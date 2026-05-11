@@ -15,12 +15,10 @@ public class SmartSplitterMod : IMod
 
   public void Shutdown()
   {
-    Debug.Log("[SmartSplitterMod] Shutdown");
   }
 
   public void ModObjectLoaded(Object obj)
   {
-    Debug.Log($"[SmartSplitterMod] Loaded object: {obj.name}");
   }
 
   public void Update()

@@ -10,9 +10,6 @@ public class SmartSplitterBaker : Baker<SmartSplitterAuthoring>
   public override void Bake(SmartSplitterAuthoring authoring)
   {
     Entity entity = GetEntity(TransformUsageFlags.Dynamic);
-
     AddComponent<SmartSplitterTag>(entity);
-
-    Debug.Log("[SmartSplitter] Baker tagged entity");
   }
 }
