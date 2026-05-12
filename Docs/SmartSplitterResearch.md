@@ -1274,3 +1274,582 @@ unmatched items,
 persistence,
 multiplayer.
 ```
+
+
+---
+
+# 21. Electricity-gated Smart Splitter architecture
+
+## Goal
+
+The Smart Splitter must behave as:
+
+```text
+UNPOWERED:
+    vanilla splitter behavior
+
+POWERED:
+    Smart Splitter behavior
+```
+
+This requirement became extremely important because:
+
+- vanilla alternating split behavior is useful by itself
+- users should be able to disable Smart Splitter logic through world automation/electricity
+- Smart Splitter should integrate naturally into existing automation systems
+
+---
+
+## Electricity research findings
+
+### Important discovery
+
+The splitter itself does not directly expose a simple:
+
+```text
+HasElectricity = true/false
+```
+
+state on the orchestrator entity.
+
+Instead, electricity state must be inferred from nearby automation/electricity ECS entities.
+
+### Final practical implementation
+
+The current implementation performs:
+
+```text
+small-radius nearby mover/electricity scan
+```
+
+around the splitter center.
+
+Observed successful detection sources:
+
+- generators
+- powered robot arms
+- nearby powered automation entities
+
+### Critical refinement
+
+Originally the electricity radius was too large.
+
+This caused:
+
+```text
+splitter became powered by unrelated nearby automation
+```
+
+Final validated direction:
+
+```text
+Only detect electricity within approximately one tile of the splitter.
+```
+
+This better matches user expectations:
+
+```text
+power must actually connect to the splitter
+```
+
+---
+
+## Powered vs unpowered runtime behavior
+
+### Unpowered
+
+The runtime restores pure vanilla splitter state:
+
+```text
+MoversWithSharedStateBuffer:
+    restore left mover
+    restore right mover
+
+splitsIntoOnMove:
+    restore 2
+
+EnabledMoverFromSharedStateCD:
+    both enabled
+
+MoverOrchestratorCD:
+    cycling restored
+```
+
+Meaning:
+
+```text
+vanilla alternation
+vanilla stack splitting
+vanilla routing
+```
+
+### Powered
+
+The runtime allows:
+
+```text
+LEFT_ONLY
+RIGHT_ONLY
+BOTH
+FORWARD_ONLY (prototype passthrough topology)
+```
+
+depending on item/filter matching.
+
+---
+
+# 22. Forward passthrough / third-direction topology research
+
+## Original blocker problem
+
+The original unresolved problem:
+
+```text
+What happens when neither left nor right output matches?
+```
+
+The Smart Splitter needed a safe behavior that:
+
+- does not delete items
+- does not jam automation permanently
+- supports multiple splitters on one belt
+- supports future large-scale filter systems
+
+---
+
+## Earlier rejected approaches
+
+### Approach: true blocking
+
+Idea:
+
+```text
+leave item in splitter center
+```
+
+Problems:
+
+- items accumulated on ground
+- FPS/performance risk
+- deadlocks
+- ugly behavior
+- difficult recovery
+
+Status:
+
+```text
+REJECTED
+```
+
+---
+
+### Approach: feeder-side filtering
+
+Idea:
+
+```text
+robot arm only inserts valid items
+```
+
+Problems:
+
+- many feeder types exist
+- impossible to centralize reliably
+- timing conflicts
+- multiple splitters become difficult
+- non-robot-arm automation unsupported
+
+Status:
+
+```text
+REJECTED / TOO COMPLEX
+```
+
+---
+
+### Approach: teleport/nudge/synthetic movers
+
+Earlier runtime prototypes attempted:
+
+```text
+teleporting
+movee nudging
+synthetic bridge movers
+temporary movee target overrides
+```
+
+Observed results:
+
+- flickering
+- teleporting
+- vanilla reclaiming ownership
+- unstable movement
+- forward belt not recognizing ownership
+- item snapping back left/right
+
+Critical discovery:
+
+```text
+Vanilla splitter redistribution still executed AFTER movement completion.
+```
+
+Meaning:
+
+```text
+belt movement phase
+!=
+splitter redistribution phase
+```
+
+This became the key architectural discovery.
+
+Status:
+
+```text
+SUPERSEDED
+```
+
+---
+
+# 23. Splitter orientation and topology discoveries
+
+## Orientation probe findings
+
+Dedicated topology/orientation probes confirmed:
+
+```text
+north/south lane behaves as input corridor
+left/right are orchestrated shared outputs
+```
+
+Observed example:
+
+```text
+south=(11,4)->(11,5)
+west =(11,5)->(10,5)
+east =(11,5)->(12,5)
+```
+
+Meaning:
+
+```text
+input reaches center first
+then splitter redistributes afterward
+```
+
+This explained why input-mover hijacking alone failed.
+
+---
+
+## Massive architectural discovery
+
+The splitter internally behaves more like:
+
+```text
+INPUT
+    ->
+CENTER BUFFER/STATE
+    ->
+OUTPUT REDISTRIBUTION
+```
+
+not:
+
+```text
+INPUT directly owns output path
+```
+
+This discovery changed the roadmap completely.
+
+---
+
+# 24. Forward topology prototype
+
+## Final successful architecture
+
+Instead of trying to fight vanilla redistribution through hacks:
+
+```text
+we extended topology itself
+```
+
+This became the first successful forward passthrough implementation.
+
+---
+
+## Core idea
+
+The splitter temporarily becomes:
+
+```text
+LEFT
+RIGHT
+FORWARD
+```
+
+instead of:
+
+```text
+LEFT
+RIGHT
+```
+
+for blocked/unmatched items.
+
+---
+
+## Key implementation
+
+### Forward mover hijack
+
+The runtime temporarily repurposes the real forward conveyor mover:
+
+```text
+center -> forward continuation
+```
+
+instead of creating synthetic fake ownership.
+
+This was the major breakthrough.
+
+---
+
+## Important detail: conveyor ownership seam
+
+Critical discovery:
+
+```text
+(11,5)->(11,6)
+```
+
+caused ownership handoff failure.
+
+The forward belt did not fully "pick up" the item.
+
+But:
+
+```text
+(11,5)->(11,7)
+```
+
+worked consistently because the item landed deeply enough inside the next conveyor ownership zone.
+
+---
+
+## Final speed fix
+
+The two-tile passthrough caused acceleration because:
+
+```text
+2 tiles
+1 moveTime
+```
+
+Result:
+
+```text
+item launched forward too quickly
+```
+
+Final validated fix:
+
+```text
+keep:
+    center -> two-tile forward stop
+
+but:
+    double moveTime
+```
+
+Meaning:
+
+```text
+2 tiles
+2x move duration
+```
+
+which restored normal conveyor speed while preserving proper ownership transfer.
+
+---
+
+# 25. Final working forward topology behavior
+
+## Blocked/unmatched items
+
+Current validated prototype:
+
+```text
+1. detect unmatched item
+2. suppress left/right routing
+3. temporarily repurpose forward belt mover
+4. create center -> forward passthrough route
+5. increase moveTime proportionally
+6. restore normal topology afterward
+```
+
+Result:
+
+```text
+smooth forward passthrough
+no flicker
+no teleport
+no ownership failure
+normal conveyor speed
+```
+
+---
+
+## Matched items
+
+### Left-only match
+
+```text
+route LEFT_ONLY
+splitsIntoOnMove = 1
+left enabled
+right disabled
+```
+
+### Right-only match
+
+```text
+route RIGHT_ONLY
+splitsIntoOnMove = 1
+right enabled
+left disabled
+```
+
+### Both-sides match
+
+```text
+restore BOTH
+splitsIntoOnMove = 2
+vanilla alternation restored
+```
+
+---
+
+# 26. Important safety discoveries
+
+## Topology cleanup crashes
+
+Breaking belts/splitters during active routing caused ECS crashes:
+
+```text
+NullReferenceException
+SetComponentData(...)
+```
+
+Root cause:
+
+```text
+cleanup attempted writing to destroyed entities/components
+```
+
+Final required rule:
+
+Before ANY runtime ECS write:
+
+```csharp
+if (!EntityManager.Exists(entity))
+    return;
+
+if (!EntityManager.HasComponent<T>(entity))
+    return;
+```
+
+especially for:
+
+- SmartSplitterArmedRouteCD
+- MoverCD
+- orchestrator entities
+- temporary forward mover ownership
+
+This became mandatory for safe runtime topology mutation.
+
+---
+
+# 27. Current validated Smart Splitter capabilities
+
+Current prototype now supports:
+
+```text
+✓ Electricity-gated smart behavior
+✓ Vanilla fallback when unpowered
+✓ Left-only routing
+✓ Right-only routing
+✓ Both-output vanilla alternation
+✓ Full-stack preservation
+✓ Rapid mixed-item routing
+✓ Forward passthrough topology
+✓ Third-direction reject lane
+✓ No Harmony
+✓ ECS-only runtime mutation
+✓ Real conveyor ownership transfer
+✓ Runtime topology mutation
+```
+
+---
+
+# 28. Updated architecture understanding
+
+The current understanding of vanilla automation is now:
+
+```text
+Input mover
+    ->
+center movement state
+    ->
+splitter redistribution topology
+    ->
+output mover ownership
+```
+
+Meaning:
+
+```text
+topology matters more than geometry
+```
+
+This became the single most important lesson from the passthrough research.
+
+---
+
+# 29. Recommended future directions
+
+## Short term
+
+Continue validating:
+
+- rotated splitter orientations
+- larger automation networks
+- multiple chained splitters
+- throughput stress tests
+- non-robot-arm feeders
+- long-duration runtime stability
+
+## Medium term
+
+Add:
+
+- proper filter UI
+- persistent saved filters
+- configurable reject lane behavior
+- optional hard-block mode
+- player-configurable passthrough rules
+
+## Long term
+
+Potential future systems now enabled by this research:
+
+```text
+smart overflow lanes
+priority sorting
+multi-stage logistics
+multi-way topology routers
+advanced conveyor intersections
+automation balancing systems
+dynamic rerouting networks
+```
+
+The topology discoveries made during Smart Splitter development are likely reusable for many future Core Keeper automation mods.
