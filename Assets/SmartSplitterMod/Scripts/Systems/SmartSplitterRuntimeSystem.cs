@@ -26,11 +26,29 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     public bool WasCloseToSplitter;
   }
 
+  private sealed class ForwardPassthroughState
+  {
+    public Entity Orchestrator;
+    public Entity TrackedEntity;
+    public Entity MoveeEntity;
+    public Entity ForwardMover;
+    public MoverCD OriginalForwardMover;
+    public bool AddedForwardMoverSharedStateComponent;
+    public double ExpiresAt;
+    public int2 Center;
+    public int2 Back;
+    public int2 Forward;
+    public int2 ForwardDirection;
+    public int2 ForwardStop;
+    public float ReleaseAfterProgress;
+  }
+
   private readonly Dictionary<Entity, CachedSplitter> _splitters = new();
   private readonly Dictionary<Entity, double> _recentlyArmedEntities = new();
   private readonly Dictionary<Entity, bool> _bothSingleNextRight = new();
   private readonly Dictionary<Entity, TrackedRouteState> _trackedRoutes = new();
   private readonly Dictionary<Entity, bool> _splitterPowerState = new();
+  private readonly Dictionary<Entity, ForwardPassthroughState> _recentlyForwardPassthroughEntities = new();
   private readonly HashSet<Entity> _smartStateDirty = new();
 
   private static bool EnableRouting = true;
@@ -57,11 +75,17 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private const float RouteTrackingDistanceEpsilon = 0.05f;
   private const float RouteTrackingCloseDistance = 0.35f;
 
+  private const float ForwardPassthroughCaptureDistance = 0.55f;
+  private const float ForwardPassthroughMoveeMatchDistance = 0.20f;
+  private const double ForwardPassthroughRecentlyMovedSeconds = 4.00d;
+  private const float ForwardTopologyPrototypeRestoreProgress = 1.05f;
+
   private EntityQuery _allOrchestratorsQuery;
   private EntityQuery _taggedSplitterQuery;
   private EntityQuery _routeQuery;
   private EntityQuery _droppedItemQuery;
   private EntityQuery _moverQuery;
+  private EntityQuery _moveeQuery;
   private EntityQuery _objectDataTransformQuery;
   private EntityQuery _electricityQuery;
 
@@ -105,6 +129,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     });
 
     _moverQuery = GetEntityQuery(ComponentType.ReadOnly<MoverCD>());
+    _moveeQuery = GetEntityQuery(ComponentType.ReadWrite<MoveeCD>());
 
     RequireForUpdate(_allOrchestratorsQuery);
   }
@@ -121,6 +146,9 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     using NativeArray<Entity> droppedEntities = _droppedItemQuery.ToEntityArray(Allocator.Temp);
     using NativeArray<ObjectDataCD> droppedOuterObjects = _droppedItemQuery.ToComponentDataArray<ObjectDataCD>(Allocator.Temp);
     using NativeArray<LocalTransform> droppedTransforms = _droppedItemQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+
+    using NativeArray<Entity> moveeEntities = _moveeQuery.ToEntityArray(Allocator.Temp);
+    using NativeArray<MoveeCD> moveeData = _moveeQuery.ToComponentDataArray<MoveeCD>(Allocator.Temp);
 
     using NativeArray<Entity> electricityEntities = _electricityQuery.ToEntityArray(Allocator.Temp);
     using NativeArray<ElectricityCD> electricityData = _electricityQuery.ToComponentDataArray<ElectricityCD>(Allocator.Temp);
@@ -147,6 +175,15 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       }
     }
 
+    MaintainForwardPassthroughBufferRoutes(
+        now,
+        droppedEntities,
+        droppedTransforms,
+        moveeEntities,
+        moveeData,
+        allMovers,
+        allMoverData);
+
     UpdateTrackedRoutes(droppedEntities, droppedTransforms, allMovers, allMoverData);
 
     ApplyElectricityGateToSplitters(
@@ -155,6 +192,16 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         electricityTransforms,
         allMovers,
         allMoverData);
+
+    ProcessImmediateForwardPassthroughCandidates(
+        now,
+        allMovers,
+        allMoverData,
+        droppedEntities,
+        droppedOuterObjects,
+        droppedTransforms,
+        moveeEntities,
+        moveeData);
 
     if (ForceRightOnlyTestMode)
     {
@@ -168,7 +215,14 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       // This prevents the robot arm's NEXT carried item from overriding the CURRENT belt item.
       ObserveSplitters(now, droppedEntities, droppedOuterObjects, droppedTransforms, allMovers, allMoverData);
       ObserveFeederCarriedItems(now, allMovers, allMoverData, droppedEntities, droppedOuterObjects, droppedTransforms);
-      ApplyArmedRoutes(now, allMovers, allMoverData);
+      ApplyArmedRoutes(
+          now,
+          allMovers,
+          allMoverData,
+          droppedEntities,
+          droppedTransforms,
+          moveeEntities,
+          moveeData);
     }
   }
 
@@ -1059,6 +1113,12 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       float distance,
       double now)
   {
+    if (!EntityManager.Exists(splitter.Orchestrator) ||
+        !EntityManager.HasComponent<SmartSplitterArmedRouteCD>(splitter.Orchestrator))
+    {
+      return;
+    }
+
     EntityManager.SetComponentData(splitter.Orchestrator, new SmartSplitterArmedRouteCD
     {
       HasArmedRoute = true,
@@ -1308,6 +1368,11 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     {
       Entity droppedEntity = droppedEntities[i];
 
+      if (_recentlyForwardPassthroughEntities.ContainsKey(droppedEntity))
+      {
+        continue;
+      }
+
       if (droppedOuterObjects[i].objectID != ObjectID.DroppedItem)
       {
         continue;
@@ -1370,7 +1435,11 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private void ApplyArmedRoutes(
       double now,
       NativeArray<Entity> allMovers,
-      NativeArray<MoverCD> allMoverData)
+      NativeArray<MoverCD> allMoverData,
+      NativeArray<Entity> droppedEntities,
+      NativeArray<LocalTransform> droppedTransforms,
+      NativeArray<Entity> moveeEntities,
+      NativeArray<MoveeCD> moveeData)
   {
     using NativeArray<Entity> orchestrators = _routeQuery.ToEntityArray(Allocator.Temp);
 
@@ -1378,6 +1447,17 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     {
       if (!EnableRouting)
       {
+        continue;
+      }
+
+      if (!EntityManager.Exists(orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterConfigCD>(orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterArmedRouteCD>(orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterOriginalOutputsCD>(orchestrator) ||
+          !EntityManager.HasBuffer<MoversWithSharedStateBuffer>(orchestrator))
+      {
+        _trackedRoutes.Remove(orchestrator);
+        _smartStateDirty.Remove(orchestrator);
         continue;
       }
 
@@ -1407,6 +1487,20 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
       if (!armed.HasArmedRoute || armed.Decision == SmartSplitterDecision.None)
       {
+        continue;
+      }
+
+      if (_recentlyForwardPassthroughEntities.ContainsKey(armed.ArmedEntity))
+      {
+        if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+        {
+          Debug.Log(
+              $"[SmartSplitterPassthroughPrototype] suppressed-existing-route orchestrator={orchestrator} " +
+              $"item={armed.ArmedEntity} decision={armed.Decision}");
+        }
+
+        ClearArmedRoute(orchestrator);
+        _trackedRoutes.Remove(orchestrator);
         continue;
       }
 
@@ -1484,6 +1578,41 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       DynamicBuffer<MoversWithSharedStateBuffer> buffer =
           EntityManager.GetBuffer<MoversWithSharedStateBuffer>(orchestrator);
 
+      if (armed.Decision == SmartSplitterDecision.Blocked &&
+          SmartSplitterDebugSettings.EnablePassthroughPrototype)
+      {
+        if (TryApplyForwardPassthroughPrototype(
+                now,
+                orchestrator,
+                originals,
+                armed,
+                allMovers,
+                allMoverData,
+                droppedEntities,
+                droppedTransforms,
+                moveeEntities,
+                moveeData))
+        {
+          ClearArmedRoute(orchestrator);
+          _trackedRoutes.Remove(orchestrator);
+          continue;
+        }
+
+        if (_smartStateDirty.Contains(orchestrator))
+        {
+          RestoreVanillaSplitterState(orchestrator, allMovers, allMoverData);
+          _smartStateDirty.Remove(orchestrator);
+        }
+
+        if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+        {
+          Debug.Log(
+              $"[SmartSplitterPassthroughPrototype] waiting decision=Blocked orchestrator={orchestrator} " +
+              $"item={armed.ArmedEntity} object={armed.ItemObject}/{armed.ItemVariation} amount={armed.ItemAmount}");
+        }
+        continue;
+      }
+
       ApplyDecision(orchestrator, buffer, originals, armed, allMovers, allMoverData);
 
       VerifyRouteState("after-apply", orchestrator, allMovers, allMoverData);
@@ -1504,6 +1633,13 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       armed.AppliedOnce = true;
       armed.RouteAppliedAt = now;
 
+      if (!EntityManager.Exists(orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterArmedRouteCD>(orchestrator))
+      {
+        _trackedRoutes.Remove(orchestrator);
+        continue;
+      }
+
       EntityManager.SetComponentData(orchestrator, armed);
 
       _trackedRoutes[orchestrator] = new TrackedRouteState
@@ -1513,6 +1649,615 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         WasCloseToSplitter = false
       };
     }
+  }
+
+
+  private void ProcessImmediateForwardPassthroughCandidates(
+      double now,
+      NativeArray<Entity> allMovers,
+      NativeArray<MoverCD> allMoverData,
+      NativeArray<Entity> droppedEntities,
+      NativeArray<ObjectDataCD> droppedOuterObjects,
+      NativeArray<LocalTransform> droppedTransforms,
+      NativeArray<Entity> moveeEntities,
+      NativeArray<MoveeCD> moveeData)
+  {
+    if (!SmartSplitterDebugSettings.EnablePassthroughPrototype)
+    {
+      return;
+    }
+
+    foreach (CachedSplitter splitter in _splitters.Values)
+    {
+      Entity orchestrator = splitter.Orchestrator;
+
+      if (!EntityManager.Exists(orchestrator) ||
+          !IsSplitterSmartPowered(orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterConfigCD>(orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterOriginalOutputsCD>(orchestrator))
+      {
+        continue;
+      }
+
+      SmartSplitterConfigCD config = EntityManager.GetComponentData<SmartSplitterConfigCD>(orchestrator);
+      if (!config.Enabled)
+      {
+        continue;
+      }
+
+      SmartSplitterOriginalOutputsCD originals = EntityManager.GetComponentData<SmartSplitterOriginalOutputsCD>(orchestrator);
+      if (!IsOriginalOutputStateValid(originals))
+      {
+        continue;
+      }
+
+      MoverCD leftMover = EntityManager.GetComponentData<MoverCD>(originals.LeftMoverEntity);
+      MoverCD rightMover = EntityManager.GetComponentData<MoverCD>(originals.RightMoverEntity);
+
+      if (!TryFindBestIncomingItem(
+              leftMover,
+              rightMover,
+              now,
+              droppedEntities,
+              droppedOuterObjects,
+              droppedTransforms,
+              out Entity droppedEntity,
+              out ObjectID itemObject,
+              out int itemVariation,
+              out int itemAmount,
+              out float distance))
+      {
+        continue;
+      }
+
+      SmartSplitterDecision decision = DecideRoute(config, itemObject, itemVariation);
+      if (decision != SmartSplitterDecision.Blocked)
+      {
+        continue;
+      }
+
+      SmartSplitterArmedRouteCD passthroughArmed = new SmartSplitterArmedRouteCD
+      {
+        HasArmedRoute = true,
+        AppliedOnce = false,
+        VerifiedHoldState = false,
+        ArmedEntity = droppedEntity,
+        Decision = SmartSplitterDecision.Blocked,
+        ItemObject = itemObject,
+        ItemVariation = itemVariation,
+        ItemAmount = itemAmount,
+        ArmedAt = now,
+        ExpiresAt = now + ArmedRouteDurationSeconds,
+        RouteAppliedAt = 0d,
+        HoldUntil = 0d
+      };
+
+      if (TryApplyForwardPassthroughPrototype(
+              now,
+              orchestrator,
+              originals,
+              passthroughArmed,
+              allMovers,
+              allMoverData,
+              droppedEntities,
+              droppedTransforms,
+              moveeEntities,
+              moveeData))
+      {
+        ClearArmedRoute(orchestrator);
+        _trackedRoutes.Remove(orchestrator);
+        continue;
+      }
+
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] candidate-not-ready orchestrator={orchestrator} " +
+            $"item={droppedEntity} object={itemObject}/{itemVariation} amount={itemAmount} inputDistance={distance:0.00}");
+      }
+    }
+  }
+
+
+  private bool TryApplyForwardPassthroughPrototype(
+      double now,
+      Entity orchestrator,
+      SmartSplitterOriginalOutputsCD originals,
+      SmartSplitterArmedRouteCD armed,
+      NativeArray<Entity> allMovers,
+      NativeArray<MoverCD> allMoverData,
+      NativeArray<Entity> droppedEntities,
+      NativeArray<LocalTransform> droppedTransforms,
+      NativeArray<Entity> moveeEntities,
+      NativeArray<MoveeCD> moveeData)
+  {
+    if (!SmartSplitterDebugSettings.EnablePassthroughPrototype)
+    {
+      return false;
+    }
+
+    if (armed.ArmedEntity == Entity.Null ||
+        _recentlyForwardPassthroughEntities.ContainsKey(armed.ArmedEntity))
+    {
+      return false;
+    }
+
+    if (!TryGetSplitterForwardPassthroughTopology(
+            originals,
+            allMovers,
+            allMoverData,
+            out int2 center,
+            out int2 back,
+            out int2 forward,
+            out int2 forwardDirection,
+            out Entity inputMover,
+            out Entity forwardMover))
+    {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] skipped reason=no_valid_forward_topology " +
+            $"orchestrator={orchestrator} item={armed.ArmedEntity} decision={armed.Decision}");
+      }
+
+      return false;
+    }
+
+    if (!TryFindDroppedTransformIndex(armed.ArmedEntity, droppedEntities, out int droppedIndex))
+    {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] skipped reason=dropped_not_in_query " +
+            $"orchestrator={orchestrator} item={armed.ArmedEntity} object={armed.ItemObject}/{armed.ItemVariation}");
+      }
+      return false;
+    }
+
+    LocalTransform droppedTransform = EntityManager.GetComponentData<LocalTransform>(armed.ArmedEntity);
+    float itemX = droppedTransform.Position.x;
+    float itemY = droppedTransform.Position.z;
+    float distanceFromCenter = Distance2D(itemX, itemY, center.x, center.y);
+
+    if (distanceFromCenter > ForwardPassthroughCaptureDistance)
+    {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] skipped reason=not_at_capture_point " +
+            $"orchestrator={orchestrator} item={armed.ArmedEntity} object={armed.ItemObject}/{armed.ItemVariation} " +
+            $"distanceFromCenter={distanceFromCenter:0.00} max={ForwardPassthroughCaptureDistance:0.00}");
+      }
+      return false;
+    }
+
+    Entity moveeEntity = Entity.Null;
+    float moveeDistance = float.MaxValue;
+
+    if (TryFindNearestMoveeIndex(
+            itemX,
+            itemY,
+            moveeEntities,
+            moveeData,
+            ForwardPassthroughMoveeMatchDistance,
+            out int moveeIndex,
+            out moveeDistance))
+    {
+      moveeEntity = moveeEntities[moveeIndex];
+    }
+
+    if (!EntityManager.Exists(forwardMover) ||
+        !EntityManager.HasComponent<MoverCD>(forwardMover))
+    {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] skipped reason=forward_mover_missing " +
+            $"orchestrator={orchestrator} item={armed.ArmedEntity} forwardMover={forwardMover}");
+      }
+      return false;
+    }
+
+    MoverCD originalForwardMover = EntityManager.GetComponentData<MoverCD>(forwardMover);
+
+    // Important: the prototype must only bridge the splitter center into the
+    // forward tile. The normal forward conveyor owns the next segment after
+    // restore. If we use the forward conveyor's original stop here, the route
+    // becomes center -> next tile, effectively covering two tiles in one mover
+    // cycle and the item visibly accelerates.
+    int2 forwardStop = forward;
+
+    bool hadForwardSharedStateComponent = EntityManager.HasComponent<EnabledMoverFromSharedStateCD>(forwardMover);
+    bool addedForwardSharedStateComponent = false;
+
+    if (!hadForwardSharedStateComponent)
+    {
+      EntityManager.AddComponent<EnabledMoverFromSharedStateCD>(forwardMover);
+      addedForwardSharedStateComponent = true;
+    }
+
+    ApplyForwardTopologyRoute(
+        orchestrator,
+        originals,
+        forwardMover,
+        originalForwardMover,
+        center,
+        forwardDirection,
+        forwardStop,
+        allMovers,
+        allMoverData);
+
+    _recentlyForwardPassthroughEntities[armed.ArmedEntity] = new ForwardPassthroughState
+    {
+      Orchestrator = orchestrator,
+      TrackedEntity = armed.ArmedEntity,
+      MoveeEntity = moveeEntity,
+      ForwardMover = forwardMover,
+      OriginalForwardMover = originalForwardMover,
+      AddedForwardMoverSharedStateComponent = addedForwardSharedStateComponent,
+      ExpiresAt = now + ForwardPassthroughRecentlyMovedSeconds,
+      Center = center,
+      Back = back,
+      Forward = forward,
+      ForwardDirection = forwardDirection,
+      ForwardStop = forwardStop,
+      ReleaseAfterProgress = ForwardTopologyPrototypeRestoreProgress
+    };
+
+    if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+    {
+      MoverCD inputMoverDataForLog = EntityManager.Exists(inputMover) && EntityManager.HasComponent<MoverCD>(inputMover)
+          ? EntityManager.GetComponentData<MoverCD>(inputMover)
+          : default;
+      MoverCD patchedForwardMover = EntityManager.GetComponentData<MoverCD>(forwardMover);
+
+      Debug.Log(
+          $"[SmartSplitterForwardTopologyPrototype] applied item={armed.ArmedEntity} movee={moveeEntity} " +
+          $"orchestrator={orchestrator} object={armed.ItemObject}/{armed.ItemVariation} amount={armed.ItemAmount} " +
+          $"center={center} back={back} forward={forward} forwardDirection={forwardDirection} forwardStop={forwardStop} " +
+          $"inputMover={inputMover} inputPath=({inputMoverDataForLog.start.x},{inputMoverDataForLog.start.y})->({inputMoverDataForLog.stop.x},{inputMoverDataForLog.stop.y}) " +
+          $"forwardMover={forwardMover} originalForwardPath=({originalForwardMover.start.x},{originalForwardMover.start.y})->({originalForwardMover.stop.x},{originalForwardMover.stop.y}) " +
+          $"patchedForwardPath=({patchedForwardMover.start.x},{patchedForwardMover.start.y})->({patchedForwardMover.stop.x},{patchedForwardMover.stop.y}) " +
+          $"addedForwardSharedState={addedForwardSharedStateComponent} moveeDistance={moveeDistance:0.000} " +
+          $"distanceFromCenter={distanceFromCenter:0.00}");
+    }
+
+    return true;
+  }
+
+  private void ApplyForwardTopologyRoute(
+      Entity orchestrator,
+      SmartSplitterOriginalOutputsCD originals,
+      Entity forwardMoverEntity,
+      MoverCD originalForwardMover,
+      int2 center,
+      int2 forwardDirection,
+      int2 forwardStop,
+      NativeArray<Entity> allMovers,
+      NativeArray<MoverCD> allMoverData)
+  {
+    if (!EntityManager.Exists(orchestrator) ||
+        !EntityManager.HasBuffer<MoversWithSharedStateBuffer>(orchestrator) ||
+        !EntityManager.Exists(forwardMoverEntity) ||
+        !EntityManager.HasComponent<MoverCD>(forwardMoverEntity))
+    {
+      return;
+    }
+
+    MoverCD patchedForwardMover = originalForwardMover;
+    patchedForwardMover.start = center;
+    patchedForwardMover.stop = forwardStop + forwardDirection;
+    patchedForwardMover.moveTime =
+    math.max(
+        patchedForwardMover.moveTime * 2,
+        patchedForwardMover.moveTime + 1);
+    patchedForwardMover.moverOrchestratorEntity = orchestrator;
+    patchedForwardMover.indexInOrchestrator = 2;
+    patchedForwardMover.splitsIntoOnMove = 1;
+    patchedForwardMover.cycleEnabledMoverAfterActivation = true;
+    patchedForwardMover.enableAllMoversAfterActivation = false;
+    patchedForwardMover.allowPickupFromInventories = false;
+    patchedForwardMover.inventoryEntity = Entity.Null;
+
+    EntityManager.SetComponentData(forwardMoverEntity, patchedForwardMover);
+
+    DynamicBuffer<MoversWithSharedStateBuffer> buffer =
+        EntityManager.GetBuffer<MoversWithSharedStateBuffer>(orchestrator);
+
+    buffer.Clear();
+    buffer.Add(new MoversWithSharedStateBuffer
+    {
+      moverEntity = forwardMoverEntity,
+      cachedDirection = forwardDirection,
+      cachedStart = center
+    });
+
+    SetAllSplitterMoverSplitCounts(orchestrator, 1, allMovers, allMoverData);
+
+    if (EntityManager.HasComponent<MoverOrchestratorCD>(orchestrator))
+    {
+      MoverOrchestratorCD orchestratorData = EntityManager.GetComponentData<MoverOrchestratorCD>(orchestrator);
+      orchestratorData.enabledMoverIndex = 2;
+      orchestratorData.nextMoverCycleIncrement = 0;
+      EntityManager.SetComponentData(orchestrator, orchestratorData);
+    }
+
+    SetEnabledMoverFromSharedState(originals.LeftMoverEntity, false);
+    SetEnabledMoverFromSharedState(originals.RightMoverEntity, false);
+    SetEnabledMoverFromSharedState(forwardMoverEntity, true);
+
+    _smartStateDirty.Add(orchestrator);
+  }
+
+  private bool TryGetSplitterForwardPassthroughTopology(
+      SmartSplitterOriginalOutputsCD originals,
+      NativeArray<Entity> allMovers,
+      NativeArray<MoverCD> allMoverData,
+      out int2 center,
+      out int2 back,
+      out int2 forward,
+      out int2 forwardDirection,
+      out Entity inputMover,
+      out Entity forwardMover)
+  {
+    center = default;
+    back = default;
+    forward = default;
+    forwardDirection = default;
+    inputMover = Entity.Null;
+    forwardMover = Entity.Null;
+
+    if (!IsOriginalOutputStateValid(originals))
+    {
+      return false;
+    }
+
+    MoverCD leftMover = EntityManager.GetComponentData<MoverCD>(originals.LeftMoverEntity);
+    MoverCD rightMover = EntityManager.GetComponentData<MoverCD>(originals.RightMoverEntity);
+
+    center = new int2(
+        Mathf.RoundToInt((leftMover.start.x + rightMover.start.x) * 0.5f),
+        Mathf.RoundToInt((leftMover.start.y + rightMover.start.y) * 0.5f));
+
+    int inputCount = 0;
+    int2 foundInputDirection = default;
+
+    for (int i = 0; i < allMovers.Length; i++)
+    {
+      Entity moverEntity = allMovers[i];
+      MoverCD mover = allMoverData[i];
+
+      if (moverEntity == originals.LeftMoverEntity || moverEntity == originals.RightMoverEntity)
+      {
+        continue;
+      }
+
+      int2 start = mover.start;
+      int2 stop = mover.stop;
+
+      if (stop.x == center.x && stop.y == center.y)
+      {
+        inputCount++;
+        inputMover = moverEntity;
+        back = start;
+        foundInputDirection = new int2(center.x - start.x, center.y - start.y);
+      }
+    }
+
+    if (inputCount != 1 || (foundInputDirection.x == 0 && foundInputDirection.y == 0))
+    {
+      return false;
+    }
+
+    forwardDirection = foundInputDirection;
+    forward = new int2(center.x + forwardDirection.x, center.y + forwardDirection.y);
+
+    for (int i = 0; i < allMovers.Length; i++)
+    {
+      Entity moverEntity = allMovers[i];
+      MoverCD mover = allMoverData[i];
+
+      if (mover.start.x != forward.x || mover.start.y != forward.y)
+      {
+        continue;
+      }
+
+      int2 direction = new int2(mover.stop.x - mover.start.x, mover.stop.y - mover.start.y);
+
+      if (direction.x == forwardDirection.x && direction.y == forwardDirection.y)
+      {
+        forwardMover = moverEntity;
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private static bool TryFindDroppedTransformIndex(
+      Entity droppedEntity,
+      NativeArray<Entity> droppedEntities,
+      out int index)
+  {
+    for (int i = 0; i < droppedEntities.Length; i++)
+    {
+      if (droppedEntities[i] == droppedEntity)
+      {
+        index = i;
+        return true;
+      }
+    }
+
+    index = -1;
+    return false;
+  }
+
+
+  private void MaintainForwardPassthroughBufferRoutes(
+      double now,
+      NativeArray<Entity> droppedEntities,
+      NativeArray<LocalTransform> droppedTransforms,
+      NativeArray<Entity> moveeEntities,
+      NativeArray<MoveeCD> moveeData,
+      NativeArray<Entity> allMovers,
+      NativeArray<MoverCD> allMoverData)
+  {
+    if (_recentlyForwardPassthroughEntities.Count == 0)
+    {
+      return;
+    }
+
+    List<Entity> finished = null;
+
+    foreach (KeyValuePair<Entity, ForwardPassthroughState> entry in _recentlyForwardPassthroughEntities)
+    {
+      Entity droppedEntity = entry.Key;
+      ForwardPassthroughState state = entry.Value;
+
+      bool shouldFinish = state.ExpiresAt <= now ||
+          !EntityManager.Exists(droppedEntity) ||
+          !EntityManager.HasComponent<LocalTransform>(droppedEntity) ||
+          !EntityManager.Exists(state.Orchestrator) ||
+          !EntityManager.HasComponent<SmartSplitterOriginalOutputsCD>(state.Orchestrator) ||
+          !EntityManager.Exists(state.ForwardMover) ||
+          !EntityManager.HasComponent<MoverCD>(state.ForwardMover);
+
+      float progress = 0f;
+
+      if (!shouldFinish)
+      {
+        LocalTransform transform = EntityManager.GetComponentData<LocalTransform>(droppedEntity);
+        float fromCenterX = transform.Position.x - state.Center.x;
+        float fromCenterY = transform.Position.z - state.Center.y;
+        progress = fromCenterX * state.ForwardDirection.x + fromCenterY * state.ForwardDirection.y;
+
+        if (progress >= state.ReleaseAfterProgress)
+        {
+          shouldFinish = true;
+        }
+      }
+
+      if (shouldFinish)
+      {
+        RestoreForwardTopologyRoute(state, allMovers, allMoverData);
+
+        finished ??= new List<Entity>();
+        finished.Add(droppedEntity);
+
+        if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+        {
+          Debug.Log(
+              $"[SmartSplitterForwardTopologyPrototype] restored item={droppedEntity} " +
+              $"orchestrator={state.Orchestrator} forwardMover={state.ForwardMover} progress={progress:0.00} now={now:0.00}");
+        }
+
+        continue;
+      }
+
+      if (EntityManager.HasComponent<SmartSplitterOriginalOutputsCD>(state.Orchestrator))
+      {
+        SmartSplitterOriginalOutputsCD originals = EntityManager.GetComponentData<SmartSplitterOriginalOutputsCD>(state.Orchestrator);
+        ApplyForwardTopologyRoute(
+            state.Orchestrator,
+            originals,
+            state.ForwardMover,
+            state.OriginalForwardMover,
+            state.Center,
+            state.ForwardDirection,
+            state.ForwardStop,
+            allMovers,
+            allMoverData);
+      }
+
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        MoverCD currentForwardMover = EntityManager.GetComponentData<MoverCD>(state.ForwardMover);
+        string moveeText = "movee=none";
+        if (state.MoveeEntity != Entity.Null && EntityManager.Exists(state.MoveeEntity) && EntityManager.HasComponent<MoveeCD>(state.MoveeEntity))
+        {
+          MoveeCD currentMovee = EntityManager.GetComponentData<MoveeCD>(state.MoveeEntity);
+          moveeText = $"movee={state.MoveeEntity} moveePos={currentMovee.position} moveeTarget={currentMovee.target} moveeTimer={currentMovee.moveTimer}";
+        }
+
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] holding item={droppedEntity} " +
+            $"orchestrator={state.Orchestrator} forwardMover={state.ForwardMover} " +
+            $"path=({currentForwardMover.start.x},{currentForwardMover.start.y})->({currentForwardMover.stop.x},{currentForwardMover.stop.y}) " +
+            $"progress={progress:0.00} {moveeText}");
+      }
+    }
+
+    if (finished == null)
+    {
+      return;
+    }
+
+    foreach (Entity droppedEntity in finished)
+    {
+      _recentlyForwardPassthroughEntities.Remove(droppedEntity);
+    }
+  }
+
+  private void RestoreForwardTopologyRoute(
+      ForwardPassthroughState state,
+      NativeArray<Entity> allMovers,
+      NativeArray<MoverCD> allMoverData)
+  {
+    if (EntityManager.Exists(state.ForwardMover) &&
+        EntityManager.HasComponent<MoverCD>(state.ForwardMover))
+    {
+      EntityManager.SetComponentData(state.ForwardMover, state.OriginalForwardMover);
+
+      if (state.AddedForwardMoverSharedStateComponent &&
+          EntityManager.HasComponent<EnabledMoverFromSharedStateCD>(state.ForwardMover))
+      {
+        EntityManager.RemoveComponent<EnabledMoverFromSharedStateCD>(state.ForwardMover);
+      }
+    }
+
+    if (EntityManager.Exists(state.Orchestrator))
+    {
+      RestoreVanillaSplitterState(state.Orchestrator, allMovers, allMoverData);
+      _smartStateDirty.Remove(state.Orchestrator);
+      ClearArmedRoute(state.Orchestrator);
+      _trackedRoutes.Remove(state.Orchestrator);
+    }
+  }
+
+  private static bool TryFindNearestMoveeIndex(
+      float itemX,
+      float itemY,
+      NativeArray<Entity> moveeEntities,
+      NativeArray<MoveeCD> moveeData,
+      float maxDistance,
+      out int index,
+      out float bestDistance)
+  {
+    index = -1;
+    bestDistance = float.MaxValue;
+
+    for (int i = 0; i < moveeEntities.Length; i++)
+    {
+      MoveeCD movee = moveeData[i];
+      float distance = Distance2D(itemX, itemY, movee.position.x, movee.position.y);
+
+      if (distance >= bestDistance || distance > maxDistance)
+      {
+        continue;
+      }
+
+      bestDistance = distance;
+      index = i;
+    }
+
+    return index >= 0;
+  }
+
+  private static float Distance2D(float ax, float ay, float bx, float by)
+  {
+    float dx = ax - bx;
+    float dy = ay - by;
+    return Mathf.Sqrt(dx * dx + dy * dy);
   }
 
   private void ApplyDecision(
@@ -1622,7 +2367,9 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
   private void ForceMoverOrchestrator(Entity orchestrator, Entity selectedMoverEntity)
   {
-    if (!EntityManager.HasComponent<MoverOrchestratorCD>(orchestrator) ||
+    if (!EntityManager.Exists(orchestrator) ||
+        !EntityManager.Exists(selectedMoverEntity) ||
+        !EntityManager.HasComponent<MoverOrchestratorCD>(orchestrator) ||
         !EntityManager.HasComponent<MoverCD>(selectedMoverEntity))
     {
       return;
@@ -1639,7 +2386,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
   private void RestoreMoverOrchestratorCycling(Entity orchestrator)
   {
-    if (!EntityManager.HasComponent<MoverOrchestratorCD>(orchestrator))
+    if (!EntityManager.Exists(orchestrator) ||
+        !EntityManager.HasComponent<MoverOrchestratorCD>(orchestrator))
     {
       return;
     }
@@ -1676,8 +2424,16 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         continue;
       }
 
+      Entity moverEntity = allMovers[i];
+
+      if (!EntityManager.Exists(moverEntity) ||
+          !EntityManager.HasComponent<MoverCD>(moverEntity))
+      {
+        continue;
+      }
+
       mover.splitsIntoOnMove = splitCount;
-      EntityManager.SetComponentData(allMovers[i], mover);
+      EntityManager.SetComponentData(moverEntity, mover);
     }
   }
 
@@ -1711,6 +2467,12 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
   private void ClearArmedRoute(Entity orchestrator)
   {
+    if (!EntityManager.Exists(orchestrator) ||
+        !EntityManager.HasComponent<SmartSplitterArmedRouteCD>(orchestrator))
+    {
+      return;
+    }
+
     EntityManager.SetComponentData(orchestrator, EmptyArmedRoute());
   }
 

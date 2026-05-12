@@ -10,7 +10,13 @@ public static class SmartSplitterDebugSettings
   public static bool EnableOrchestratorProbe = false;
   public static bool EnableSplitterCoreProbe = false;
   public static bool EnableDroppedItemNearSplitterProbe = false;
-  public static bool EnableOrientationTopologyProbe = true;
+  public static bool EnableOrientationTopologyProbe = false;
+  public static bool EnablePassthroughCandidateProbe = false;
+  public static bool EnableMoveeHandoffProbe = true;
+
+  // Runtime prototype toggles. Keep disabled unless actively testing passthrough behavior.
+  public static bool EnablePassthroughPrototype = true;
+  public static bool EnablePassthroughPrototypeLogs = true;
 
   // Extra probes. Keep these off unless needed.
   public static bool EnableContainedObjectsProbe = false;
@@ -29,6 +35,11 @@ public static class SmartSplitterDebugSettings
   public const float NearbyItemRadius = 6.0f;
   public const float MoveeNearSplitterRadius = 5.0f;
   public const float OrientationTopologyProbeRadius = 4.0f;
+  public const float PassthroughCandidateProbeRadius = 2.25f;
+  public const float PassthroughCenterCaptureRadius = 0.85f;
+  public const float MoveeHandoffProbeRadius = 2.25f;
+  public const double MoveeHandoffProbeIntervalSeconds = 0.10d;
+  public static bool MoveeHandoffOnlyUnmatchedItems = true;
 
   public static bool ShouldRunProbe(double now, ref double nextLogTime, double intervalSeconds = DefaultLogIntervalSeconds)
   {
