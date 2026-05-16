@@ -49,6 +49,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private readonly Dictionary<Entity, TrackedRouteState> _trackedRoutes = new();
   private readonly Dictionary<Entity, bool> _splitterPowerState = new();
   private readonly Dictionary<Entity, ForwardPassthroughState> _recentlyForwardPassthroughEntities = new();
+  private readonly Dictionary<Entity, double> _recentlyCompletedForwardPassthroughEntities = new();
   private readonly HashSet<Entity> _smartStateDirty = new();
 
   private static bool EnableRouting = true;
@@ -75,9 +76,10 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private const float RouteTrackingDistanceEpsilon = 0.05f;
   private const float RouteTrackingCloseDistance = 0.35f;
 
-  private const float ForwardPassthroughCaptureDistance = 0.55f;
+  private const float ForwardPassthroughCaptureDistance = 0.85f;
   private const float ForwardPassthroughMoveeMatchDistance = 0.20f;
   private const double ForwardPassthroughRecentlyMovedSeconds = 4.00d;
+  private const double ForwardPassthroughCompletedIgnoreSeconds = 4.00d;
   private const float ForwardTopologyPrototypeRestoreProgress = 1.05f;
 
   private EntityQuery _allOrchestratorsQuery;
@@ -137,6 +139,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   protected override void OnUpdate()
   {
     double now = World.Time.ElapsedTime;
+
+    PruneRecentlyCompletedForwardPassthroughEntities(now);
 
     ComponentLookup<MoverCD> moverLookup = GetComponentLookup<MoverCD>(true);
 
@@ -457,6 +461,13 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
     if (!IsOriginalOutputStateValid(originals))
     {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] topology-fail reason=invalid_original_outputs " +
+            $"left={originals.LeftMoverEntity} right={originals.RightMoverEntity}");
+      }
+
       return false;
     }
 
@@ -1368,7 +1379,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     {
       Entity droppedEntity = droppedEntities[i];
 
-      if (_recentlyForwardPassthroughEntities.ContainsKey(droppedEntity))
+      if (_recentlyForwardPassthroughEntities.ContainsKey(droppedEntity) ||
+          _recentlyCompletedForwardPassthroughEntities.ContainsKey(droppedEntity))
       {
         continue;
       }
@@ -1598,6 +1610,18 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
           continue;
         }
 
+        if (HasActiveForwardPassthroughForOrchestrator(orchestrator))
+        {
+          if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+          {
+            Debug.Log(
+                $"[SmartSplitterPassthroughPrototype] waiting-active-forward-route orchestrator={orchestrator} " +
+                $"item={armed.ArmedEntity} object={armed.ItemObject}/{armed.ItemVariation} amount={armed.ItemAmount}");
+          }
+
+          continue;
+        }
+
         if (_smartStateDirty.Contains(orchestrator))
         {
           RestoreVanillaSplitterState(orchestrator, allMovers, allMoverData);
@@ -1777,7 +1801,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     }
 
     if (armed.ArmedEntity == Entity.Null ||
-        _recentlyForwardPassthroughEntities.ContainsKey(armed.ArmedEntity))
+        _recentlyForwardPassthroughEntities.ContainsKey(armed.ArmedEntity) ||
+        _recentlyCompletedForwardPassthroughEntities.ContainsKey(armed.ArmedEntity))
     {
       return false;
     }
@@ -2009,6 +2034,13 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
     if (!IsOriginalOutputStateValid(originals))
     {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] topology-fail reason=invalid_original_outputs " +
+            $"left={originals.LeftMoverEntity} right={originals.RightMoverEntity}");
+      }
+
       return false;
     }
 
@@ -2046,6 +2078,15 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
     if (inputCount != 1 || (foundInputDirection.x == 0 && foundInputDirection.y == 0))
     {
+      if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+      {
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] topology-fail reason=input_count " +
+            $"center={center} inputCount={inputCount} foundInputDirection={foundInputDirection} " +
+            $"leftMover={originals.LeftMoverEntity} leftPath=({leftMover.start.x},{leftMover.start.y})->({leftMover.stop.x},{leftMover.stop.y}) " +
+            $"rightMover={originals.RightMoverEntity} rightPath=({rightMover.start.x},{rightMover.start.y})->({rightMover.stop.x},{rightMover.stop.y})");
+      }
+
       return false;
     }
 
@@ -2068,6 +2109,41 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       {
         forwardMover = moverEntity;
         return true;
+      }
+    }
+
+    if (SmartSplitterDebugSettings.EnablePassthroughPrototypeLogs)
+    {
+      Debug.Log(
+          $"[SmartSplitterForwardTopologyPrototype] topology-fail reason=forward_mover_not_found " +
+          $"center={center} back={back} forward={forward} forwardDirection={forwardDirection} inputMover={inputMover} " +
+          $"leftMover={originals.LeftMoverEntity} rightMover={originals.RightMoverEntity}");
+
+      for (int i = 0; i < allMovers.Length; i++)
+      {
+        Entity candidateEntity = allMovers[i];
+        MoverCD candidate = allMoverData[i];
+
+        bool nearForward =
+            Mathf.Abs(candidate.start.x - forward.x) <= 1 &&
+            Mathf.Abs(candidate.start.y - forward.y) <= 1;
+
+        bool nearCenter =
+            Mathf.Abs(candidate.start.x - center.x) <= 1 &&
+            Mathf.Abs(candidate.start.y - center.y) <= 1;
+
+        if (!nearForward && !nearCenter)
+        {
+          continue;
+        }
+
+        int2 direction = new int2(candidate.stop.x - candidate.start.x, candidate.stop.y - candidate.start.y);
+
+        Debug.Log(
+            $"[SmartSplitterForwardTopologyPrototype] topology-candidate mover={candidateEntity} " +
+            $"path=({candidate.start.x},{candidate.start.y})->({candidate.stop.x},{candidate.stop.y}) " +
+            $"direction={direction} orchestrator={candidate.moverOrchestratorEntity} " +
+            $"index={candidate.indexInOrchestrator} splits={candidate.splitsIntoOnMove}");
       }
     }
 
@@ -2140,6 +2216,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       if (shouldFinish)
       {
         RestoreForwardTopologyRoute(state, allMovers, allMoverData);
+
+        _recentlyCompletedForwardPassthroughEntities[droppedEntity] = now;
 
         finished ??= new List<Entity>();
         finished.Add(droppedEntity);
@@ -2412,7 +2490,22 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   {
     for (int i = 0; i < allMovers.Length; i++)
     {
-      MoverCD mover = allMoverData[i];
+      Entity moverEntity = allMovers[i];
+
+      if (!EntityManager.Exists(moverEntity) ||
+          !EntityManager.HasComponent<MoverCD>(moverEntity))
+      {
+        continue;
+      }
+
+      // Important:
+      // allMoverData is a snapshot captured at the start of OnUpdate. Forward passthrough
+      // temporarily mutates a real forward conveyor mover into a splitter-owned mover.
+      // During restore, using the stale snapshot here can overwrite the freshly-restored
+      // forward conveyor with its old patched state again.
+      //
+      // Always read the live MoverCD before writing split counts.
+      MoverCD mover = EntityManager.GetComponentData<MoverCD>(moverEntity);
 
       if (mover.moverOrchestratorEntity != orchestrator)
       {
@@ -2420,14 +2513,6 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       }
 
       if (mover.splitsIntoOnMove == splitCount)
-      {
-        continue;
-      }
-
-      Entity moverEntity = allMovers[i];
-
-      if (!EntityManager.Exists(moverEntity) ||
-          !EntityManager.HasComponent<MoverCD>(moverEntity))
       {
         continue;
       }
@@ -2491,9 +2576,20 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     float offsetY = itemY - centerY;
 
     float outputAxisDistance = Mathf.Abs(Dot(offsetX, offsetY, outputAxisX, outputAxisY));
-    inputDistance = Mathf.Abs(Dot(offsetX, offsetY, inputAxisX, inputAxisY));
+    float signedInputDistance = Dot(offsetX, offsetY, inputAxisX, inputAxisY);
+
+    // Only accept items on the true input/back side of the splitter.
+    // The old absolute distance check accepted items on both the input lane and
+    // the forward output lane, which made short forward belts re-feed already
+    // forwarded items back into the splitter decision loop.
+    inputDistance = -signedInputDistance;
 
     if (outputAxisDistance > InputLaneHalfWidth)
+    {
+      return false;
+    }
+
+    if (signedInputDistance >= 0f)
     {
       return false;
     }
@@ -2602,6 +2698,48 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         $"[SmartSplitterRuntime] route={route} orchestrator={orchestrator} " +
         $"armedEntity={armed.ArmedEntity} item={armed.ItemObject} " +
         $"variation={armed.ItemVariation} amount={armed.ItemAmount}");
+  }
+
+  private bool HasActiveForwardPassthroughForOrchestrator(Entity orchestrator)
+  {
+    foreach (KeyValuePair<Entity, ForwardPassthroughState> entry in _recentlyForwardPassthroughEntities)
+    {
+      if (entry.Value.Orchestrator == orchestrator)
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private void PruneRecentlyCompletedForwardPassthroughEntities(double now)
+  {
+    if (_recentlyCompletedForwardPassthroughEntities.Count == 0)
+    {
+      return;
+    }
+
+    List<Entity> stale = null;
+
+    foreach (KeyValuePair<Entity, double> entry in _recentlyCompletedForwardPassthroughEntities)
+    {
+      if (now - entry.Value >= ForwardPassthroughCompletedIgnoreSeconds)
+      {
+        stale ??= new List<Entity>();
+        stale.Add(entry.Key);
+      }
+    }
+
+    if (stale == null)
+    {
+      return;
+    }
+
+    foreach (Entity entity in stale)
+    {
+      _recentlyCompletedForwardPassthroughEntities.Remove(entity);
+    }
   }
 
   private void PruneRecentlyArmedEntities(double now)

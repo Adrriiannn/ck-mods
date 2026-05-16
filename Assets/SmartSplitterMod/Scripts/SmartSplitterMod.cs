@@ -10,6 +10,8 @@ public class SmartSplitterMod : IMod
 
   public void Init()
   {
+    SmartSplitterAssetRegistry.EnsureExists();
+    SmartSplitterVisualSwapController.EnsureExists();
     Debug.Log("[SmartSplitterMod] Init");
   }
 
@@ -19,6 +21,7 @@ public class SmartSplitterMod : IMod
 
   public void ModObjectLoaded(Object obj)
   {
+    SmartSplitterAssetRegistry.RegisterLoadedObject(obj);
   }
 
   public void Update()
