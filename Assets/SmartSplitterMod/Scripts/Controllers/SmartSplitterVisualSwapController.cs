@@ -11,11 +11,10 @@ using UnityEngine;
 /// <summary>
 /// Prefab-authored powered visual swap for placed ConveyorBeltSplitter graphical objects.
 ///
-/// This version auto-centers the instantiated SmartSplitterVisual prefab by comparing
-/// the rendered bounds center of the vanilla SpriteObject and the smart SpriteObject.
 /// It preserves the material authored on SmartSplitterVisual.prefab instead of forcing
-/// the registry material at runtime.
-/// That fixes SpriteAsset pivot/atlas/frame-origin differences without hardcoding tile offsets.
+/// the registry material at runtime, and applies the placed splitter variation to the
+/// Smart Splitter sprite asset using the same index-based convention as the vanilla
+/// SpriteVariationFromEntityVariation component.
 /// </summary>
 public sealed class SmartSplitterVisualSwapController : MonoBehaviour
 {
@@ -27,14 +26,15 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     public bool AppliedSmartVisual;
     public bool HasLastPowered;
     public bool LastPowered;
+    public int LastVariation = -1;
     public string LastAssetName;
     public string LastMaterialName;
-    public bool HasAlignedSmartVisual;
   }
 
   private static SmartSplitterVisualSwapController _instance;
 
   private readonly Dictionary<SpriteObject, CachedSpriteState> _spriteStates = new();
+  private readonly HashSet<long> _poweredElectricityTiles = new();
 
   private World _world;
   private EntityQuery _splitterQuery;
@@ -65,12 +65,13 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       return;
     }
 
-    if (Time.time < _nextUpdateAt)
+    float intervalSeconds = SmartSplitterDebugSettings.VisualSwapIntervalSeconds;
+    if (intervalSeconds > 0.0f && Time.time < _nextUpdateAt)
     {
       return;
     }
 
-    _nextUpdateAt = Time.time + SmartSplitterDebugSettings.VisualSwapIntervalSeconds;
+    _nextUpdateAt = Time.time + intervalSeconds;
     RunSwap();
   }
 
@@ -88,7 +89,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     {
       if (SmartSplitterDebugSettings.EnableVisualSwapLogs && !_loggedWaitingForSmartPrefab)
       {
-        Debug.Log("[SmartSplitterVisualSwap:PrefabAutoCenterPrefabMaterial] waiting reason=smart visual prefab not resolved yet");
+        Debug.Log("[SmartSplitterVisualSwap:PrefabVariant] waiting reason=smart visual prefab not resolved yet");
         _loggedWaitingForSmartPrefab = true;
       }
 
@@ -104,12 +105,12 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     using NativeArray<LocalTransform> splitterTransforms =
         _splitterQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
 
-    using NativeArray<Entity> electricityEntities =
-        _electricityQuery.ToEntityArray(Allocator.Temp);
     using NativeArray<ElectricityCD> electricityData =
         _electricityQuery.ToComponentDataArray<ElectricityCD>(Allocator.Temp);
     using NativeArray<LocalTransform> electricityTransforms =
         _electricityQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+
+    BuildPoweredElectricityTileSet(electricityData, electricityTransforms, _poweredElectricityTiles);
 
     for (int i = 0; i < splitterEntities.Length; i++)
     {
@@ -143,18 +144,11 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       bool powered = IsSplitterPoweredByAdjacentElectricity(
           splitterX,
           splitterY,
-          electricityEntities,
-          electricityData,
-          electricityTransforms);
+          _poweredElectricityTiles);
 
-      bool changed = ApplyDesiredVisual(state, smartPrefab, smartAsset, smartMaterial, powered);
-
-      SmartSplitterClientInteractionController.RegisterOrUpdate(
-          splitterEntity,
-          _world,
-          graphicalObject,
-          state.SmartVisualObject,
-          powered);
+      int placedVariation = SmartSplitterOrientationUtility.NormalizeVariation(splitterObjectData[i].variation);
+      int spriteVariation = SmartSplitterOrientationUtility.GetSmartSpriteVariationForPlacedVariation(placedVariation);
+      bool changed = ApplyDesiredVisual(state, smartPrefab, smartAsset, smartMaterial, powered, spriteVariation);
 
       SpriteObject visibleSprite = powered && state.SmartSpriteObject != null
           ? state.SmartSpriteObject
@@ -171,6 +165,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
           (changed ||
            !state.HasLastPowered ||
            state.LastPowered != powered ||
+           state.LastVariation != spriteVariation ||
            state.LastAssetName != currentAssetName ||
            state.LastMaterialName != currentMaterialName))
       {
@@ -178,23 +173,22 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
         Transform smartSpriteTransform = state.SmartSpriteObject != null ? state.SmartSpriteObject.transform : null;
 
         Debug.Log(
-            $"[SmartSplitterVisualSwap:PrefabAutoCenterPrefabMaterial] entity={splitterEntity} root={graphicalObject.name} " +
-            $"tile=({splitterX},{splitterY}) powered={powered} changed={changed} appliedSmart={state.AppliedSmartVisual} " +
+            $"[SmartSplitterVisualSwap:PrefabVariant] entity={splitterEntity} root={graphicalObject.name} " +
+            $"tile=({splitterX},{splitterY}) placedVariation={placedVariation} spriteVariation={spriteVariation} " +
+            $"powered={powered} changed={changed} appliedSmart={state.AppliedSmartVisual} " +
             $"visibleAsset={currentAssetName} visibleMaterial={currentMaterialName} " +
             $"vanillaActive={(state.VanillaSpriteObject != null && state.VanillaSpriteObject.gameObject.activeSelf)} " +
             $"smartActive={(state.SmartVisualObject != null && state.SmartVisualObject.activeSelf)} " +
             $"smartRootLocal={(smartRoot != null ? smartRoot.localPosition.ToString() + "/" + smartRoot.localEulerAngles.ToString() : "null")} " +
-            $"smartSpriteLocal={(smartSpriteTransform != null ? smartSpriteTransform.localPosition.ToString() + "/" + smartSpriteTransform.localEulerAngles.ToString() : "null")} " +
-            $"aligned={state.HasAlignedSmartVisual}");
+            $"smartSpriteLocal={(smartSpriteTransform != null ? smartSpriteTransform.localPosition.ToString() + "/" + smartSpriteTransform.localEulerAngles.ToString() : "null")}");
       }
 
       state.HasLastPowered = true;
       state.LastPowered = powered;
+      state.LastVariation = spriteVariation;
       state.LastAssetName = currentAssetName;
       state.LastMaterialName = currentMaterialName;
     }
-
-    SmartSplitterClientInteractionController.Tick();
   }
 
   private bool TryEnsureQueries()
@@ -211,7 +205,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     {
       if (SmartSplitterDebugSettings.EnableVisualSwapLogs && !_loggedWaitingForGraphicalSystem)
       {
-        Debug.Log("[SmartSplitterVisualSwap:PrefabAutoCenterPrefabMaterial] waiting reason=no CreateGraphicalObjectSystem in any active world");
+        Debug.Log("[SmartSplitterVisualSwap:PrefabVariant] waiting reason=no CreateGraphicalObjectSystem in any active world");
         _loggedWaitingForGraphicalSystem = true;
       }
 
@@ -234,6 +228,10 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
                 ComponentType.ReadOnly<ObjectDataCD>(),
                 ComponentType.ReadOnly<LocalTransform>()
             },
+      None = new[]
+        {
+                ComponentType.ReadOnly<EntityDestroyedCD>()
+            },
       Options = EntityQueryOptions.IncludeDisabledEntities
     });
 
@@ -244,6 +242,10 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
                 ComponentType.ReadOnly<ElectricityCD>(),
                 ComponentType.ReadOnly<LocalTransform>()
             },
+      None = new[]
+        {
+                ComponentType.ReadOnly<EntityDestroyedCD>()
+            },
       Options = EntityQueryOptions.IncludeDisabledEntities
     });
 
@@ -251,7 +253,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
 
     if (SmartSplitterDebugSettings.EnableVisualSwapLogs)
     {
-      Debug.Log($"[SmartSplitterVisualSwap:PrefabAutoCenterPrefabMaterial] initialized graphical lookup world={_world.Name}");
+      Debug.Log($"[SmartSplitterVisualSwap:PrefabVariant] initialized graphical lookup world={_world.Name}");
     }
 
     return true;
@@ -358,9 +360,9 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       AppliedSmartVisual = false,
       HasLastPowered = false,
       LastPowered = false,
+      LastVariation = -1,
       LastAssetName = vanillaSpriteObject.asset != null ? vanillaSpriteObject.asset.name : "null",
-      LastMaterialName = vanillaSpriteObject.material != null ? vanillaSpriteObject.material.name : "null",
-      HasAlignedSmartVisual = false
+      LastMaterialName = vanillaSpriteObject.material != null ? vanillaSpriteObject.material.name : "null"
     };
 
     _spriteStates[vanillaSpriteObject] = state;
@@ -372,7 +374,8 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       GameObject smartPrefab,
       SpriteAsset smartAsset,
       Material smartMaterial,
-      bool powered)
+      bool powered,
+      int variation)
   {
     if (state.VanillaSpriteObject == null)
     {
@@ -382,22 +385,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     if (powered)
     {
       bool changed = EnsureSmartVisual(state, smartPrefab, smartAsset, smartMaterial);
-
-      // Align before hiding vanilla, so vanilla renderer bounds are still available.
-      if (!state.HasAlignedSmartVisual)
-      {
-        if (TryAutoCenterSmartVisual(state, out Vector3 worldDelta))
-        {
-          state.SmartVisualObject.transform.position += worldDelta;
-          state.HasAlignedSmartVisual = true;
-          changed = true;
-
-          if (SmartSplitterDebugSettings.EnableVisualSwapLogs)
-          {
-            Debug.Log($"[SmartSplitterVisualSwap:PrefabAutoCenterPrefabMaterial] auto-centered delta={worldDelta}");
-          }
-        }
-      }
+      changed |= ApplyDirectionalVariant(state.SmartSpriteObject, variation);
 
       if (state.VanillaSpriteObject.gameObject.activeSelf)
       {
@@ -488,73 +476,56 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     return changed;
   }
 
-  private bool TryAutoCenterSmartVisual(CachedSpriteState state, out Vector3 worldDelta)
+  private static bool ApplyDirectionalVariant(SpriteObject spriteObject, int variation)
   {
-    worldDelta = Vector3.zero;
-
-    if (state.VanillaSpriteObject == null ||
-        state.SmartVisualObject == null ||
-        state.SmartSpriteObject == null)
+    if (spriteObject == null)
     {
       return false;
     }
 
-    if (!TryGetRendererBounds(state.VanillaSpriteObject.gameObject, out Bounds vanillaBounds) ||
-        !TryGetRendererBounds(state.SmartVisualObject, out Bounds smartBounds))
+    variation = SmartSplitterOrientationUtility.NormalizeVariation(variation);
+
+    if (variation == 0)
+    {
+      if (spriteObject.currentVariantHash == 0)
+      {
+        return false;
+      }
+
+      spriteObject.ResetVariant();
+      return true;
+    }
+
+    int desiredVariantIndex = variation - 1;
+    if (spriteObject.currentVariantIndex == desiredVariantIndex)
     {
       return false;
     }
 
-    worldDelta = vanillaBounds.center - smartBounds.center;
-
-    // Avoid tiny jitter adjustments.
-    return worldDelta.sqrMagnitude > 0.000001f;
-  }
-
-  private bool TryGetRendererBounds(GameObject root, out Bounds bounds)
-  {
-    bounds = default;
-
-    if (root == null)
-    {
-      return false;
-    }
-
-    Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-
-    bool found = false;
-
-    for (int i = 0; i < renderers.Length; i++)
-    {
-      Renderer renderer = renderers[i];
-
-      if (renderer == null)
-      {
-        continue;
-      }
-
-      if (!found)
-      {
-        bounds = renderer.bounds;
-        found = true;
-      }
-      else
-      {
-        bounds.Encapsulate(renderer.bounds);
-      }
-    }
-
-    return found;
+    spriteObject.SetVariantByIndex(variation);
+    return true;
   }
 
   private bool IsSplitterPoweredByAdjacentElectricity(
       int splitterX,
       int splitterY,
-      NativeArray<Entity> electricityEntities,
-      NativeArray<ElectricityCD> electricityData,
-      NativeArray<LocalTransform> electricityTransforms)
+      HashSet<long> poweredElectricityTiles)
   {
-    for (int i = 0; i < electricityEntities.Length; i++)
+    return poweredElectricityTiles.Contains(GetTileKey(splitterX, splitterY)) ||
+           poweredElectricityTiles.Contains(GetTileKey(splitterX + 1, splitterY)) ||
+           poweredElectricityTiles.Contains(GetTileKey(splitterX - 1, splitterY)) ||
+           poweredElectricityTiles.Contains(GetTileKey(splitterX, splitterY + 1)) ||
+           poweredElectricityTiles.Contains(GetTileKey(splitterX, splitterY - 1));
+  }
+
+  private static void BuildPoweredElectricityTileSet(
+      NativeArray<ElectricityCD> electricityData,
+      NativeArray<LocalTransform> electricityTransforms,
+      HashSet<long> poweredElectricityTiles)
+  {
+    poweredElectricityTiles.Clear();
+
+    for (int i = 0; i < electricityData.Length; i++)
     {
       ElectricityCD electricity = electricityData[i];
 
@@ -568,22 +539,15 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       }
 
       LocalTransform transform = electricityTransforms[i];
-
       int powerX = Mathf.RoundToInt(transform.Position.x);
       int powerY = Mathf.RoundToInt(transform.Position.z);
 
-      int dx = Mathf.Abs(powerX - splitterX);
-      int dy = Mathf.Abs(powerY - splitterY);
-
-      bool sameTile = dx == 0 && dy == 0;
-      bool orthogonallyAdjacent = (dx == 1 && dy == 0) || (dx == 0 && dy == 1);
-
-      if (sameTile || orthogonallyAdjacent)
-      {
-        return true;
-      }
+      poweredElectricityTiles.Add(GetTileKey(powerX, powerY));
     }
+  }
 
-    return false;
+  private static long GetTileKey(int x, int y)
+  {
+    return ((long)x << 32) ^ (uint)y;
   }
 }

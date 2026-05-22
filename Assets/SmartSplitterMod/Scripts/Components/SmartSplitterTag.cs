@@ -10,20 +10,46 @@ public enum SmartSplitterDecision : byte
 {
   None = 0,
   LeftOnly = 1,
-  RightOnly = 2,
-  Both = 3,
-  Blocked = 4
+  CenterOnly = 2,
+  LeftCenter = 3,
+  RightOnly = 4,
+  Both = 5,
+  CenterRight = 6,
+  All = 7,
+  Blocked = 8
+}
+
+public enum SmartSplitterLane : byte
+{
+  Left = 0,
+  Center = 1,
+  Right = 2
+}
+
+public enum SmartSplitterLaneFilterMode : byte
+{
+  Any = 0,
+  Item = 1,
+  None = 2
+}
+
+public struct SmartSplitterLaneFilter
+{
+  public SmartSplitterLaneFilterMode Mode;
+  public ObjectID FilterObject;
+  public int FilterVariation;
+}
+
+public struct SmartSplitterLaneFiltersCD : IComponentData
+{
+  public SmartSplitterLaneFilter Left;
+  public SmartSplitterLaneFilter Center;
+  public SmartSplitterLaneFilter Right;
 }
 
 public struct SmartSplitterConfigCD : IComponentData
 {
   public bool Enabled;
-
-  public ObjectID LeftFilterObject;
-  public int LeftFilterVariation;
-
-  public ObjectID RightFilterObject;
-  public int RightFilterVariation;
 }
 
 public struct SmartSplitterOriginalOutputsCD : IComponentData
@@ -45,7 +71,6 @@ public struct SmartSplitterArmedRouteCD : IComponentData
 {
   public bool HasArmedRoute;
   public bool AppliedOnce;
-  public bool VerifiedHoldState;
 
   public Entity ArmedEntity;
 
@@ -54,10 +79,11 @@ public struct SmartSplitterArmedRouteCD : IComponentData
   public ObjectID ItemObject;
   public int ItemVariation;
   public int ItemAmount;
+  public int RouteStartLaneIndex;
+  public int NextRouteStartLaneIndex;
 
   public double ArmedAt;
   public double ExpiresAt;
 
   public double RouteAppliedAt;
-  public double HoldUntil;
 }

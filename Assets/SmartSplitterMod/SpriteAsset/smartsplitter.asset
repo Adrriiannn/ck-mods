@@ -48,10 +48,10 @@ MonoBehaviour:
   m_animations:
   - m_guid: 28f0ecc2-1d3b-4264-bed6-a1f041270b90
     m_spriteData:
-      texture: {fileID: 2800000, guid: 8c14fdeeac7b5c24b9602feff9776c68, type: 3}
+      texture: {fileID: 2800000, guid: 076b541e158c2a64287f3659f6c6d6b5, type: 3}
       emissiveTexture: {fileID: 0}
       normalTexture: {fileID: 0}
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       positionalData: []
       inheritPivot: 1
     srcFrameCount: 4
@@ -59,22 +59,22 @@ MonoBehaviour:
     loop: 1
     m_exitAnimationGuid: 
     m_variants:
-    - texture: {fileID: 2800000, guid: 71d1653dcd0601b4eb587e8ffc70b6e3, type: 3}
+    - texture: {fileID: 2800000, guid: e4f440a07b425a84388428e14c42cd72, type: 3}
       emissiveTexture: {fileID: 0}
       normalTexture: {fileID: 0}
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       positionalData: []
       inheritPivot: 1
-    - texture: {fileID: 2800000, guid: 753ce9bf781c0614c89125fe0b340dba, type: 3}
+    - texture: {fileID: 2800000, guid: ae78aee0cab9e91489b4b1e7e7798bfd, type: 3}
       emissiveTexture: {fileID: 0}
       normalTexture: {fileID: 0}
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       positionalData: []
       inheritPivot: 1
-    - texture: {fileID: 2800000, guid: b14193391cf210f4e8e0fe3d1986c494, type: 3}
+    - texture: {fileID: 2800000, guid: bb7b079fa190fb043abf1fade29d9bcd, type: 3}
       emissiveTexture: {fileID: 0}
       normalTexture: {fileID: 0}
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       positionalData: []
       inheritPivot: 1
     m_transitions: []

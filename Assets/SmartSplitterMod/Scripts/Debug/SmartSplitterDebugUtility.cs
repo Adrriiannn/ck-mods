@@ -112,10 +112,19 @@ public static class SmartSplitterDebugUtility
         {
             SmartSplitterConfigCD config = entityManager.GetComponentData<SmartSplitterConfigCD>(orchestrator);
 
-            configText =
-                $"config.enabled={config.Enabled} " +
-                $"leftFilter={config.LeftFilterObject}/{config.LeftFilterVariation} " +
-                $"rightFilter={config.RightFilterObject}/{config.RightFilterVariation}";
+            configText = $"config.enabled={config.Enabled}";
+        }
+
+        string filtersText = "SmartSplitterLaneFiltersCD=missing";
+
+        if (entityManager.HasComponent<SmartSplitterLaneFiltersCD>(orchestrator))
+        {
+            SmartSplitterLaneFiltersCD filters = entityManager.GetComponentData<SmartSplitterLaneFiltersCD>(orchestrator);
+
+            filtersText =
+                $"filters.left={BuildLaneFilterText(filters.Left)} " +
+                $"filters.center={BuildLaneFilterText(filters.Center)} " +
+                $"filters.right={BuildLaneFilterText(filters.Right)}";
         }
 
         string routeText = "SmartSplitterArmedRouteCD=missing";
@@ -147,7 +156,14 @@ public static class SmartSplitterDebugUtility
                 $"rightDir={originals.RightCachedDirection} rightStart={originals.RightCachedStart}";
         }
 
-        return $"{tagText} {configText} {routeText} {originalsText}";
+        return $"{tagText} {configText} {filtersText} {routeText} {originalsText}";
+    }
+
+    private static string BuildLaneFilterText(SmartSplitterLaneFilter filter)
+    {
+        return filter.Mode == SmartSplitterLaneFilterMode.Item
+            ? $"{filter.Mode}:{filter.FilterObject}/{filter.FilterVariation}"
+            : filter.Mode.ToString();
     }
 
     public static bool IsDirtOrTurf(ObjectID objectID)

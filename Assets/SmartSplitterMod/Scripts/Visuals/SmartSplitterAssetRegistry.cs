@@ -2,7 +2,7 @@ using Pug.Sprite;
 using UnityEngine;
 
 /// <summary>
-/// Static registry for Smart Splitter visual/UI assets.
+/// Static registry for Smart Splitter visual assets.
 ///
 /// Important:
 /// Do not create an empty runtime SmartSplitterAssetRegistry GameObject.
@@ -30,7 +30,6 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
   [Tooltip("Assign Assets/SmartSplitterMod/Prefabs/SmartSplitterVisual.prefab here.")]
   public GameObject SmartSplitterVisualPrefab;
 
-  [Header("UI Prefabs")]
   [Tooltip("Assign Assets/SmartSplitterMod/Prefabs/SmartSplitterPanel.prefab here.")]
   public GameObject SmartSplitterPanelPrefab;
 
@@ -68,6 +67,12 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
     }
     else if (obj is GameObject gameObject)
     {
+      if (LooksLikePanelPrefab(gameObject))
+      {
+        _loadedSmartSplitterPanelPrefab = gameObject;
+        Debug.Log($"[SmartSplitterAssetRegistry] Captured SmartSplitterPanel prefab name={gameObject.name}");
+      }
+
       source = gameObject.GetComponentInChildren<SmartSplitterAssetRegistry>(true);
     }
 
@@ -83,8 +88,7 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
           $"name={(obj != null ? obj.name : "null")} " +
           $"assetAddress={(source.SmartSplitterAsset.hasAddress ? source.SmartSplitterAsset.address.ToString() : "no-address")} " +
           $"material={(source.SmartSplitterMaterial != null ? source.SmartSplitterMaterial.name : "null")} " +
-          $"visualPrefab={(source.SmartSplitterVisualPrefab != null ? source.SmartSplitterVisualPrefab.name : "null")} " +
-          $"panelPrefab={(source.SmartSplitterPanelPrefab != null ? source.SmartSplitterPanelPrefab.name : "null")}");
+          $"visualPrefab={(source.SmartSplitterVisualPrefab != null ? source.SmartSplitterVisualPrefab.name : "null")}");
       return;
     }
 
@@ -123,19 +127,6 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
     return prefab != null;
   }
 
-  public static bool TryGetSmartPanelPrefab(out GameObject prefab)
-  {
-    prefab = null;
-
-    if (!_hasLoadedRegistryData)
-    {
-      return false;
-    }
-
-    prefab = _loadedSmartSplitterPanelPrefab;
-    return prefab != null;
-  }
-
   public static bool TryGetSmartVisualPrefabAndFallbacks(
       out GameObject prefab,
       out SpriteAsset asset,
@@ -160,6 +151,12 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
     return prefab != null;
   }
 
+  public static bool TryGetSmartSplitterPanelPrefab(out GameObject prefab)
+  {
+    prefab = _loadedSmartSplitterPanelPrefab;
+    return prefab != null;
+  }
+
   private static bool HasUsefulRegistryData(SmartSplitterAssetRegistry source)
   {
     if (source == null)
@@ -178,7 +175,9 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
     _loadedSmartSplitterAsset = source.SmartSplitterAsset;
     _loadedSmartSplitterMaterial = source.SmartSplitterMaterial;
     _loadedSmartSplitterVisualPrefab = source.SmartSplitterVisualPrefab;
-    _loadedSmartSplitterPanelPrefab = source.SmartSplitterPanelPrefab;
+    _loadedSmartSplitterPanelPrefab = source.SmartSplitterPanelPrefab != null
+        ? source.SmartSplitterPanelPrefab
+        : _loadedSmartSplitterPanelPrefab;
     _hasLoadedRegistryData = true;
 
     SpriteAsset resolvedAsset = null;
@@ -190,7 +189,43 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
         $"resolvedAsset={(resolvedAsset != null ? resolvedAsset.name : "null")} " +
         $"material={(source.SmartSplitterMaterial != null ? source.SmartSplitterMaterial.name : "null")} " +
         $"visualPrefab={(source.SmartSplitterVisualPrefab != null ? source.SmartSplitterVisualPrefab.name : "null")} " +
-        $"panelPrefab={(source.SmartSplitterPanelPrefab != null ? source.SmartSplitterPanelPrefab.name : "null")}");
+        $"panelPrefab={(_loadedSmartSplitterPanelPrefab != null ? _loadedSmartSplitterPanelPrefab.name : "null")}");
+  }
+
+  private static bool LooksLikePanelPrefab(GameObject gameObject)
+  {
+    if (gameObject == null)
+    {
+      return false;
+    }
+
+    return gameObject.name.StartsWith("SmartSplitterPanel") ||
+           gameObject.GetComponentInChildren<SmartSplitterFilterPanelController>(true) != null ||
+           FindChildByName(gameObject.transform, "PanelRoot") != null;
+  }
+
+  private static Transform FindChildByName(Transform root, string childName)
+  {
+    if (root == null)
+    {
+      return null;
+    }
+
+    if (root.name == childName)
+    {
+      return root;
+    }
+
+    for (int i = 0; i < root.childCount; i++)
+    {
+      Transform found = FindChildByName(root.GetChild(i), childName);
+      if (found != null)
+      {
+        return found;
+      }
+    }
+
+    return null;
   }
 
   private void Awake()
