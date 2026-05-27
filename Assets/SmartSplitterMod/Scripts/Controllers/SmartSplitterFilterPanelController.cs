@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using I2.Loc;
 using PugMod;
 using Unity.Entities;
 using UnityEngine;
@@ -10,15 +11,22 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
   private const int RuntimeIconSortingOrder = 500;
   private const int DropdownRuntimeSortingOrder = 620;
   private const float UiPixelsPerUnit = 16.0f;
+  private const float PanelLayoutScale = 1.0f;
   private const float DropdownHeaderIconSize = 0.25f;
-  private const float DropdownOptionIconSize = 0.4375f;
+  private const float FilterIconSize = 0.5f;
+  private const float DropdownOptionIconSize = 0.5f;
   private const float DropdownRowHeight = 0.5f;
-  private const float DropdownTextScale = 1.0f;
-  private const float DropdownOptionInputZ = -0.125f;
-  private const float DropdownArrowVerticalNudge = 0.0f;
+  private const float DropdownTextScale = 0.5f;
+  private const float NativeButtonInputZ = -2.25f;
+  private const float PanelBlockerInputZ = -2.0f;
+  private const float DropdownOptionInputZ = -2.4f;
+  private const float DropdownBlockerInputZ = -2.3f;
+  private const float DropdownArrowVerticalNudge = 1.5f / UiPixelsPerUnit;
   private const float DropdownContentRightNudge = 4.0f / UiPixelsPerUnit;
-  private const int MaxVisibleDropdownOptions = 7;
-  private const int DropdownHeaderLabelMaxCharacters = 6;
+  private const float PanelInventoryGap = 2.0f / UiPixelsPerUnit;
+  private const int DropdownHistoryColumns = 3;
+  private const int MaxVisibleDropdownHistoryRows = 3;
+  private const int DropdownHeaderLabelMaxCharacters = 7;
   private const int DropdownOptionLabelMaxCharacters = 8;
 
   private sealed class LaneWidgets
@@ -79,6 +87,9 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private readonly Dictionary<string, GameObject> _nativeObjectsByName = new();
   private readonly Dictionary<Sprite, Sprite> _uiPixelSprites = new();
+  private static Sprite _dropdownArrowDownSprite;
+  private static Sprite _dropdownArrowUpSprite;
+  private static Sprite _dropdownPixelSprite;
 
   private World _world;
   private Entity _splitter;
@@ -245,6 +256,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     _nativeObjectsByName.Clear();
     _nativeDrawOrder = PanelSortingOrderBase;
     CloneRectTransformTree(_panelRoot.transform, _nativeRoot.transform, true);
+    AddPanelInputBlocker();
   }
 
   private void ConfigureNativeRoot()
@@ -266,8 +278,91 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     float scale = SmartSplitterDebugSettings.SmartSplitterPanelScale;
     _nativeRoot.transform.localScale = Vector3.one * scale;
 
-    _nativeRoot.transform.localPosition = new Vector3(0.0f, SnapUiUnits(2.45f), 10.0f);
+    _nativeRoot.transform.localPosition = new Vector3(
+        0.0f,
+        GetPanelRootY(uiRoot, scale),
+        10.0f);
     _nativeRoot.transform.localRotation = Quaternion.identity;
+  }
+
+  private static float GetPanelRootY(Transform uiRoot, float rootScale)
+  {
+    if (TryGetInventoryTopInRootSpace(uiRoot, out float inventoryTop))
+    {
+      float panelHalfHeight = ToUiUnits(GetAuthoredSize("PanelRoot", null).y) * rootScale * 0.5f;
+      return SnapUiUnits(inventoryTop + PanelInventoryGap + panelHalfHeight);
+    }
+
+    return SnapUiUnits(2.45f);
+  }
+
+  private static bool TryGetInventoryTopInRootSpace(Transform uiRoot, out float topY)
+  {
+    topY = 0.0f;
+    if (uiRoot == null || Manager.ui == null || Manager.ui.playerInventoryUI == null)
+    {
+      return false;
+    }
+
+    ItemSlotsUIContainer inventory = Manager.ui.playerInventoryUI;
+    if (!inventory.isShowing)
+    {
+      return false;
+    }
+
+    Bounds bounds = default;
+    bool hasBounds = false;
+    EncapsulateRendererBounds(inventory.backgroundSR, ref bounds, ref hasBounds);
+    if (inventory.additionalBackgroundSRs != null)
+    {
+      for (int i = 0; i < inventory.additionalBackgroundSRs.Length; i++)
+      {
+        EncapsulateRendererBounds(inventory.additionalBackgroundSRs[i], ref bounds, ref hasBounds);
+      }
+    }
+
+    if (inventory.itemSlots != null)
+    {
+      for (int i = 0; i < inventory.itemSlots.Count; i++)
+      {
+        SlotUIBase slot = inventory.itemSlots[i];
+        if (slot == null || !slot.gameObject.activeInHierarchy)
+        {
+          continue;
+        }
+
+        Renderer[] renderers = slot.GetComponentsInChildren<Renderer>(true);
+        for (int j = 0; j < renderers.Length; j++)
+        {
+          EncapsulateRendererBounds(renderers[j], ref bounds, ref hasBounds);
+        }
+      }
+    }
+
+    if (!hasBounds)
+    {
+      return false;
+    }
+
+    topY = uiRoot.InverseTransformPoint(new Vector3(bounds.center.x, bounds.max.y, bounds.center.z)).y;
+    return true;
+  }
+
+  private static void EncapsulateRendererBounds(Renderer renderer, ref Bounds bounds, ref bool hasBounds)
+  {
+    if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy)
+    {
+      return;
+    }
+
+    if (hasBounds)
+    {
+      bounds.Encapsulate(renderer.bounds);
+      return;
+    }
+
+    bounds = renderer.bounds;
+    hasBounds = true;
   }
 
   private static Transform TryGetVanillaUIRoot()
@@ -344,11 +439,12 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       return;
     }
 
+    Vector2 authoredSize = GetAuthoredSize(source.name, sourceRect);
     Vector2 targetSize = new Vector2(
-        ToUiUnits(sourceRect.sizeDelta.x),
-        ToUiUnits(sourceRect.sizeDelta.y));
+        ToUiUnits(authoredSize.x),
+        ToUiUnits(authoredSize.y));
 
-    if (ShouldRenderAtAuthoredPixelSize(source.name, spriteRenderer.sprite, sourceRect))
+    if (ShouldRenderAtAuthoredPixelSize(source.name, spriteRenderer.sprite, sourceRect, authoredSize))
     {
       spriteRenderer.drawMode = SpriteDrawMode.Simple;
       spriteObject.transform.localScale = Vector3.one;
@@ -392,27 +488,189 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private static float ToUiUnits(float pixels)
   {
-    return SnapUiPixels(pixels) / UiPixelsPerUnit;
+    return SnapUiPixels(pixels * PanelLayoutScale) / UiPixelsPerUnit;
   }
 
   private static float PixelsToUiUnits(float pixels)
   {
-    return pixels / UiPixelsPerUnit;
+    return SnapUiPixels(pixels * PanelLayoutScale) / UiPixelsPerUnit;
   }
 
   private static Vector3 GetNativeLocalPosition(string objectName, RectTransform sourceRect)
   {
-    Vector2 anchoredPosition = sourceRect.anchoredPosition;
+    Vector2 authoredSize = GetAuthoredSize(objectName, sourceRect);
+    Vector2 anchoredPosition = GetAuthoredAnchoredPosition(objectName, sourceRect);
     if (IsDropdownFrameObject(objectName))
     {
-      anchoredPosition.x = AlignCenterToPixelGrid(anchoredPosition.x, sourceRect.sizeDelta.x);
-      anchoredPosition.y = AlignCenterToPixelGrid(anchoredPosition.y, sourceRect.sizeDelta.y);
+      anchoredPosition.x = AlignCenterToPixelGrid(
+          anchoredPosition.x * PanelLayoutScale,
+          authoredSize.x * PanelLayoutScale) / PanelLayoutScale;
+      anchoredPosition.y = AlignCenterToPixelGrid(
+          anchoredPosition.y * PanelLayoutScale,
+          authoredSize.y * PanelLayoutScale) / PanelLayoutScale;
     }
 
     return new Vector3(
         PixelsToUiUnits(anchoredPosition.x),
-        PixelsToUiUnits(anchoredPosition.y),
+        ShouldPreserveHalfPixelPosition(objectName)
+            ? PixelsToUiUnitsUnsnapped(anchoredPosition.y)
+            : PixelsToUiUnits(anchoredPosition.y),
         0.0f);
+  }
+
+  private static bool ShouldPreserveHalfPixelPosition(string objectName)
+  {
+    return objectName == "Header" || objectName == "FilteringText";
+  }
+
+  private static float PixelsToUiUnitsUnsnapped(float pixels)
+  {
+    return pixels * PanelLayoutScale / UiPixelsPerUnit;
+  }
+
+  private static Vector2 GetAuthoredSize(string objectName, RectTransform sourceRect)
+  {
+    Vector2 fallback = sourceRect != null ? sourceRect.sizeDelta : Vector2.zero;
+    switch (objectName)
+    {
+      case "SmartSplitterPanel":
+      case "PanelRoot":
+        return new Vector2(112.0f, 60.0f);
+      case "PanelBody":
+        return new Vector2(112.0f, 48.0f);
+      case "Header":
+        return new Vector2(30.0f, 7.0f);
+      case "FilteringText":
+        return GetHalfAuthoredSize(fallback);
+      case "LeftDropdown":
+      case "CenterDropdown":
+      case "RightDropdown":
+        return new Vector2(32.0f, 6.0f);
+      case "LeftDropdownPanel":
+      case "CenterDropdownPanel":
+      case "RightDropdownPanel":
+        return new Vector2(32.0f, 48.0f);
+      case "DividerLeft":
+      case "DividerRight":
+        return new Vector2(1.0f, 40.0f);
+      case "Icon":
+      case "HoverHighlight":
+        return GetHalfAuthoredSize(fallback);
+      default:
+        break;
+    }
+
+    if (TryGetLaneLayout(objectName, out _, out string part))
+    {
+      switch (part)
+      {
+        case "Text":
+        case "FilterButton":
+        case "FilterSilhouette":
+        case "FilterHighlight":
+        case "FilterNone":
+        case "Slot0":
+        case "Slot1":
+          return GetHalfAuthoredSize(fallback);
+        case "DropdownArrow":
+          return GetHalfAuthoredSize(fallback);
+      }
+    }
+
+    if (objectName == "ElectricityIconOn" || objectName == "ElectricityIconOff")
+    {
+      return GetHalfAuthoredSize(fallback);
+    }
+
+    return fallback;
+  }
+
+  private static Vector2 GetHalfAuthoredSize(Vector2 size)
+  {
+    return new Vector2(
+        Mathf.Max(1.0f, Mathf.Round(size.x * 0.5f)),
+        Mathf.Max(1.0f, Mathf.Round(size.y * 0.5f)));
+  }
+
+  private static Vector2 GetAuthoredAnchoredPosition(string objectName, RectTransform sourceRect)
+  {
+    Vector2 fallback = sourceRect != null ? sourceRect.anchoredPosition : Vector2.zero;
+    if (string.IsNullOrEmpty(objectName))
+    {
+      return fallback;
+    }
+
+    switch (objectName)
+    {
+      case "PanelBody":
+        return new Vector2(0.0f, -6.0f);
+      case "Header":
+      case "FilteringText":
+        return new Vector2(0.0f, 21.5f);
+      case "DividerLeft":
+        return new Vector2(-18.0f, -6.0f);
+      case "DividerRight":
+        return new Vector2(18.0f, -6.0f);
+    }
+
+    if (TryGetLaneLayout(objectName, out float laneX, out string part))
+    {
+      switch (part)
+      {
+        case "Text":
+          return new Vector2(laneX, 11.5f);
+        case "FilterButton":
+        case "FilterSilhouette":
+        case "FilterHighlight":
+        case "FilterNone":
+          return new Vector2(laneX, 2.5f);
+        case "Dropdown":
+          return new Vector2(laneX, -11.0f);
+        case "DropdownArrow":
+          return new Vector2(laneX + 13.5f, -11.5f);
+        case "DropdownPanel":
+          return new Vector2(laneX, -37.5f);
+        case "Slot0":
+          return new Vector2(laneX - 6.0f, -20.0f);
+        case "Slot1":
+          return new Vector2(laneX + 6.0f, -20.0f);
+      }
+    }
+
+    if (objectName == "ElectricityIconOn" || objectName == "ElectricityIconOff")
+    {
+      return new Vector2(50.0f, 12.0f);
+    }
+
+    return fallback;
+  }
+
+  private static bool TryGetLaneLayout(string objectName, out float laneX, out string part)
+  {
+    laneX = 0.0f;
+    part = null;
+    if (objectName.StartsWith("Left"))
+    {
+      laneX = -36.0f;
+      part = objectName.Substring("Left".Length);
+      return true;
+    }
+
+    if (objectName.StartsWith("Center"))
+    {
+      laneX = 0.0f;
+      part = objectName.Substring("Center".Length);
+      return true;
+    }
+
+    if (objectName.StartsWith("Right"))
+    {
+      laneX = 36.0f;
+      part = objectName.Substring("Right".Length);
+      return true;
+    }
+
+    return false;
   }
 
   private static bool IsDropdownFrameObject(string objectName)
@@ -455,8 +713,9 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       return;
     }
 
-    int targetWidth = Mathf.RoundToInt(SnapUiPixels(sourceRect.sizeDelta.x));
-    int targetHeight = Mathf.RoundToInt(SnapUiPixels(sourceRect.sizeDelta.y));
+    Vector2 authoredSize = GetAuthoredSize(objectName, sourceRect);
+    int targetWidth = Mathf.RoundToInt(SnapUiPixels(authoredSize.x * PanelLayoutScale));
+    int targetHeight = Mathf.RoundToInt(SnapUiPixels(authoredSize.y * PanelLayoutScale));
     int sourceWidth = Mathf.RoundToInt(sourceSprite.rect.width);
     int sourceHeight = Mathf.RoundToInt(sourceSprite.rect.height);
     if (targetWidth <= 0 || targetHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0)
@@ -567,7 +826,11 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     renderer.sortingOrder = sortingOrder;
   }
 
-  private static bool ShouldRenderAtAuthoredPixelSize(string objectName, Sprite sprite, RectTransform sourceRect)
+  private static bool ShouldRenderAtAuthoredPixelSize(
+      string objectName,
+      Sprite sprite,
+      RectTransform sourceRect,
+      Vector2 authoredSize)
   {
     if (sprite == null || sourceRect == null || string.IsNullOrEmpty(objectName))
     {
@@ -579,8 +842,8 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       return false;
     }
 
-    return Mathf.Approximately(SnapUiPixels(sourceRect.sizeDelta.x), sprite.rect.width) &&
-           Mathf.Approximately(SnapUiPixels(sourceRect.sizeDelta.y), sprite.rect.height);
+    return Mathf.Approximately(SnapUiPixels(authoredSize.x), sprite.rect.width) &&
+           Mathf.Approximately(SnapUiPixels(authoredSize.y), sprite.rect.height);
   }
 
   private Sprite GetUiPixelSprite(Sprite source)
@@ -619,6 +882,11 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     return Mathf.Round(units * UiPixelsPerUnit) / UiPixelsPerUnit;
   }
 
+  private static float ScaleLayoutUnits(float units)
+  {
+    return SnapUiUnits(units * PanelLayoutScale);
+  }
+
   private static float SnapUiPixels(float value)
   {
     return Mathf.Round(value);
@@ -642,7 +910,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
   {
     lane.FilterButton = BindButton(prefix + "FilterButton", null);
     lane.PickButton = BindButton(prefix + "Slot0", () => BeginPickLane(lane.Lane));
-    lane.ClearButton = BindButton(prefix + "Slot1", () => SetLaneToNone(lane.Lane));
+    lane.ClearButton = BindButton(prefix + "Slot1", () => SetLaneToAny(lane.Lane));
     lane.DropdownButton = BindButton(prefix + "Dropdown", () => ToggleDropdown(lane.Lane));
     lane.DropdownArrowButton = BindButton(prefix + "DropdownArrow", () => ToggleDropdown(lane.Lane));
     lane.Silhouette = FindNativeObject(prefix + "FilterSilhouette");
@@ -667,7 +935,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     if (lane.ClearButton != null)
     {
       lane.ClearButton.HoverTitle = "Clear filter";
-      lane.ClearButton.HoverDescription = "Removes this lane's item filter.";
+      lane.ClearButton.HoverDescription = "Resets this lane to accept any item.";
     }
 
     if (lane.DropdownButton != null)
@@ -683,9 +951,9 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       lane.DropdownHeaderText = CreateTinyPixelText(
           lane.DropdownButton.gameObject,
           prefix + "DropdownHeaderText",
-          new Vector3(-0.42f, 0.0f, 0.0f),
+          Vector3.zero,
           DropdownRuntimeSortingOrder + 1,
-          TinyPixelText.Alignment.Left);
+          TinyPixelText.Alignment.Center);
     }
 
     if (lane.DropdownPanel != null)
@@ -698,6 +966,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     if (lane.DropdownArrow != null)
     {
       AlignDropdownArrow(lane.DropdownArrow);
+      SetDropdownArrowSprite(lane, false);
     }
 
     if (lane.NoneIcon != null)
@@ -749,13 +1018,57 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     }
 
     RectTransform sourceRect = FindGameObjectInSource(objectName)?.GetComponent<RectTransform>();
+    Vector2 authoredSize = GetAuthoredSize(objectName, sourceRect);
     Vector2 size = sourceRect != null
-        ? new Vector2(ToUiUnits(sourceRect.sizeDelta.x), ToUiUnits(sourceRect.sizeDelta.y))
+        ? new Vector2(ToUiUnits(authoredSize.x), ToUiUnits(authoredSize.y))
         : Vector2.one;
     collider.size = new Vector3(size.x, size.y, 0.1f);
-    collider.center = Vector3.zero;
+    collider.center = new Vector3(0.0f, 0.0f, NativeButtonInputZ);
 
     return button;
+  }
+
+  private void AddPanelInputBlocker()
+  {
+    if (_nativeRoot == null)
+    {
+      return;
+    }
+
+    RectTransform sourceRect = FindSourceRect("PanelRoot") ?? FindSourceRect("SmartSplitterPanel");
+    Vector2 authoredSize = GetAuthoredSize(sourceRect != null ? sourceRect.name : "PanelRoot", sourceRect);
+    Vector2 size = sourceRect != null
+        ? new Vector2(ToUiUnits(authoredSize.x), ToUiUnits(authoredSize.y))
+        : new Vector2(9.375f, 5.0f);
+
+    GameObject blockerObject = FindDirectChild(_nativeRoot, "PanelInputBlocker");
+    if (blockerObject == null)
+    {
+      blockerObject = new GameObject("PanelInputBlocker");
+      SetNativeLayer(blockerObject);
+      blockerObject.transform.SetParent(_nativeRoot.transform, false);
+    }
+
+    blockerObject.transform.localPosition = Vector3.zero;
+    blockerObject.transform.localRotation = Quaternion.identity;
+    blockerObject.transform.localScale = Vector3.one;
+
+    BlockingUIElement blocker = blockerObject.GetComponent<BlockingUIElement>();
+    if (blocker == null)
+    {
+      blocker = blockerObject.AddComponent<BlockingUIElement>();
+    }
+
+    InitializeUIElementLists(blocker);
+
+    BoxCollider collider = blockerObject.GetComponent<BoxCollider>();
+    if (collider == null)
+    {
+      collider = blockerObject.AddComponent<BoxCollider>();
+    }
+
+    collider.size = new Vector3(size.x, size.y, 0.1f);
+    collider.center = new Vector3(0.0f, 0.0f, PanelBlockerInputZ);
   }
 
   private void ToggleDropdown(SmartSplitterLane lane)
@@ -803,9 +1116,8 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
     if (lane.DropdownArrow != null)
     {
-      lane.DropdownArrow.transform.localRotation = open
-          ? Quaternion.Euler(0.0f, 0.0f, 180.0f)
-          : Quaternion.identity;
+      lane.DropdownArrow.transform.localRotation = Quaternion.identity;
+      SetDropdownArrowSprite(lane, open);
     }
 
     if (!open)
@@ -836,32 +1148,35 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
     ClearDropdownOptions(lane);
 
-    List<DropdownOptionData> options = BuildDropdownOptions();
-    int maxScrollOffset = Mathf.Max(0, options.Count - MaxVisibleDropdownOptions);
+    List<DropdownOptionData> options = BuildDropdownHistoryOptions();
+    int totalHistoryRows = Mathf.CeilToInt(options.Count / (float)DropdownHistoryColumns);
+    int maxScrollOffset = Mathf.Max(0, totalHistoryRows - MaxVisibleDropdownHistoryRows);
     lane.DropdownScrollOffset = Mathf.Clamp(lane.DropdownScrollOffset, 0, maxScrollOffset);
 
-    float rowY = 1.55f;
-    int visibleCount = Mathf.Min(MaxVisibleDropdownOptions, options.Count - lane.DropdownScrollOffset);
+    AddDropdownTextOption(lane, DropdownOptionKind.Any, ObjectID.None, 0, 1.0f);
+    AddDropdownTextOption(lane, DropdownOptionKind.None, ObjectID.None, 0, 0.55f);
+
+    int firstHistoryIndex = lane.DropdownScrollOffset * DropdownHistoryColumns;
+    int visibleCount = Mathf.Min(
+        MaxVisibleDropdownHistoryRows * DropdownHistoryColumns,
+        options.Count - firstHistoryIndex);
     for (int i = 0; i < visibleCount; i++)
     {
-      DropdownOptionData option = options[lane.DropdownScrollOffset + i];
-      AddDropdownOption(
+      DropdownOptionData option = options[firstHistoryIndex + i];
+      int column = i % DropdownHistoryColumns;
+      int row = i / DropdownHistoryColumns;
+      AddDropdownHistoryOption(
           lane,
-          option.Kind,
           option.ObjectID,
           option.Variation,
-          rowY);
-      rowY -= DropdownRowHeight;
+          -0.5f + column * 0.5f,
+          -0.03125f - row * 0.5f);
     }
   }
 
-  private static List<DropdownOptionData> BuildDropdownOptions()
+  private static List<DropdownOptionData> BuildDropdownHistoryOptions()
   {
-    List<DropdownOptionData> options = new()
-    {
-      new DropdownOptionData(DropdownOptionKind.Any, ObjectID.None, 0),
-      new DropdownOptionData(DropdownOptionKind.None, ObjectID.None, 0)
-    };
+    List<DropdownOptionData> options = new();
 
     for (int i = 0; i < RememberedFilterItems.Count; i++)
     {
@@ -893,8 +1208,9 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       return;
     }
 
-    int optionCount = BuildDropdownOptions().Count;
-    int maxScrollOffset = Mathf.Max(0, optionCount - MaxVisibleDropdownOptions);
+    int optionCount = BuildDropdownHistoryOptions().Count;
+    int totalHistoryRows = Mathf.CeilToInt(optionCount / (float)DropdownHistoryColumns);
+    int maxScrollOffset = Mathf.Max(0, totalHistoryRows - MaxVisibleDropdownHistoryRows);
     int direction = scroll < 0.0f ? 1 : -1;
     int nextOffset = Mathf.Clamp(lane.DropdownScrollOffset + direction, 0, maxScrollOffset);
     if (nextOffset == lane.DropdownScrollOffset)
@@ -919,17 +1235,17 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     return null;
   }
 
-  private void AddDropdownOption(
+  private void AddDropdownTextOption(
       LaneWidgets lane,
       DropdownOptionKind kind,
       ObjectID objectID,
       int variation,
       float rowY)
   {
-    GameObject row = new GameObject($"{lane.Lane}DropdownOption_{kind}_{objectID}");
+    GameObject row = new GameObject($"{lane.Lane}DropdownOption_{kind}");
     SetNativeLayer(row);
     row.transform.SetParent(lane.DropdownPanel.transform, false);
-    row.transform.localPosition = new Vector3(0.0f, rowY, DropdownOptionInputZ);
+    row.transform.localPosition = new Vector3(0.0f, ScaleLayoutUnits(rowY), 0.0f);
     row.transform.localRotation = Quaternion.identity;
     row.transform.localScale = Vector3.one;
 
@@ -938,24 +1254,20 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     button.InitializeVisuals();
 
     BoxCollider collider = row.AddComponent<BoxCollider>();
-    collider.size = new Vector3(1.55f, DropdownRowHeight, 0.1f);
-    collider.center = Vector3.zero;
+    collider.size = new Vector3(ScaleLayoutUnits(1.55f), ScaleLayoutUnits(DropdownRowHeight), 0.1f);
+    collider.center = new Vector3(0.0f, 0.0f, DropdownOptionInputZ);
 
-    SpriteRenderer selectedBackground = CreateFlatSelectionBackground(row);
+    SpriteRenderer selectedBackground = CreateFlatSelectionBackground(
+        row,
+        new Vector2(
+            ScaleLayoutUnits(1.45f),
+            ScaleLayoutUnits(DropdownRowHeight - 0.0625f)));
     selectedBackground.gameObject.SetActive(IsDropdownOptionSelected(lane.Lane, kind, objectID));
-
-    SpriteRenderer icon = CreateRuntimeIcon(row, "Icon");
-    if (icon != null)
-    {
-      icon.sortingOrder = DropdownRuntimeSortingOrder + 2;
-      icon.transform.localPosition = new Vector3(-1.08f + DropdownContentRightNudge, 0.0f, 0.0f);
-      ApplyDropdownOptionIcon(icon, kind, objectID, variation, DropdownOptionIconSize);
-    }
 
     TinyPixelText label = CreateTinyPixelText(
         row,
         "Text",
-        new Vector3(-0.68f + DropdownContentRightNudge, 0.0f, 0.0f),
+        new Vector3(ScaleLayoutUnits(-0.62f), 0.0f, 0.0f),
         DropdownRuntimeSortingOrder + 3,
         TinyPixelText.Alignment.Left);
     label.Render(FormatDropdownSingleLineLabel(
@@ -965,6 +1277,57 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     lane.DropdownOptionObjects.Add(row);
   }
 
+  private void AddDropdownHistoryOption(
+      LaneWidgets lane,
+      ObjectID objectID,
+      int variation,
+      float x,
+      float y)
+  {
+    GameObject option = new GameObject($"{lane.Lane}DropdownHistoryOption_{objectID}");
+    SetNativeLayer(option);
+    option.transform.SetParent(lane.DropdownPanel.transform, false);
+    option.transform.localPosition = new Vector3(ScaleLayoutUnits(x), ScaleLayoutUnits(y), 0.0f);
+    option.transform.localRotation = Quaternion.identity;
+    option.transform.localScale = Vector3.one;
+
+    SmartSplitterNativeButton button = option.AddComponent<SmartSplitterNativeButton>();
+    button.Clicked = () => SelectDropdownOption(
+        lane.Lane,
+        DropdownOptionKind.Item,
+        objectID,
+        variation);
+    button.HoverTitleProvider = () => new TextAndFormatFields
+    {
+      text = GetItemDisplayName(objectID, variation),
+      dontLocalize = true
+    };
+    button.InitializeVisuals();
+
+    BoxCollider collider = option.AddComponent<BoxCollider>();
+    collider.size = new Vector3(ScaleLayoutUnits(0.5f), ScaleLayoutUnits(0.5f), 0.1f);
+    collider.center = new Vector3(0.0f, 0.0f, DropdownOptionInputZ);
+
+    SpriteRenderer selectedBackground = CreateFlatSelectionBackground(
+        option,
+        new Vector2(ScaleLayoutUnits(0.5f), ScaleLayoutUnits(0.5f)));
+    selectedBackground.gameObject.SetActive(IsDropdownOptionSelected(
+        lane.Lane,
+        DropdownOptionKind.Item,
+        objectID));
+    button.HoverHighlight = selectedBackground.gameObject;
+
+    SpriteRenderer icon = CreateRuntimeIcon(option, "Icon");
+    if (icon != null)
+    {
+      icon.sortingOrder = DropdownRuntimeSortingOrder + 2;
+      icon.transform.localPosition = Vector3.zero;
+      ApplyItemIcon(icon, objectID, variation, ScaleLayoutUnits(DropdownOptionIconSize));
+    }
+
+    lane.DropdownOptionObjects.Add(option);
+  }
+
   private void AddDropdownInputBlocker(GameObject dropdownPanel)
   {
     if (dropdownPanel == null)
@@ -972,24 +1335,55 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       return;
     }
 
-    BlockingUIElement blocker = dropdownPanel.GetComponent<BlockingUIElement>();
+    RectTransform sourceRect = FindGameObjectInSource(dropdownPanel.name)?.GetComponent<RectTransform>();
+    Vector2 authoredSize = GetAuthoredSize(dropdownPanel.name, sourceRect);
+    Vector2 blockerSize = authoredSize + new Vector2(2.0f, 2.0f);
+    Vector2 size = sourceRect != null
+        ? new Vector2(ToUiUnits(blockerSize.x), ToUiUnits(blockerSize.y))
+        : new Vector2(2.6f, 4.0f);
+
+    GameObject blockerObject = FindDirectChild(dropdownPanel, "DropdownInputBlocker");
+    if (blockerObject == null)
+    {
+      blockerObject = new GameObject("DropdownInputBlocker");
+      SetNativeLayer(blockerObject);
+      blockerObject.transform.SetParent(dropdownPanel.transform, false);
+    }
+
+    blockerObject.transform.localPosition = Vector3.zero;
+    blockerObject.transform.localRotation = Quaternion.identity;
+    blockerObject.transform.localScale = Vector3.one;
+
+    BlockingUIElement blocker = blockerObject.GetComponent<BlockingUIElement>();
     if (blocker == null)
     {
-      blocker = dropdownPanel.AddComponent<BlockingUIElement>();
+      blocker = blockerObject.AddComponent<BlockingUIElement>();
     }
 
-    BoxCollider collider = dropdownPanel.GetComponent<BoxCollider>();
+    InitializeUIElementLists(blocker);
+
+    BoxCollider collider = blockerObject.GetComponent<BoxCollider>();
     if (collider == null)
     {
-      collider = dropdownPanel.AddComponent<BoxCollider>();
+      collider = blockerObject.AddComponent<BoxCollider>();
     }
 
-    RectTransform sourceRect = FindGameObjectInSource(dropdownPanel.name)?.GetComponent<RectTransform>();
-    Vector2 size = sourceRect != null
-        ? new Vector2(ToUiUnits(sourceRect.sizeDelta.x), ToUiUnits(sourceRect.sizeDelta.y))
-        : new Vector2(2.6f, 4.0f);
     collider.size = new Vector3(size.x, size.y, 0.1f);
-    collider.center = Vector3.zero;
+    collider.center = new Vector3(0.0f, 0.0f, DropdownBlockerInputZ);
+  }
+
+  private static void InitializeUIElementLists(UIelement element)
+  {
+    if (element == null)
+    {
+      return;
+    }
+
+    element.topUIElements ??= new List<UIelement>();
+    element.bottomUIElements ??= new List<UIelement>();
+    element.leftUIElements ??= new List<UIelement>();
+    element.rightUIElements ??= new List<UIelement>();
+    element.childElements ??= new List<UIelement>();
   }
 
   private void RaiseDropdownPanelRenderers(GameObject dropdownPanel)
@@ -1029,6 +1423,142 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     renderer.sortingOrder = DropdownRuntimeSortingOrder + 4;
   }
 
+  private void SetDropdownArrowSprite(LaneWidgets lane, bool open)
+  {
+    if (lane == null || lane.DropdownArrow == null)
+    {
+      return;
+    }
+
+    SpriteRenderer[] renderers = lane.DropdownArrow.GetComponentsInChildren<SpriteRenderer>(true);
+    for (int i = 0; i < renderers.Length; i++)
+    {
+      if (renderers[i] != null)
+      {
+        renderers[i].enabled = false;
+      }
+    }
+
+    GameObject existingPixels = FindDirectChild(lane.DropdownArrow, "RuntimeDropdownArrowPixels");
+    if (existingPixels != null)
+    {
+      Destroy(existingPixels);
+    }
+
+    CreateDropdownArrowPixels(lane.DropdownArrow.transform, open);
+    RaiseDropdownArrowRenderer(lane.DropdownArrow);
+  }
+
+  private static void CreateDropdownArrowPixels(Transform parent, bool up)
+  {
+    if (parent == null)
+    {
+      return;
+    }
+
+    GameObject root = new GameObject("RuntimeDropdownArrowPixels");
+    SetNativeLayer(root);
+    root.transform.SetParent(parent, false);
+    root.transform.localPosition = Vector3.zero;
+    root.transform.localRotation = Quaternion.identity;
+    root.transform.localScale = Vector3.one * 0.5f;
+
+    Vector2Int[] pixels = up
+        ? new[]
+        {
+          new Vector2Int(-1, -1),
+          new Vector2Int(0, -1),
+          new Vector2Int(1, -1),
+          new Vector2Int(0, 0)
+        }
+        : new[]
+        {
+          new Vector2Int(-1, 0),
+          new Vector2Int(0, 0),
+          new Vector2Int(1, 0),
+          new Vector2Int(0, -1)
+        };
+
+    Color arrow = new Color(0.95f, 0.78f, 0.72f, 1.0f);
+    for (int i = 0; i < pixels.Length; i++)
+    {
+      GameObject pixel = new GameObject("Pixel");
+      SetNativeLayer(pixel);
+      pixel.transform.SetParent(root.transform, false);
+      pixel.transform.localPosition = new Vector3(
+          pixels[i].x / UiPixelsPerUnit,
+          pixels[i].y / UiPixelsPerUnit,
+          0.0f);
+      pixel.transform.localRotation = Quaternion.identity;
+      pixel.transform.localScale = Vector3.one;
+
+      SpriteRenderer renderer = pixel.AddComponent<SpriteRenderer>();
+      renderer.sprite = GetDropdownPixelSprite();
+      renderer.color = arrow;
+      renderer.sortingLayerID = SortingLayerID.GUI;
+      renderer.sortingOrder = DropdownRuntimeSortingOrder + 4;
+    }
+  }
+
+  private static Sprite GetDropdownPixelSprite()
+  {
+    if (_dropdownPixelSprite == null)
+    {
+      _dropdownPixelSprite = Sprite.Create(
+          Texture2D.whiteTexture,
+          new Rect(0, 0, 1, 1),
+          new Vector2(0.5f, 0.5f),
+          UiPixelsPerUnit,
+          0,
+          SpriteMeshType.FullRect);
+    }
+
+    return _dropdownPixelSprite;
+  }
+
+  private static Sprite GetDropdownArrowDownSprite()
+  {
+    if (_dropdownArrowDownSprite == null)
+    {
+      _dropdownArrowDownSprite = CreateDropdownArrowSprite(false);
+    }
+
+    return _dropdownArrowDownSprite;
+  }
+
+  private static Sprite GetDropdownArrowUpSprite()
+  {
+    if (_dropdownArrowUpSprite == null)
+    {
+      _dropdownArrowUpSprite = CreateDropdownArrowSprite(true);
+    }
+
+    return _dropdownArrowUpSprite;
+  }
+
+  private static Sprite CreateDropdownArrowSprite(bool up)
+  {
+    Texture2D texture = new Texture2D(3, 2, TextureFormat.RGBA32, false)
+    {
+      filterMode = FilterMode.Point,
+      wrapMode = TextureWrapMode.Clamp
+    };
+    Color clear = new Color(0.0f, 0.0f, 0.0f, 0.0f);
+    Color arrow = new Color(0.95f, 0.78f, 0.72f, 1.0f);
+    texture.SetPixels(up
+        ? new[] { arrow, arrow, arrow, clear, arrow, clear }
+        : new[] { clear, arrow, clear, arrow, arrow, arrow });
+    texture.Apply(false, true);
+
+    return Sprite.Create(
+        texture,
+        new Rect(0, 0, 3, 2),
+        new Vector2(0.5f, 0.5f),
+        UiPixelsPerUnit,
+        0,
+        SpriteMeshType.FullRect);
+  }
+
   private void AlignDropdownArrow(GameObject dropdownArrow)
   {
     if (dropdownArrow == null)
@@ -1039,16 +1569,17 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     RectTransform sourceRect = FindSourceRect(dropdownArrow.name);
     if (sourceRect != null)
     {
+      Vector2 authoredPosition = GetAuthoredAnchoredPosition(dropdownArrow.name, sourceRect);
       dropdownArrow.transform.localPosition = new Vector3(
-          PixelsToUiUnits(sourceRect.anchoredPosition.x),
-          PixelsToUiUnits(sourceRect.anchoredPosition.y) + DropdownArrowVerticalNudge,
+          PixelsToUiUnits(authoredPosition.x),
+          PixelsToUiUnits(authoredPosition.y) + DropdownArrowVerticalNudge,
           dropdownArrow.transform.localPosition.z);
     }
 
     RaiseDropdownArrowRenderer(dropdownArrow);
   }
 
-  private SpriteRenderer CreateFlatSelectionBackground(GameObject parent)
+  private SpriteRenderer CreateFlatSelectionBackground(GameObject parent, Vector2 size)
   {
     GameObject selectedObject = new GameObject("Selected");
     SetNativeLayer(selectedObject);
@@ -1065,7 +1596,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
         : null;
     renderer.color = new Color(0.75f, 0.86f, 1.0f, 0.35f);
     renderer.drawMode = SpriteDrawMode.Sliced;
-    renderer.size = new Vector2(1.45f, DropdownRowHeight - 0.0625f);
+    renderer.size = size;
     return renderer;
   }
 
@@ -1387,46 +1918,38 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       Manager.ui.ApplyAnyIconGradientMap(containedObject, lane.RuntimeIcon);
     }
 
-    lane.RuntimeIcon.transform.localPosition = objectInfo.iconOffset;
-    FitSpriteRenderer(lane.RuntimeIcon, Vector2.one);
+    lane.RuntimeIcon.transform.localPosition = GetFilterIconLocalPosition(lane, objectInfo.iconOffset);
+    FitSpriteRenderer(lane.RuntimeIcon, Vector2.one * FilterIconSize);
     lane.RuntimeIcon.gameObject.SetActive(true);
     RememberFilterItem(filter.FilterObject, filter.FilterVariation);
   }
 
-  private void RefreshDropdownHeader(LaneWidgets lane, SmartSplitterLaneFilter filter)
+  private static Vector3 GetFilterIconLocalPosition(LaneWidgets lane, Vector3 iconOffset)
   {
-    bool hasItem = filter.Mode == SmartSplitterLaneFilterMode.Item &&
-                   filter.FilterObject != ObjectID.None;
-    bool isNone = filter.Mode == SmartSplitterLaneFilterMode.None;
-
-    if (lane.DropdownHeaderIcon != null)
+    if (lane == null ||
+        lane.RuntimeIcon == null ||
+        lane.RuntimeIcon.transform.parent == null ||
+        lane.Silhouette == null)
     {
-      if (hasItem)
-      {
-        lane.DropdownHeaderIcon.transform.localPosition = new Vector3(-0.62f, 0.0f, 0.0f);
-        ApplyItemIcon(lane.DropdownHeaderIcon, filter.FilterObject, filter.FilterVariation, DropdownHeaderIconSize);
-      }
-      else if (isNone)
-      {
-        lane.DropdownHeaderIcon.transform.localPosition = new Vector3(-0.62f, 0.0f, 0.0f);
-        ApplyNoneIcon(lane.DropdownHeaderIcon, DropdownHeaderIconSize);
-      }
-      else
-      {
-        lane.DropdownHeaderIcon.sprite = null;
-        lane.DropdownHeaderIcon.gameObject.SetActive(false);
-      }
+      return iconOffset * FilterIconSize;
     }
 
-    string label = hasItem
-        ? GetItemDisplayName(filter.FilterObject, filter.FilterVariation)
-        : isNone ? "None" : "Any";
-    bool showIcon = hasItem || isNone;
+    Vector3 slotCenter = lane.RuntimeIcon.transform.parent.InverseTransformPoint(lane.Silhouette.transform.position);
+    return slotCenter + (iconOffset * FilterIconSize);
+  }
+
+  private void RefreshDropdownHeader(LaneWidgets lane, SmartSplitterLaneFilter filter)
+  {
+    if (lane.DropdownHeaderIcon != null)
+    {
+      lane.DropdownHeaderIcon.sprite = null;
+      lane.DropdownHeaderIcon.gameObject.SetActive(false);
+    }
+
     if (lane.DropdownHeaderText != null)
     {
-      lane.DropdownHeaderText.Root.localPosition =
-          new Vector3(showIcon ? -0.42f : -0.58f, 0.0f, 0.0f);
-      lane.DropdownHeaderText.Render(FormatDropdownSingleLineLabel(label, DropdownHeaderLabelMaxCharacters));
+      lane.DropdownHeaderText.Root.localPosition = new Vector3(0.0f, 0.5f / UiPixelsPerUnit, 0.0f);
+      lane.DropdownHeaderText.Render(FormatDropdownSingleLineLabel("History", DropdownHeaderLabelMaxCharacters));
     }
   }
 
@@ -1594,6 +2117,21 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
         API.Authoring.ObjectProperties.TryGetPropertyString(displayObjectID, "name", out string propertyName) &&
         !string.IsNullOrEmpty(propertyName))
     {
+      string term = "Items/" + propertyName;
+      string translated = LocalizationManager.GetTranslation(
+          term,
+          true,
+          0,
+          true,
+          false,
+          null,
+          null,
+          true);
+      if (!string.IsNullOrEmpty(translated) && translated != term)
+      {
+        return translated;
+      }
+
       return propertyName;
     }
 
@@ -1716,7 +2254,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     return new TinyPixelText(
         textObject.transform,
         sortingOrder,
-        new Color(0.29f, 0.41f, 0.43f, 1.0f),
+        Color.white,
         alignment);
   }
 
@@ -1806,9 +2344,10 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     spriteRenderer.drawMode = SpriteDrawMode.Simple;
     spriteRenderer.transform.localScale = Vector3.one;
 
+    Vector2 authoredSize = GetAuthoredSize(sourceRect.name, sourceRect);
     Vector2 targetSize = new Vector2(
-        ToUiUnits(sourceRect.sizeDelta.x),
-        ToUiUnits(sourceRect.sizeDelta.y));
+        ToUiUnits(authoredSize.x),
+        ToUiUnits(authoredSize.y));
     Vector2 spriteSize = spriteRenderer.sprite.bounds.size;
     if (targetSize.x <= 0.0f ||
         targetSize.y <= 0.0f ||

@@ -61,7 +61,7 @@ public static class SmartSplitterDebugSettings
   // Prefab-backed Smart Splitter panel.
   public static bool EnableSmartSplitterPanel = true;
   public static KeyCode SmartSplitterPanelToggleKey = KeyCode.F9;
-  public static float SmartSplitterPanelScale = 1.0f;
+  public static float SmartSplitterPanelScale = 2.0f;
   public static float SmartSplitterPanelInteractionRadius = 2.0f;
   public static float SmartSplitterPanelAimLineRadius = 0.85f;
   public static float SmartSplitterPanelCursorRadius = 1.05f;
