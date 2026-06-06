@@ -2,9 +2,10 @@ using PugMod;
 using Unity.Entities;
 using UnityEngine;
 
-public class SmartSplitterMod : IMod
+public class SmartSplitterModEntry : IMod
 {
   private World _registeredServerWorld;
+  private World _registeredClientWorld;
 
   public void EarlyInit()
   {
@@ -15,18 +16,26 @@ public class SmartSplitterMod : IMod
   {
     if (API.Server != null)
     {
-      API.Server.OnWorldCreated -= RegisterRuntimeSystem;
-      API.Server.OnWorldCreated += RegisterRuntimeSystem;
+      API.Server.OnWorldCreated -= RegisterServerSystems;
+      API.Server.OnWorldCreated += RegisterServerSystems;
       API.Server.OnWorldDestroyed -= OnServerWorldDestroyed;
       API.Server.OnWorldDestroyed += OnServerWorldDestroyed;
     }
 
-    RegisterRuntimeSystem();
+    if (API.Client != null)
+    {
+      API.Client.OnWorldCreated -= RegisterClientSystems;
+      API.Client.OnWorldCreated += RegisterClientSystems;
+      API.Client.OnWorldDestroyed -= OnClientWorldDestroyed;
+      API.Client.OnWorldDestroyed += OnClientWorldDestroyed;
+    }
+
+    RegisterServerSystems();
+    RegisterClientSystems();
 
     SmartSplitterAssetRegistry.EnsureExists();
     SmartSplitterVisualSwapController.EnsureExists();
     SmartSplitterFilterPanelHost.EnsureExists();
-    SmartSplitterLaneFilterVerticalSliceController.EnsureExists();
     Debug.Log("[SmartSplitterMod] Init");
   }
 
@@ -34,8 +43,14 @@ public class SmartSplitterMod : IMod
   {
     if (API.Server != null)
     {
-      API.Server.OnWorldCreated -= RegisterRuntimeSystem;
+      API.Server.OnWorldCreated -= RegisterServerSystems;
       API.Server.OnWorldDestroyed -= OnServerWorldDestroyed;
+    }
+
+    if (API.Client != null)
+    {
+      API.Client.OnWorldCreated -= RegisterClientSystems;
+      API.Client.OnWorldDestroyed -= OnClientWorldDestroyed;
     }
   }
 
@@ -46,9 +61,10 @@ public class SmartSplitterMod : IMod
 
   public void Update()
   {
+    SmartSplitterPersistence.FlushIfDue();
   }
 
-  private void RegisterRuntimeSystem()
+  private void RegisterServerSystems()
   {
     if (API.Server == null ||
         API.Server.World == null ||
@@ -58,19 +74,61 @@ public class SmartSplitterMod : IMod
     }
 
     World serverWorld = API.Server.World;
+
+    if (_registeredServerWorld == serverWorld)
+    {
+      Debug.Log("[SmartSplitterMod] Runtime system already registered for this server world; skipping duplicate schedule.");
+      return;
+    }
+
     SmartSplitterRuntimeSystem system =
         serverWorld.GetOrCreateSystemManaged<SmartSplitterRuntimeSystem>();
     API.Server.AddScheduledSystem(system);
 
-    if (_registeredServerWorld != serverWorld)
+    SmartSplitterServerFilterRpcSystem rpcSystem =
+        serverWorld.GetOrCreateSystemManaged<SmartSplitterServerFilterRpcSystem>();
+    API.Server.AddScheduledSystem(rpcSystem);
+
+    _registeredServerWorld = serverWorld;
+    SmartSplitterPersistence.ResetLoadedState();
+    SmartSplitterPersistence.EnsureLoadedForCurrentWorld();
+    Debug.Log("[SmartSplitterMod] Registered server runtime/RPC systems in server SimulationSystemGroup");
+  }
+
+  private void RegisterClientSystems()
+  {
+    if (API.Client == null ||
+        API.Client.World == null ||
+        !API.Client.World.IsCreated)
     {
-      _registeredServerWorld = serverWorld;
-      Debug.Log("[SmartSplitterMod] Registered SmartSplitterRuntimeSystem in server SimulationSystemGroup");
+      return;
     }
+
+    World clientWorld = API.Client.World;
+
+    if (_registeredClientWorld == clientWorld)
+    {
+      return;
+    }
+
+    SmartSplitterClientFilterStateRpcSystem rpcSystem =
+        clientWorld.GetOrCreateSystemManaged<SmartSplitterClientFilterStateRpcSystem>();
+    API.Client.AddScheduledSystem(rpcSystem);
+
+    _registeredClientWorld = clientWorld;
+    SmartSplitterNetworkState.Reset();
+    Debug.Log("[SmartSplitterMod] Registered client Smart Splitter RPC systems in client SimulationSystemGroup");
   }
 
   private void OnServerWorldDestroyed()
   {
+    SmartSplitterPersistence.ResetLoadedState();
     _registeredServerWorld = null;
+  }
+
+  private void OnClientWorldDestroyed()
+  {
+    SmartSplitterNetworkState.Reset();
+    _registeredClientWorld = null;
   }
 }

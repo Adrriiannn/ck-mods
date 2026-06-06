@@ -67,23 +67,3 @@ public struct SmartSplitterOriginalOutputsCD : IComponentData
   public int2 RightCachedStart;
 }
 
-public struct SmartSplitterArmedRouteCD : IComponentData
-{
-  public bool HasArmedRoute;
-  public bool AppliedOnce;
-
-  public Entity ArmedEntity;
-
-  public SmartSplitterDecision Decision;
-
-  public ObjectID ItemObject;
-  public int ItemVariation;
-  public int ItemAmount;
-  public int RouteStartLaneIndex;
-  public int NextRouteStartLaneIndex;
-
-  public double ArmedAt;
-  public double ExpiresAt;
-
-  public double RouteAppliedAt;
-}

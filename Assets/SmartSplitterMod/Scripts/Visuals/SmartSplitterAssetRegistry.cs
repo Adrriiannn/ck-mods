@@ -96,37 +96,6 @@ public sealed class SmartSplitterAssetRegistry : MonoBehaviour
     CaptureRegistryData(source, "ModObjectLoaded");
   }
 
-  public static bool TryGetSmartVisual(out SpriteAsset asset, out Material material)
-  {
-    asset = null;
-    material = _loadedSmartSplitterMaterial;
-
-    if (!_hasLoadedRegistryData)
-    {
-      return false;
-    }
-
-    if (!_loadedSmartSplitterAsset.TryGet(out asset) || asset == null)
-    {
-      return false;
-    }
-
-    return true;
-  }
-
-  public static bool TryGetSmartVisualPrefab(out GameObject prefab)
-  {
-    prefab = null;
-
-    if (!_hasLoadedRegistryData)
-    {
-      return false;
-    }
-
-    prefab = _loadedSmartSplitterVisualPrefab;
-    return prefab != null;
-  }
-
   public static bool TryGetSmartVisualPrefabAndFallbacks(
       out GameObject prefab,
       out SpriteAsset asset,

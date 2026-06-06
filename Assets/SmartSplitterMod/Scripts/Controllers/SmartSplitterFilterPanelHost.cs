@@ -2,13 +2,26 @@ using Pug.ECS.Components;
 using Pug.ECS.Hybrid;
 using Pug.Sprite;
 using Pug.Automation;
+using Pug.UnityExtensions;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
 
 public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
 {
+  private const float TargetPollIntervalSeconds = 0.08f;
+
+  private struct LookTarget
+  {
+    public World World;
+    public Entity Entity;
+    public int2 Center;
+    public bool UseDirectEcsTarget;
+    public bool Powered;
+  }
+
   private static SmartSplitterFilterPanelHost _instance;
 
   private SmartSplitterFilterPanelController _panel;
@@ -18,10 +31,15 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
   private Entity _highlightedSplitter = Entity.Null;
   private World _panelTargetWorld;
   private Entity _panelTargetSplitter = Entity.Null;
+  private int2 _panelTargetCenter;
+  private bool _panelTargetUseDirectEcs;
+  private bool _showSplitterInteractPrompt;
   private bool _panelOpenedInventory;
   private bool _inventoryWasShowingBeforePanel;
   private bool _loggedWaitingForPrefab;
-  private bool _isPlayingInteractHint;
+  private bool _hasCachedLookTarget;
+  private LookTarget _cachedLookTarget;
+  private float _nextTargetPollAt;
 
   public static void EnsureExists()
   {
@@ -54,19 +72,15 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
       return;
     }
 
-    bool hasLookedAtSplitter = SmartSplitterLaneFilterUtility.TryFindLookedAtSmartSplitter(
-        out World lookedAtWorld,
-        out Entity lookedAtSplitter,
-        out _,
-        SmartSplitterDebugSettings.SmartSplitterPanelInteractionRadius,
-        SmartSplitterDebugSettings.SmartSplitterPanelAimLineRadius);
-    bool hasPoweredLookedAtSplitter =
-        hasLookedAtSplitter && IsSmartSplitterPowered(lookedAtWorld, lookedAtSplitter);
+    bool hasLookTarget = TryGetLookedAtTarget(out LookTarget lookTarget);
+    bool hasPoweredLookedAtSplitter = hasLookTarget && lookTarget.Powered;
 
-    UpdateHighlight(hasPoweredLookedAtSplitter ? lookedAtWorld : null, lookedAtSplitter);
+    UpdateHighlight(
+        hasPoweredLookedAtSplitter ? lookTarget.World : null,
+        hasPoweredLookedAtSplitter ? lookTarget.Entity : Entity.Null);
 
     if (_panel.IsShowing &&
-        (!IsSmartSplitterPowered(_panelTargetWorld, _panelTargetSplitter) || ShouldClosePanel()))
+        (!IsPanelTargetPowered() || ShouldClosePanel()))
     {
       HidePanel();
       return;
@@ -80,9 +94,30 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
       }
       else if (hasPoweredLookedAtSplitter)
       {
-        ShowPanel(lookedAtWorld, lookedAtSplitter);
+        ShowPanel(lookTarget);
       }
     }
+  }
+
+  private void LateUpdate()
+  {
+    if (!_showSplitterInteractPrompt ||
+        Manager.ui == null ||
+        Manager.ui.interactHintButton == null ||
+        Manager.ui.isAnyInventoryShowing ||
+        Manager.ui.isShowingMap ||
+        Manager.main == null ||
+        Manager.main.player == null ||
+        Manager.main.player.instrumentHandler.IsPlayingInstrument ||
+        Manager.main.player.guestMode)
+    {
+      return;
+    }
+
+    InteractButton interactButton = Manager.ui.interactHintButton;
+    interactButton.icon.enabled = true;
+    interactButton.icon.SetAlpha(1.0f);
+    interactButton.textContainer.SetActive(true);
   }
 
   private void EnsurePanelInstance()
@@ -159,7 +194,7 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
            input.WasButtonPressedDownThisFrame(PlayerInput.InputType.TOGGLE_INVENTORY, false);
   }
 
-  private void ShowPanel(World world, Entity splitter)
+  private void ShowPanel(LookTarget target)
   {
     _inventoryWasShowingBeforePanel = Manager.ui != null && Manager.ui.isAnyInventoryShowing;
     _panelOpenedInventory = true;
@@ -187,9 +222,16 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
       Manager.ui.creativeModeUI.HideContainerUI();
     }
 
-    _panel.Show(world, splitter);
-    _panelTargetWorld = world;
-    _panelTargetSplitter = splitter;
+    if (!target.UseDirectEcsTarget)
+    {
+      SmartSplitterNetworkState.RequestFilters(target.Center);
+    }
+
+    _panel.Show(target.World, target.Entity, target.Center, target.UseDirectEcsTarget);
+    _panelTargetWorld = target.World;
+    _panelTargetSplitter = target.Entity;
+    _panelTargetCenter = target.Center;
+    _panelTargetUseDirectEcs = target.UseDirectEcsTarget;
   }
 
   private void HidePanel()
@@ -207,13 +249,77 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
     _panelOpenedInventory = false;
     _panelTargetWorld = null;
     _panelTargetSplitter = Entity.Null;
+    _panelTargetCenter = default;
+    _panelTargetUseDirectEcs = false;
+  }
+
+  private bool TryGetLookedAtTarget(out LookTarget target)
+  {
+    if (Time.time < _nextTargetPollAt)
+    {
+      target = _cachedLookTarget;
+      return _hasCachedLookTarget;
+    }
+
+    _nextTargetPollAt = Time.time + TargetPollIntervalSeconds;
+    _hasCachedLookTarget = TryGetLookedAtTargetUncached(out _cachedLookTarget);
+    target = _cachedLookTarget;
+    return _hasCachedLookTarget;
+  }
+
+  private bool TryGetLookedAtTargetUncached(out LookTarget target)
+  {
+    target = default;
+
+    if (SmartSplitterLaneFilterUtility.TryFindLookedAtSmartSplitter(
+            out World smartWorld,
+            out Entity smartSplitter,
+            out int2 smartCenter,
+            out _,
+            SmartSplitterDebugSettings.SmartSplitterPanelInteractionRadius,
+            SmartSplitterDebugSettings.SmartSplitterPanelAimLineRadius))
+    {
+      target = new LookTarget
+      {
+        World = smartWorld,
+        Entity = smartSplitter,
+        Center = smartCenter,
+        UseDirectEcsTarget = true,
+        Powered = IsSmartSplitterPowered(smartWorld, smartSplitter)
+      };
+      return true;
+    }
+
+    if (SmartSplitterLaneFilterUtility.TryFindLookedAtPhysicalSplitter(
+            out World physicalWorld,
+            out Entity physicalSplitter,
+            out int2 physicalCenter,
+            out _,
+            SmartSplitterDebugSettings.SmartSplitterPanelInteractionRadius,
+            SmartSplitterDebugSettings.SmartSplitterPanelAimLineRadius))
+    {
+      target = new LookTarget
+      {
+        World = physicalWorld,
+        Entity = physicalSplitter,
+        Center = physicalCenter,
+        UseDirectEcsTarget = false,
+        Powered = IsSplitterCenterPowered(physicalWorld, physicalCenter)
+      };
+      return true;
+    }
+
+    return false;
   }
 
   private void UpdateHighlight(World world, Entity splitter)
   {
+    _showSplitterInteractPrompt = world != null &&
+                                  splitter != Entity.Null &&
+                                  !_panel.IsShowing;
+
     if (_highlightedSplitter == splitter && _highlightTargetWorld == world)
     {
-      UpdateInteractHint(splitter != Entity.Null);
       return;
     }
 
@@ -223,35 +329,14 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
     _highlightedSplitter = splitter;
 
     SetSplitterOutline(_highlightTargetWorld, _highlightedSplitter, true);
-    UpdateInteractHint(splitter != Entity.Null);
   }
 
   private void OnDisable()
   {
+    _showSplitterInteractPrompt = false;
     SetSplitterOutline(_highlightTargetWorld, _highlightedSplitter, false);
-    UpdateInteractHint(false);
     _highlightTargetWorld = null;
     _highlightedSplitter = Entity.Null;
-  }
-
-  private void UpdateInteractHint(bool show)
-  {
-    if (Manager.ui == null || Manager.ui.interactHintButton == null)
-    {
-      _isPlayingInteractHint = false;
-      return;
-    }
-
-    if (show && !_isPlayingInteractHint)
-    {
-      _isPlayingInteractHint = true;
-      Manager.ui.interactHintButton.ShowLightUpHint();
-    }
-    else if (!show && _isPlayingInteractHint)
-    {
-      _isPlayingInteractHint = false;
-      Manager.ui.interactHintButton.HideLightUpHint();
-    }
   }
 
   private void SetSplitterOutline(World world, Entity splitter, bool show)
@@ -415,8 +500,33 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
 
     MoverCD leftMover = entityManager.GetComponentData<MoverCD>(originals.LeftMoverEntity);
     MoverCD rightMover = entityManager.GetComponentData<MoverCD>(originals.RightMoverEntity);
-    int splitterX = Mathf.RoundToInt((leftMover.start.x + rightMover.start.x) * 0.5f);
-    int splitterY = Mathf.RoundToInt((leftMover.start.y + rightMover.start.y) * 0.5f);
+    int2 center = new int2(
+        Mathf.RoundToInt((leftMover.start.x + rightMover.start.x) * 0.5f),
+        Mathf.RoundToInt((leftMover.start.y + rightMover.start.y) * 0.5f));
+
+    return IsSplitterCenterPowered(world, center);
+  }
+
+  private bool IsPanelTargetPowered()
+  {
+    if (_panelTargetUseDirectEcs)
+    {
+      return IsSmartSplitterPowered(_panelTargetWorld, _panelTargetSplitter);
+    }
+
+    return IsSplitterCenterPowered(_panelTargetWorld, _panelTargetCenter);
+  }
+
+  private bool IsSplitterCenterPowered(World world, int2 center)
+  {
+    if (world == null || !world.IsCreated)
+    {
+      return false;
+    }
+
+    int splitterX = center.x;
+    int splitterY = center.y;
+    EntityManager entityManager = world.EntityManager;
 
     EntityQuery electricityQuery = entityManager.CreateEntityQuery(new EntityQueryDesc
     {

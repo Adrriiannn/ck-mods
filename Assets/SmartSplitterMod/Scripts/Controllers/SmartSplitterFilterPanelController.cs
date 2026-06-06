@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using I2.Loc;
 using PugMod;
 using Unity.Entities;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,6 +29,7 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
   private const int MaxVisibleDropdownHistoryRows = 3;
   private const int DropdownHeaderLabelMaxCharacters = 7;
   private const int DropdownOptionLabelMaxCharacters = 8;
+  private const float PanelRefreshIntervalSeconds = 0.08f;
 
   private sealed class LaneWidgets
   {
@@ -93,6 +95,9 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private World _world;
   private Entity _splitter;
+  private int2 _targetCenter;
+  private bool _hasTargetCenter;
+  private bool _useDirectEcsTarget;
   private GameObject _panelRoot;
   private GameObject _nativeRoot;
   private SmartSplitterLane? _pendingPickLane;
@@ -106,15 +111,47 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
   private bool _isBound;
   private bool _loggedFirstShow;
   private SmartSplitterLane? _openDropdownLane;
+  private float _nextPanelRefreshAt;
 
   public bool IsShowing => _nativeRoot != null && _nativeRoot.activeSelf;
 
   public void Show(World world, Entity splitter)
   {
+    int2 center = default;
+    bool hasCenter = world != null &&
+                     world.IsCreated &&
+                     splitter != Entity.Null &&
+                     world.EntityManager.Exists(splitter) &&
+                     world.EntityManager.HasComponent<SmartSplitterOriginalOutputsCD>(splitter) &&
+                     SmartSplitterLaneFilterUtility.TryGetSplitterCenter(
+                         world.EntityManager,
+                         world.EntityManager.GetComponentData<SmartSplitterOriginalOutputsCD>(splitter),
+                         out center);
+
+    if (!hasCenter)
+    {
+      Hide();
+      return;
+    }
+
+    Show(world, splitter, center, hasCenter);
+  }
+
+  public void Show(World world, Entity splitter, int2 center, bool useDirectEcsTarget)
+  {
     EnsureBound();
 
     _world = world;
     _splitter = splitter;
+    _targetCenter = center;
+    _hasTargetCenter = true;
+    _useDirectEcsTarget = useDirectEcsTarget;
+    _nextPanelRefreshAt = 0.0f;
+
+    if (!_useDirectEcsTarget)
+    {
+      SmartSplitterNetworkState.RequestFilters(center);
+    }
 
     if (_nativeRoot != null)
     {
@@ -141,6 +178,9 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
   {
     _world = null;
     _splitter = Entity.Null;
+    _targetCenter = default;
+    _hasTargetCenter = false;
+    _useDirectEcsTarget = false;
     CloseDropdowns();
 
     if (_nativeRoot != null)
@@ -155,22 +195,10 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
   {
     EnsureBound();
 
-    if (_world == null || !_world.IsCreated || _splitter == Entity.Null)
+    if (!TryGetCurrentFilters(out SmartSplitterLaneFiltersCD filters))
     {
-      Hide();
-      return;
+      filters = SmartSplitterLaneFilterUtility.CreateDefaultLaneFilters();
     }
-
-    EntityManager entityManager = _world.EntityManager;
-    if (!entityManager.Exists(_splitter) ||
-        !entityManager.HasComponent<SmartSplitterLaneFiltersCD>(_splitter))
-    {
-      Hide();
-      return;
-    }
-
-    SmartSplitterLaneFiltersCD filters =
-        entityManager.GetComponentData<SmartSplitterLaneFiltersCD>(_splitter);
 
     for (int i = 0; i < _lanes.Length; i++)
     {
@@ -195,9 +223,14 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
         TryApplyHoveredInventoryItemToPendingLane(deferPickerEnd: true);
       }
 
-      ConfigureNativeRoot();
-      ApplyVanillaUiSprites();
-      Refresh();
+      if (Time.unscaledTime >= _nextPanelRefreshAt)
+      {
+        _nextPanelRefreshAt = Time.unscaledTime + PanelRefreshIntervalSeconds;
+        ConfigureNativeRoot();
+        ApplyVanillaUiSprites();
+        Refresh();
+      }
+
       HandleDropdownScroll();
       MaintainFilterPickMouseMode();
     }
@@ -1176,6 +1209,8 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private static List<DropdownOptionData> BuildDropdownHistoryOptions()
   {
+    MergePersistedHistoryItems();
+
     List<DropdownOptionData> options = new();
 
     for (int i = 0; i < RememberedFilterItems.Count; i++)
@@ -1251,6 +1286,8 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
     SmartSplitterNativeButton button = row.AddComponent<SmartSplitterNativeButton>();
     button.Clicked = () => SelectDropdownOption(lane.Lane, kind, objectID, variation);
+    button.HoverTitleProvider = () => GetDropdownOptionHoverTitle(kind, objectID, variation);
+    button.HoverDescriptionProvider = () => GetDropdownOptionHoverDescription(kind);
     button.InitializeVisuals();
 
     BoxCollider collider = row.AddComponent<BoxCollider>();
@@ -1263,6 +1300,15 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
             ScaleLayoutUnits(1.45f),
             ScaleLayoutUnits(DropdownRowHeight - 0.0625f)));
     selectedBackground.gameObject.SetActive(IsDropdownOptionSelected(lane.Lane, kind, objectID));
+
+    SpriteRenderer hoverBackground = CreateFlatSelectionBackground(
+        row,
+        new Vector2(
+            ScaleLayoutUnits(1.45f),
+            ScaleLayoutUnits(DropdownRowHeight - 0.0625f)));
+    hoverBackground.color = new Color(0.75f, 0.86f, 1.0f, 0.22f);
+    hoverBackground.gameObject.SetActive(false);
+    button.HoverHighlight = hoverBackground.gameObject;
 
     TinyPixelText label = CreateTinyPixelText(
         row,
@@ -1646,23 +1692,63 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     };
   }
 
-  private void CycleLane(SmartSplitterLane lane)
+  private TextAndFormatFields GetDropdownOptionHoverTitle(
+      DropdownOptionKind kind,
+      ObjectID objectID,
+      int variation)
   {
-    if (!TryGetTargetEntityManager(out EntityManager entityManager))
+    return new TextAndFormatFields
     {
-      return;
+      text = kind switch
+      {
+        DropdownOptionKind.Any => "Any item",
+        DropdownOptionKind.None => "Blocked lane",
+        DropdownOptionKind.Item => GetItemDisplayName(objectID, variation),
+        _ => string.Empty
+      },
+      dontLocalize = true
+    };
+  }
+
+  private List<TextAndFormatFields> GetDropdownOptionHoverDescription(DropdownOptionKind kind)
+  {
+    string description = kind switch
+    {
+      DropdownOptionKind.Any => "Allows this lane to pass any item.",
+      DropdownOptionKind.None => "Prevents items from using this lane.",
+      _ => string.Empty
+    };
+
+    if (string.IsNullOrEmpty(description))
+    {
+      return null;
     }
 
-    SmartSplitterLaneFiltersCD filters = entityManager.GetComponentData<SmartSplitterLaneFiltersCD>(_splitter);
+    return new List<TextAndFormatFields>
+    {
+      new TextAndFormatFields
+      {
+        text = description,
+        color = Color.white * 0.99f,
+        dontLocalize = true
+      }
+    };
+  }
+
+  private void CycleLane(SmartSplitterLane lane)
+  {
+    SmartSplitterLaneFiltersCD filters = TryGetCurrentFilters(out SmartSplitterLaneFiltersCD currentFilters)
+        ? currentFilters
+        : SmartSplitterLaneFilterUtility.CreateDefaultLaneFilters();
     SmartSplitterLaneFilter current = SmartSplitterLaneFilterUtility.GetLaneFilter(filters, lane);
     SmartSplitterLaneFilter next = SmartSplitterLaneFilterUtility.GetNextProofFilter(current);
-    SmartSplitterLaneFilterUtility.SetLaneFilter(entityManager, _splitter, lane, next);
+    ApplyLaneFilter(lane, next);
     Refresh();
   }
 
   private void BeginPickLane(SmartSplitterLane lane)
   {
-    if (!TryGetTargetEntityManager(out EntityManager entityManager))
+    if (!HasValidTarget())
     {
       return;
     }
@@ -1806,24 +1892,24 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private void SetLaneToItem(SmartSplitterLane lane, ObjectID objectID, int variation)
   {
-    if (!TryGetTargetEntityManager(out EntityManager entityManager))
+    if (!HasValidTarget())
     {
       return;
     }
 
     RememberFilterItem(objectID, variation);
-    SmartSplitterLaneFilterUtility.SetLaneToItem(entityManager, _splitter, lane, objectID, variation);
+    ApplyLaneFilter(lane, SmartSplitterLaneFilterUtility.CreateItemFilter(objectID, variation));
     Refresh();
   }
 
   private void SetLaneToAny(SmartSplitterLane lane)
   {
-    if (!TryGetTargetEntityManager(out EntityManager entityManager))
+    if (!HasValidTarget())
     {
       return;
     }
 
-    SmartSplitterLaneFilterUtility.SetLaneToAny(entityManager, _splitter, lane);
+    ApplyLaneFilter(lane, SmartSplitterLaneFilterUtility.CreateAnyFilter());
     if (_pendingPickLane == lane)
     {
       EndPendingPick();
@@ -1834,12 +1920,12 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private void SetLaneToNone(SmartSplitterLane lane)
   {
-    if (!TryGetTargetEntityManager(out EntityManager entityManager))
+    if (!HasValidTarget())
     {
       return;
     }
 
-    SmartSplitterLaneFilterUtility.SetLaneToNone(entityManager, _splitter, lane);
+    ApplyLaneFilter(lane, SmartSplitterLaneFilterUtility.CreateNoneFilter());
     if (_pendingPickLane == lane)
     {
       EndPendingPick();
@@ -1860,6 +1946,61 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     entityManager = _world.EntityManager;
     return entityManager.Exists(_splitter) &&
            entityManager.HasComponent<SmartSplitterLaneFiltersCD>(_splitter);
+  }
+
+  private bool HasValidTarget()
+  {
+    return TryGetTargetEntityManager(out _) ||
+           (_hasTargetCenter && _targetCenter.x != int.MinValue);
+  }
+
+  private bool TryGetCurrentFilters(out SmartSplitterLaneFiltersCD filters)
+  {
+    if (TryGetTargetEntityManager(out EntityManager entityManager))
+    {
+      filters = entityManager.GetComponentData<SmartSplitterLaneFiltersCD>(_splitter);
+      if (_hasTargetCenter)
+      {
+        SmartSplitterNetworkState.RememberFilters(_targetCenter, filters);
+      }
+
+      return true;
+    }
+
+    if (_hasTargetCenter && SmartSplitterNetworkState.TryGetFilters(_targetCenter, out filters))
+    {
+      return true;
+    }
+
+    filters = default;
+    if (_hasTargetCenter)
+    {
+      SmartSplitterNetworkState.RequestFilters(_targetCenter);
+    }
+
+    return false;
+  }
+
+  private void ApplyLaneFilter(SmartSplitterLane lane, SmartSplitterLaneFilter filter)
+  {
+    if (TryGetTargetEntityManager(out EntityManager entityManager))
+    {
+      SmartSplitterLaneFilterUtility.SetLaneFilter(entityManager, _splitter, lane, filter);
+
+      if (_hasTargetCenter &&
+          SmartSplitterNetworkState.TryGetFilters(_targetCenter, out SmartSplitterLaneFiltersCD cachedFilters))
+      {
+        SmartSplitterLaneFilterUtility.SetLaneFilterValue(ref cachedFilters, lane, filter);
+        SmartSplitterNetworkState.RememberFilters(_targetCenter, cachedFilters);
+      }
+
+      return;
+    }
+
+    if (_hasTargetCenter)
+    {
+      SmartSplitterNetworkState.SendLaneFilter(_targetCenter, lane, filter);
+    }
   }
 
   private void RefreshLane(LaneWidgets lane, SmartSplitterLaneFilter filter)
@@ -2011,11 +2152,34 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       return;
     }
 
+    AddRememberedFilterItem(objectID, variation);
+    SmartSplitterPersistence.RememberHistoryItem(objectID, variation);
+  }
+
+  private static void MergePersistedHistoryItems()
+  {
+    List<SmartSplitterPersistence.HistoryItem> persistedItems =
+        SmartSplitterPersistence.GetHistoryItems();
+
+    for (int i = 0; i < persistedItems.Count; i++)
+    {
+      AddRememberedFilterItem(persistedItems[i].ObjectID, persistedItems[i].Variation);
+    }
+  }
+
+  private static bool AddRememberedFilterItem(ObjectID objectID, int variation)
+  {
+    if (objectID == ObjectID.None)
+    {
+      return false;
+    }
+
     for (int i = 0; i < RememberedFilterItems.Count; i++)
     {
-      if (RememberedFilterItems[i].ObjectID == objectID)
+      if (RememberedFilterItems[i].ObjectID == objectID &&
+          RememberedFilterItems[i].Variation == variation)
       {
-        return;
+        return false;
       }
     }
 
@@ -2024,6 +2188,8 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
       ObjectID = objectID,
       Variation = variation
     });
+
+    return true;
   }
 
   private void ApplyDropdownOptionIcon(
@@ -2147,7 +2313,11 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
     return new TextAndFormatFields
     {
-      text = hasItem ? "Filtering enabled" : "No item filter",
+      text = filter.Mode == SmartSplitterLaneFilterMode.None
+          ? "Blocked lane"
+          : hasItem
+              ? "Filtering enabled"
+              : "No item filter",
       dontLocalize = true
     };
   }
@@ -2157,6 +2327,19 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
     SmartSplitterLaneFilter filter = GetCurrentLaneFilter(lane.Lane);
     bool hasItem = filter.Mode == SmartSplitterLaneFilterMode.Item &&
                    filter.FilterObject != ObjectID.None;
+
+    if (filter.Mode == SmartSplitterLaneFilterMode.None)
+    {
+      return new List<TextAndFormatFields>
+      {
+        new TextAndFormatFields
+        {
+          text = "This lane is blocked and will not let items through.",
+          color = Color.white * 0.99f,
+          dontLocalize = true
+        }
+      };
+    }
 
     if (!hasItem)
     {
@@ -2202,12 +2385,11 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
   private SmartSplitterLaneFilter GetCurrentLaneFilter(SmartSplitterLane lane)
   {
-    if (!TryGetTargetEntityManager(out EntityManager entityManager))
+    if (!TryGetCurrentFilters(out SmartSplitterLaneFiltersCD filters))
     {
       return SmartSplitterLaneFilterUtility.CreateAnyFilter();
     }
 
-    SmartSplitterLaneFiltersCD filters = entityManager.GetComponentData<SmartSplitterLaneFiltersCD>(_splitter);
     return SmartSplitterLaneFilterUtility.GetLaneFilter(filters, lane);
   }
 
