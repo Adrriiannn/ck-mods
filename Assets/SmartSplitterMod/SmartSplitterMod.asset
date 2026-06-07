@@ -21,12 +21,128 @@ MonoBehaviour:
     accessesExtraAssemblies: 1
     disableHarmonyPatching: 0
     requiredOn: 3
-    files: []
+    files:
+    - path: Scripts/Scripts/Visuals/SmartSplitterAssetRegistry.cs
+      guid: 6445514efea44144897c44869500bfbb
+    - path: Scripts/Scripts/Utilities/SmartSplitterPersistence.cs
+      guid: 6f3d2e5a9b2c4f0a8d1e7c9b5a4f2d63
+    - path: Scripts/Scripts/Utilities/SmartSplitterOrientationUtility.cs
+      guid: e384ab56509e1c84686516553d5f3fa3
+    - path: Scripts/Scripts/Utilities/SmartSplitterNetworkState.cs
+      guid: 1630ac5eb45c4aa39fb0746910d12553
+    - path: Scripts/Scripts/Utilities/SmartSplitterLaneFilterUtility.cs
+      guid: 1c2c729d33af4d1d8df3b0c869dfdf08
+    - path: Scripts/Scripts/Systems/SmartSplitterRuntimeSystem.cs
+      guid: 6ba95d807c5d38b4a82493b02e35796b
+    - path: Scripts/Scripts/Systems/SmartSplitterNetworkSystems.cs
+      guid: 2d01d1a87c5145968f46d4d059e51d36
+    - path: Scripts/Scripts/SmartSplitterMod.cs
+      guid: 0354c6f94ab3e1e4081d5e79fea29fb4
+    - path: Scripts/Scripts/Patches/SmartSplitterPlacementPreviewPatch.cs
+      guid: c6f00d4f8ac9f7d48a077b3dbdb9f59f
+    - path: Scripts/Scripts/Debug/SmartSplitterDebugSettings.cs
+      guid: fb0e36949805ba24882ee3d21f7ef293
+    - path: Scripts/Scripts/Controllers/SmartSplitterVisualSwapController.cs
+      guid: aadec43f06ac37b4e8bb8385f3c08801
+    - path: Scripts/Scripts/Controllers/SmartSplitterFilterPanelHost.cs
+      guid: 40b925c5526a43f9835804065bcae486
+    - path: Scripts/Scripts/Controllers/SmartSplitterFilterPanelController.cs
+      guid: 8ac29983f7ce43d6b01f103e51dcb155
+    - path: Scripts/Scripts/Components/SmartSplitterTag.cs
+      guid: 2e4ea841482d6fa4b9ffed71b71015c1
+    - path: Scripts/Scripts/Components/SmartSplitterFilterRpc.cs
+      guid: a24c8a6b94bd4da783c4dba9d12e7f91
+    - path: Scripts/Generated/SmartSplitterNetworkSystems__System_3557657430.g.cs
+      guid: 
+    - path: Scripts/Generated/SmartSplitterRuntimeSystem__System_14395466820.g.cs
+      guid: 
+    - path: Scripts/Generated/SmartSplitterFilterRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/SmartSplitterFilterStateRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/SmartSplitterSetLaneFilterRpcCommandSerializer.cs
+      guid: 
+    - path: Bundles/SmartSplitterMod_Windows.assetbundle
+      guid: 
+    - path: Bundles/SmartSplitterMod_Windows.assetbundle.manifest
+      guid: 
+    - path: Bundles/SmartSplitterMod_Linux.assetbundle
+      guid: 
+    - path: Bundles/SmartSplitterMod_Linux.assetbundle.manifest
+      guid: 
     dependencies: []
   modPath: Assets\SmartSplitterMod
   forceReimport: 1
   buildBundles: 1
   cacheBundles: 0
   buildLinux: 1
-  assets: []
-  lastBuildLinux: 0
+  assets:
+  - path: Assets/SmartSplitterMod/Assets/smartsplitter_active_0.png
+    hash: 9EBFB56E4FC708D0F45AFA03CD0752FFFFF78B6D0882D15B7A448F81C0AB9CCD
+  - path: Assets/SmartSplitterMod/Assets/smartsplitter_active_side2_0.png
+    hash: A2B9BD156261D5CFA5E8EC5155AF06773DE2C480F42DA4628D52180B63AB3B2A
+  - path: Assets/SmartSplitterMod/Assets/smartsplitter_active_side_0.png
+    hash: CCDF813E592AAE1AB5B50B54212BB75111765756A39D688F8B48CB34DD0EDC0F
+  - path: Assets/SmartSplitterMod/Assets/smartsplitter_active_up_0.png
+    hash: 230DB392789C224CCDC81FFCEB90F16850D8BAB8ED8C793CAE8C2B9C48AFC65A
+  - path: Assets/SmartSplitterMod/Data/SmartSplitterMod.asset
+    hash: 52282184D375E8093C86D6EC833BCCEF5F8AEE6E7769B300B7EC32CDA770109B
+  - path: Assets/SmartSplitterMod/Prefabs/SmartSplitterAssetRegistry.prefab
+    hash: B8D3A9735FF0A173F22D681343CF4A6CBC90776FBD5B209CBF252341ECE69EE4
+  - path: Assets/SmartSplitterMod/Prefabs/SmartSplitterPanel.prefab
+    hash: 450C72C5350135806737F4DE8CC8CB068D040A1A30A456BD60073CEA4EC2800D
+  - path: Assets/SmartSplitterMod/Prefabs/SmartSplitterVisual.prefab
+    hash: F15CDDFB2F0DDC1A4554829CC9D6933B92F484B61FB02F160C472B920F4F7F95
+  - path: Assets/SmartSplitterMod/SmartSplitterMod.asset
+    hash: BE9577F33F6B4C2A967E73522BB8718F1F2828F1BD3E06AB81129C30D9854DE2
+  - path: Assets/SmartSplitterMod/SmartSplitterMod_modio.asset
+    hash: 7A160D525A607EE9A4944336BA0D21F013FB002C7EF57E427585A28B5E09AB18
+  - path: Assets/SmartSplitterMod/SmartSplitterModData.asset
+    hash: 9DE64D3CAEF4F93CD6D1104EF813660F9375B24DA187695A80B05157CB8816FA
+  - path: Assets/SmartSplitterMod/SpriteAsset/smartsplitter.asset
+    hash: 0093F26545A425AB3E9FE5DEC79303B6769E16841F5937D3AC525FE9FBCA5643
+  - path: Assets/SmartSplitterMod/SpriteAssetManifest.asset
+    hash: BF7AFBD839D7EEFE5CB4A16A11C2A2CC16C2172424CA3DE449357855E790B8D4
+  - path: Assets/SmartSplitterMod/UI/cursor_inv.png
+    hash: DECFBF438E07F3186C04A5B7A115D55334EA395EE17CA4B236F48A0A30B4F9B4
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_button_bg.png
+    hash: 0AD77E8E927D97AA8389C15C3A4A454CEFF526A59BB5A0E1E311E91F32C607F2
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_button_highlight.png
+    hash: 5ED4D28ECD55F64A950DC9E3E72A78437A8DF817F07708C140607CBBDFB0329F
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_Center_text.png
+    hash: E11371637E03AF72ACA91116C99B4F9FF8DCD0340E2104647B9E452845D26FE9
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_colorpicker_icon.png
+    hash: 89D79AB10DFE31EC70E098D7EAE6094E6B9EFB3318198DF634ABAF2746E60B16
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_divider.png
+    hash: 22ECB4373E952721293DEE43B641919F7CD3F8614FB95CEDF4B7EADF73959474
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_dropdown.png
+    hash: D37AADA6536E21A62C6C18816A41C639A9D55B905815CBC52DE744EDA64E0ECD
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_dropdown_arrow_down.png
+    hash: F71838487681983CC696D75E13875EB9A907CB25DE077036EF7C39B6219A1673
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_dropdown_arrow_up.png
+    hash: F577A3D18669777B1778B0CB7AF869543274436A89198610F091750FC82645EF
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_dropdown_header.png
+    hash: 5A67A707502F5DD0E92F12E3C811AC4C4EA63D05A1F614CC8E0E6673093C00DB
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_electricity_off.png
+    hash: 3A2F15695983BCA29FF57F838AAA0DB378FED475D318E222F12B52F4ECC40970
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_electricity_on.png
+    hash: 8BFF3EA5F8DA0C1AE8FA601375F98FEFB3924349066F6D96B708E0EEA1A4F775
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_eraser_icon.png
+    hash: F2E1793360E03D9DDE4C755D471540783BB5015727CA537E76704646C49F0A39
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_filter_highlight.png
+    hash: F8D7ABD20AAF1B374F8D4D98C3C19018BCF49B80C4DD1484DC72138FB80FD8E8
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_filter_none.png
+    hash: 3DDE777EB1F125AF71E8EC1847D9DFF506A8DFE3945B03342142CE215C794653
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_filtering_silhouette_icon.png
+    hash: D08D1E8EE621530680866213F0C67E82ACC9A4C0486C2973035BF063CF53FDF4
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_Filtering_text.png
+    hash: C6D07CB462A76DCCF45D32E6A6F4C14C6525898E0CC63DF58F6B8B758F00C5D2
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_Left_text.png
+    hash: 07923AA0A01E3A12629E252514A50D81A8DE9270D27FB19D56658C31B2174403
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_panel.png
+    hash: A571521857723469373B64E96183AA71FA6C24AD9AF30B8851A83BB774ADE98F
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_panel_header.png
+    hash: 02E5268C4CBEA15CC33086A75B00693C748EA76048C5DBD83FE8D8A2A93733E2
+  - path: Assets/SmartSplitterMod/UI/smart_crafting_Right_text.png
+    hash: 1FFF89BDFB7A163A63BA052F664A59D6305C42C6F89B4DB318A0EA1BED3BF802
+  lastBuildLinux: 1

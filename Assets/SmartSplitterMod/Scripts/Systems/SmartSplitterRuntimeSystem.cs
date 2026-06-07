@@ -23,13 +23,32 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     public string LastCoreLogKey = string.Empty;
   }
 
-  private sealed class DroppedItemSnapshot
+  private struct DroppedItemSnapshot
   {
     public Entity Entity;
     public ObjectID ItemObject;
     public int ItemVariation;
     public int ItemAmount;
     public float3 Position;
+  }
+
+  private struct ActiveSplitterContext
+  {
+    public CachedSplitter Splitter;
+    public Entity Orchestrator;
+    public SmartSplitterLaneFiltersCD Filters;
+    public int2 Center;
+    public int2 InputDirection;
+    public int2 ForwardDirection;
+    public int2 LeftDirection;
+    public int2 RightDirection;
+    public float CenterX;
+    public float CenterY;
+    public float OutputAxisX;
+    public float OutputAxisY;
+    public float InputAxisX;
+    public float InputAxisY;
+    public int BaseMoveTime;
   }
 
   private struct DirectRouteGuard
@@ -64,16 +83,19 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
   private readonly Dictionary<Entity, CachedSplitter> _splitters = new();
   private readonly Dictionary<Entity, int> _laneRoundRobinIndex = new();
-  private readonly Dictionary<Entity, double> _recentlyReleasedRoutedEntities = new();
   private readonly Dictionary<Entity, DirectRouteGuard> _directRouteGuards = new();
   private readonly Dictionary<Entity, SmartRoutePlan> _smartRoutePlans = new();
   private readonly HashSet<Entity> _handledDroppedEntitiesThisTick = new();
   private readonly Dictionary<Entity, Entity> _moveeByDroppedEntity = new();
+  private readonly List<ActiveSplitterContext> _activeSplitterContexts = new();
   private readonly List<DroppedItemSnapshot> _droppedItemSnapshots = new();
   private readonly Dictionary<long, List<int>> _droppedItemIndexesByTile = new();
-  private readonly HashSet<int> _candidateDroppedItemIndexes = new();
+  private readonly Stack<List<int>> _droppedItemIndexListPool = new();
+  private readonly List<int> _candidateDroppedItemIndexes = new(16);
+  private readonly HashSet<long> _droppedItemInterestTiles = new();
   private readonly List<SmartSplitterLane> _routeLaneScratch = new(3);
   private readonly List<SmartRoutePiece> _routePieceScratch = new(3);
+  private readonly Dictionary<long, bool> _stackableByItem = new();
   private readonly Dictionary<Entity, bool> _splitterPowerState = new();
   private readonly HashSet<Entity> _smartStateDirty = new();
   private readonly HashSet<long> _poweredElectricityTiles = new();
@@ -81,6 +103,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private bool _loggedFirstRegisteredSplitter;
   private double _moveeLookupBuiltAt = -1d;
   private double _placedSplitterVariationIndexBuiltAt = -1d;
+  private double _nextDiscoveryRefreshAt = -1d;
+  private double _nextPowerTileRefreshAt = -1d;
 
   private static bool EnableRouting = true;
   private static bool EnableElectricityGateLogs = false;
@@ -92,12 +116,14 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private int _routeHandoffDiagnosticLogs;
   private const int MaxRouteHandoffDiagnosticLogs = 260;
 
-  private const float InputDetectDistance = 4.20f;
+  private const float InputDetectDistance = 1.75f;
   private const float InputLaneHalfWidth = 0.35f;
-  private const float MinInputDistanceFromCenter = 0.15f;
+  private const float CenterDropHalfExtent = 0.55f;
   private const float AcceptedItemRedirectDistance = 0.70f;
 
-  private const double RecentlyReleasedRoutedEntityIgnoreSeconds = 0.35d;
+  private const double DiscoveryRefreshIntervalSeconds = 0.25d;
+  private const double PowerTileRefreshIntervalSeconds = 0.10d;
+  private const double PlacedSplitterVariationIndexRefreshIntervalSeconds = 0.50d;
   private const double DirectRouteGuardSeconds = 1.20d;
   private const double SmartRoutePlanLifetimeSeconds = 2.50d;
   // Core Keeper's Movee system stops items once they are within roughly
@@ -126,10 +152,19 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         ComponentType.ReadOnly<SmartSplitterTag>(),
         ComponentType.ReadOnly<SmartSplitterOriginalOutputsCD>());
 
-    _droppedItemQuery = GetEntityQuery(
+    _droppedItemQuery = GetEntityQuery(new EntityQueryDesc
+    {
+      All = new[]
+      {
         ComponentType.ReadOnly<ObjectDataCD>(),
         ComponentType.ReadOnly<ContainedObjectsBuffer>(),
-        ComponentType.ReadOnly<LocalTransform>());
+        ComponentType.ReadOnly<LocalTransform>()
+      },
+      None = new[]
+      {
+        ComponentType.ReadOnly<EntityDestroyedCD>()
+      }
+    });
 
     _objectDataTransformQuery = GetEntityQuery(new EntityQueryDesc
     {
@@ -179,9 +214,16 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
     ComponentLookup<MoverCD> moverLookup = GetComponentLookup<MoverCD>(true);
 
+    bool refreshedSplitterDiscovery = false;
     PruneDestroyedCachedSplitters();
-    RefreshSmartSplitterConfig(moverLookup);
-    RegisterSplitters();
+    if (_splitters.Count == 0 || now >= _nextDiscoveryRefreshAt)
+    {
+      RefreshSmartSplitterConfig(moverLookup);
+      RegisterSplitters();
+      _nextDiscoveryRefreshAt = now + DiscoveryRefreshIntervalSeconds;
+      refreshedSplitterDiscovery = true;
+    }
+
     SmartSplitterPersistence.FlushIfDue();
 
     if (_splitters.Count == 0)
@@ -189,36 +231,39 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       return;
     }
 
-    using NativeArray<Entity> allMovers = _moverQuery.ToEntityArray(Allocator.Temp);
-    using NativeArray<MoverCD> allMoverData = _moverQuery.ToComponentDataArray<MoverCD>(Allocator.Temp);
-
-    using NativeArray<ElectricityCD> electricityData = _electricityQuery.ToComponentDataArray<ElectricityCD>(Allocator.Temp);
-    using NativeArray<LocalTransform> electricityTransforms = _electricityQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-
-    BuildPoweredElectricityTileSet(electricityData, electricityTransforms, _poweredElectricityTiles);
-
-    PruneRecentlyReleasedRoutedEntities(now);
     PruneDirectRouteGuards(now);
     PruneSmartRoutePlans(now);
+    ProgressSmartRoutePlans(now);
     _handledDroppedEntitiesThisTick.Clear();
 
-    ApplyElectricityGateToSplitters(
-        _poweredElectricityTiles,
-        allMovers,
-        allMoverData);
+    bool refreshedPoweredTiles = RefreshPoweredElectricityTilesIfDue(now);
 
-    using NativeArray<Entity> droppedEntities = _droppedItemQuery.ToEntityArray(Allocator.Temp);
-    using NativeArray<ObjectDataCD> droppedOuterObjects = _droppedItemQuery.ToComponentDataArray<ObjectDataCD>(Allocator.Temp);
-    using NativeArray<LocalTransform> droppedTransforms = _droppedItemQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-    PugDatabase.DatabaseBankCD databaseBank = _databaseQuery.GetSingleton<PugDatabase.DatabaseBankCD>();
+    if (refreshedPoweredTiles || refreshedSplitterDiscovery)
+    {
+      ApplyElectricityGateToSplitters(_poweredElectricityTiles);
+    }
 
-    RebuildDroppedItemIndex(droppedEntities, droppedOuterObjects, droppedTransforms);
+    RebuildActiveSplitterContexts();
+    ClearDroppedItemIndex();
 
-    RouteSmartSplitterItemsDirectly(
-        now,
-        databaseBank,
-        allMovers,
-        allMoverData);
+    if (_activeSplitterContexts.Count == 0)
+    {
+      SmartSplitterPersistence.FlushIfDue();
+      return;
+    }
+
+    if (_droppedItemInterestTiles.Count > 0)
+    {
+      RebuildDroppedItemIndex();
+    }
+
+    if (_droppedItemSnapshots.Count > 0)
+    {
+      PugDatabase.DatabaseBankCD databaseBank = _databaseQuery.GetSingleton<PugDatabase.DatabaseBankCD>();
+      RouteSmartSplitterItemsDirectly(
+          now,
+          databaseBank);
+    }
 
     SmartSplitterPersistence.FlushIfDue();
   }
@@ -457,9 +502,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   }
 
   private void ApplyElectricityGateToSplitters(
-      HashSet<long> poweredElectricityTiles,
-      NativeArray<Entity> allMovers,
-      NativeArray<MoverCD> allMoverData)
+      HashSet<long> poweredElectricityTiles)
   {
     List<Entity> stale = null;
 
@@ -493,7 +536,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         if ((!hadState || !wasPowered) &&
             !HasSmartRuntimeState(orchestrator))
         {
-          BlockSmartSplitterState(orchestrator, allMovers, allMoverData);
+          BlockSmartSplitterState(orchestrator);
         }
 
         continue;
@@ -515,6 +558,18 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     {
       RemoveCachedSplitter(entity, IsCachedSplitterDestroyed(entity));
     }
+  }
+
+  private bool RefreshPoweredElectricityTilesIfDue(double now)
+  {
+    if (now < _nextPowerTileRefreshAt)
+    {
+      return false;
+    }
+
+    RebuildPoweredElectricityTileSet();
+    _nextPowerTileRefreshAt = now + PowerTileRefreshIntervalSeconds;
+    return true;
   }
 
   private bool IsSplitterSmartPowered(Entity orchestrator)
@@ -566,111 +621,53 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
            poweredElectricityTiles.Contains(GetTileKey(splitterX, splitterY - 1));
   }
 
-  private static void BuildPoweredElectricityTileSet(
-      NativeArray<ElectricityCD> electricityData,
-      NativeArray<LocalTransform> electricityTransforms,
-      HashSet<long> poweredElectricityTiles)
+  private void RebuildPoweredElectricityTileSet()
   {
-    poweredElectricityTiles.Clear();
+    _poweredElectricityTiles.Clear();
 
-    for (int i = 0; i < electricityData.Length; i++)
+    ComponentTypeHandle<ElectricityCD> electricityType = GetComponentTypeHandle<ElectricityCD>(true);
+    ComponentTypeHandle<LocalTransform> transformType = GetComponentTypeHandle<LocalTransform>(true);
+
+    using NativeArray<ArchetypeChunk> chunks = _electricityQuery.ToArchetypeChunkArray(Allocator.Temp);
+
+    for (int chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
     {
-      ElectricityCD electricity = electricityData[i];
+      ArchetypeChunk chunk = chunks[chunkIndex];
+      NativeArray<ElectricityCD> electricityData = chunk.GetNativeArray(ref electricityType);
+      NativeArray<LocalTransform> electricityTransforms = chunk.GetNativeArray(ref transformType);
 
-      bool canPowerSmartSplitter =
-          electricity.hasEnoughElectricityToPowerStuff ||
-          electricity.sourceEnergy > 0;
-
-      if (!canPowerSmartSplitter)
+      for (int i = 0; i < chunk.Count; i++)
       {
-        continue;
+        ElectricityCD electricity = electricityData[i];
+
+        bool canPowerSmartSplitter =
+            electricity.hasEnoughElectricityToPowerStuff ||
+            electricity.sourceEnergy > 0;
+
+        if (!canPowerSmartSplitter)
+        {
+          continue;
+        }
+
+        LocalTransform transform = electricityTransforms[i];
+        int powerX = Mathf.RoundToInt(transform.Position.x);
+        int powerY = Mathf.RoundToInt(transform.Position.z);
+
+        _poweredElectricityTiles.Add(GetTileKey(powerX, powerY));
       }
-
-      LocalTransform transform = electricityTransforms[i];
-      int powerX = Mathf.RoundToInt(transform.Position.x);
-      int powerY = Mathf.RoundToInt(transform.Position.z);
-
-      poweredElectricityTiles.Add(GetTileKey(powerX, powerY));
     }
   }
 
-  private void RebuildDroppedItemIndex(
-      NativeArray<Entity> droppedEntities,
-      NativeArray<ObjectDataCD> droppedOuterObjects,
-      NativeArray<LocalTransform> droppedTransforms)
+  private void RebuildActiveSplitterContexts()
   {
-    _droppedItemSnapshots.Clear();
-    _droppedItemIndexesByTile.Clear();
-
-    for (int i = 0; i < droppedEntities.Length; i++)
-    {
-      Entity droppedEntity = droppedEntities[i];
-      if (droppedOuterObjects[i].objectID != ObjectID.DroppedItem ||
-          !EntityManager.Exists(droppedEntity) ||
-          !EntityManager.HasBuffer<ContainedObjectsBuffer>(droppedEntity))
-      {
-        continue;
-      }
-
-      DynamicBuffer<ContainedObjectsBuffer> contained =
-          EntityManager.GetBuffer<ContainedObjectsBuffer>(droppedEntity);
-      if (contained.Length == 0)
-      {
-        continue;
-      }
-
-      ObjectDataCD inner = contained[0].objectData;
-      if (inner.amount <= 0)
-      {
-        continue;
-      }
-
-      DroppedItemSnapshot snapshot = new DroppedItemSnapshot
-      {
-        Entity = droppedEntity,
-        ItemObject = inner.objectID,
-        ItemVariation = inner.variation,
-        ItemAmount = inner.amount,
-        Position = droppedTransforms[i].Position
-      };
-
-      int snapshotIndex = _droppedItemSnapshots.Count;
-      _droppedItemSnapshots.Add(snapshot);
-
-      int tileX = Mathf.RoundToInt(snapshot.Position.x);
-      int tileY = Mathf.RoundToInt(snapshot.Position.z);
-      long key = GetTileKey(tileX, tileY);
-      if (!_droppedItemIndexesByTile.TryGetValue(key, out List<int> indexes))
-      {
-        indexes = new List<int>(4);
-        _droppedItemIndexesByTile.Add(key, indexes);
-      }
-
-      indexes.Add(snapshotIndex);
-    }
-  }
-
-  private static long GetTileKey(int x, int y)
-  {
-    return ((long)x << 32) ^ (uint)y;
-  }
-  private void RouteSmartSplitterItemsDirectly(
-      double now,
-      PugDatabase.DatabaseBankCD databaseBank,
-      NativeArray<Entity> allMovers,
-      NativeArray<MoverCD> allMoverData)
-  {
-    if (!EnableRouting)
-    {
-      return;
-    }
+    _activeSplitterContexts.Clear();
+    _droppedItemInterestTiles.Clear();
 
     List<Entity> stale = null;
 
     foreach (CachedSplitter splitter in _splitters.Values)
     {
       Entity orchestrator = splitter.Orchestrator;
-
       if (!EntityManager.Exists(orchestrator) ||
           !EntityManager.HasComponent<SmartSplitterConfigCD>(orchestrator) ||
           !EntityManager.HasComponent<SmartSplitterLaneFiltersCD>(orchestrator) ||
@@ -683,7 +680,6 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
       SmartSplitterConfigCD config =
           EntityManager.GetComponentData<SmartSplitterConfigCD>(orchestrator);
-
       if (!config.Enabled || !IsSplitterSmartPowered(orchestrator))
       {
         continue;
@@ -691,7 +687,6 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
       SmartSplitterOriginalOutputsCD originals =
           EntityManager.GetComponentData<SmartSplitterOriginalOutputsCD>(orchestrator);
-
       if (!IsOriginalOutputStateValid(originals))
       {
         stale ??= new List<Entity>();
@@ -699,12 +694,13 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         continue;
       }
 
-      EnsurePoweredSmartSplitterOwnsRouting(orchestrator, originals, allMovers, allMoverData);
+      EnsurePoweredSmartSplitterOwnsRouting(orchestrator, originals);
 
       if (!TryGetSmartLaneDirections(
               orchestrator,
               originals,
               out int2 center,
+              out int2 inputDirection,
               out int2 forwardDirection,
               out int2 leftDirection,
               out int2 rightDirection))
@@ -715,8 +711,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       MoverCD leftMover = EntityManager.GetComponentData<MoverCD>(originals.LeftMoverEntity);
       MoverCD rightMover = EntityManager.GetComponentData<MoverCD>(originals.RightMoverEntity);
 
-      if (!TryGetSmartInputDirection(orchestrator, center, out int2 inputDirection) ||
-          !TryGetInputCorridorGeometry(
+      if (!TryGetInputCorridorGeometry(
               leftMover,
               rightMover,
               inputDirection,
@@ -730,11 +725,163 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         continue;
       }
 
-      SmartSplitterLaneFiltersCD filters =
-          EntityManager.GetComponentData<SmartSplitterLaneFiltersCD>(orchestrator);
+      _activeSplitterContexts.Add(new ActiveSplitterContext
+      {
+        Splitter = splitter,
+        Orchestrator = orchestrator,
+        Filters = EntityManager.GetComponentData<SmartSplitterLaneFiltersCD>(orchestrator),
+        Center = center,
+        InputDirection = inputDirection,
+        ForwardDirection = forwardDirection,
+        LeftDirection = leftDirection,
+        RightDirection = rightDirection,
+        CenterX = centerX,
+        CenterY = centerY,
+        OutputAxisX = outputAxisX,
+        OutputAxisY = outputAxisY,
+        InputAxisX = inputAxisX,
+        InputAxisY = inputAxisY,
+        BaseMoveTime = leftMover.moveTime
+      });
 
-      ProgressSmartRoutePlans(orchestrator, now);
-      CollectInputCorridorCandidateItems(center, inputDirection);
+      AddInputCorridorTiles(center, inputDirection, _droppedItemInterestTiles);
+    }
+
+    if (stale == null)
+    {
+      return;
+    }
+
+    foreach (Entity entity in stale)
+    {
+      RemoveCachedSplitter(entity, IsCachedSplitterDestroyed(entity));
+    }
+  }
+
+  private void ClearDroppedItemIndex()
+  {
+    _droppedItemSnapshots.Clear();
+
+    foreach (List<int> indexes in _droppedItemIndexesByTile.Values)
+    {
+      indexes.Clear();
+      _droppedItemIndexListPool.Push(indexes);
+    }
+
+    _droppedItemIndexesByTile.Clear();
+  }
+
+  private void RebuildDroppedItemIndex()
+  {
+    EntityTypeHandle entityType = GetEntityTypeHandle();
+    ComponentTypeHandle<ObjectDataCD> objectDataType = GetComponentTypeHandle<ObjectDataCD>(true);
+    ComponentTypeHandle<LocalTransform> transformType = GetComponentTypeHandle<LocalTransform>(true);
+    BufferTypeHandle<ContainedObjectsBuffer> containedType = GetBufferTypeHandle<ContainedObjectsBuffer>(true);
+
+    using NativeArray<ArchetypeChunk> chunks = _droppedItemQuery.ToArchetypeChunkArray(Allocator.Temp);
+
+    for (int chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
+    {
+      ArchetypeChunk chunk = chunks[chunkIndex];
+      NativeArray<Entity> droppedEntities = chunk.GetNativeArray(entityType);
+      NativeArray<ObjectDataCD> droppedOuterObjects = chunk.GetNativeArray(ref objectDataType);
+      NativeArray<LocalTransform> droppedTransforms = chunk.GetNativeArray(ref transformType);
+      BufferAccessor<ContainedObjectsBuffer> containedBuffers = chunk.GetBufferAccessor(ref containedType);
+
+      for (int i = 0; i < chunk.Count; i++)
+      {
+        Entity droppedEntity = droppedEntities[i];
+        if (droppedOuterObjects[i].objectID != ObjectID.DroppedItem)
+        {
+          continue;
+        }
+
+        LocalTransform transform = droppedTransforms[i];
+        int tileX = Mathf.RoundToInt(transform.Position.x);
+        int tileY = Mathf.RoundToInt(transform.Position.z);
+        long key = GetTileKey(tileX, tileY);
+        if (!_droppedItemInterestTiles.Contains(key))
+        {
+          continue;
+        }
+
+        DynamicBuffer<ContainedObjectsBuffer> contained = containedBuffers[i];
+        if (contained.Length == 0)
+        {
+          continue;
+        }
+
+        ObjectDataCD inner = contained[0].objectData;
+        if (inner.amount <= 0)
+        {
+          continue;
+        }
+
+        DroppedItemSnapshot snapshot = new DroppedItemSnapshot
+        {
+          Entity = droppedEntity,
+          ItemObject = inner.objectID,
+          ItemVariation = inner.variation,
+          ItemAmount = inner.amount,
+          Position = transform.Position
+        };
+
+        int snapshotIndex = _droppedItemSnapshots.Count;
+        _droppedItemSnapshots.Add(snapshot);
+
+        if (!_droppedItemIndexesByTile.TryGetValue(key, out List<int> indexes))
+        {
+          indexes = RentDroppedItemIndexList();
+          _droppedItemIndexesByTile.Add(key, indexes);
+        }
+
+        indexes.Add(snapshotIndex);
+      }
+    }
+  }
+
+  private List<int> RentDroppedItemIndexList()
+  {
+    if (_droppedItemIndexListPool.Count == 0)
+    {
+      return new List<int>(4);
+    }
+
+    return _droppedItemIndexListPool.Pop();
+  }
+
+  private static long GetTileKey(int x, int y)
+  {
+    return ((long)x << 32) ^ (uint)y;
+  }
+
+  private static long GetItemKey(ObjectID objectID, int variation)
+  {
+    return ((long)(int)objectID << 32) ^ (uint)variation;
+  }
+
+  private void RouteSmartSplitterItemsDirectly(
+      double now,
+      PugDatabase.DatabaseBankCD databaseBank)
+  {
+    if (!EnableRouting ||
+        _activeSplitterContexts.Count == 0 ||
+        _droppedItemSnapshots.Count == 0)
+    {
+      return;
+    }
+
+    for (int contextIndex = 0; contextIndex < _activeSplitterContexts.Count; contextIndex++)
+    {
+      ActiveSplitterContext context = _activeSplitterContexts[contextIndex];
+      Entity orchestrator = context.Orchestrator;
+      CachedSplitter splitter = context.Splitter;
+
+      CollectInputCorridorCandidateItems(context.Center, context.InputDirection);
+      if (_candidateDroppedItemIndexes.Count == 0)
+      {
+        continue;
+      }
 
       foreach (int snapshotIndex in _candidateDroppedItemIndexes)
       {
@@ -753,23 +900,44 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
           continue;
         }
 
-        if (!IsInsideDirectRoutingWindow(
-                snapshot.Position.x,
-                snapshot.Position.z,
-                centerX,
-                centerY,
-                outputAxisX,
-                outputAxisY,
-                inputAxisX,
-                inputAxisY,
-                out float inputDistance) ||
-            inputDistance > AcceptedItemRedirectDistance)
+        bool isCenterDrop = IsInsideSplitterCenterWindow(
+            snapshot.Position.x,
+            snapshot.Position.z,
+            context.CenterX,
+            context.CenterY);
+
+        if (!isCenterDrop)
         {
-          continue;
+          if (!IsInsideDirectRoutingWindow(
+                  snapshot.Position.x,
+                  snapshot.Position.z,
+                  context.CenterX,
+                  context.CenterY,
+                  context.OutputAxisX,
+                  context.OutputAxisY,
+                  context.InputAxisX,
+                  context.InputAxisY,
+                  out float inputDistance) ||
+              inputDistance > AcceptedItemRedirectDistance)
+          {
+            continue;
+          }
+
+          if (!IsApproachingInputLane(
+                  droppedEntity,
+                  snapshot.Position,
+                  context.CenterX,
+                  context.CenterY,
+                  context.InputAxisX,
+                  context.InputAxisY,
+                  now))
+          {
+            continue;
+          }
         }
 
         SmartSplitterDecision decision =
-            DecideRoute(filters, snapshot.ItemObject, snapshot.ItemVariation);
+            DecideRoute(context.Filters, snapshot.ItemObject, snapshot.ItemVariation);
 
         if (TryRouteIncomingDroppedItem(
                 splitter,
@@ -779,12 +947,12 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
                 snapshot.ItemAmount,
                 snapshot.Position,
                 decision,
-                center,
-                inputDirection,
-                forwardDirection,
-                leftDirection,
-                rightDirection,
-                leftMover.moveTime,
+                context.Center,
+                context.InputDirection,
+                context.ForwardDirection,
+                context.LeftDirection,
+                context.RightDirection,
+                context.BaseMoveTime,
                 databaseBank,
                 now))
         {
@@ -792,23 +960,11 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         }
       }
     }
-
-    if (stale == null)
-    {
-      return;
-    }
-
-    foreach (Entity entity in stale)
-    {
-      RemoveCachedSplitter(entity, IsCachedSplitterDestroyed(entity));
-    }
   }
 
   private void EnsurePoweredSmartSplitterOwnsRouting(
       Entity orchestrator,
-      SmartSplitterOriginalOutputsCD originals,
-      NativeArray<Entity> allMovers,
-      NativeArray<MoverCD> allMoverData)
+      SmartSplitterOriginalOutputsCD originals)
   {
     bool needsBlock = !_smartStateDirty.Contains(orchestrator);
 
@@ -825,7 +981,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
     if (needsBlock)
     {
-      BlockSmartSplitterState(orchestrator, allMovers, allMoverData);
+      BlockSmartSplitterState(orchestrator);
     }
   }
 
@@ -968,7 +1124,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       float2 centerTarget = new float2(center.x, center.y);
       float2 currentPosition = new float2(itemPosition.x, itemPosition.z);
       bool itemIsAtCenter =
-          math.distance(currentPosition, centerTarget) <= SmartRouteCenterArrivalRadius;
+          math.distancesq(currentPosition, centerTarget) <=
+          SmartRouteCenterArrivalRadius * SmartRouteCenterArrivalRadius;
       float2 routeTarget = itemIsAtCenter ? target : centerTarget;
       SmartRouteStage routeStage = itemIsAtCenter
           ? SmartRouteStage.ToExit
@@ -1091,7 +1248,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     return true;
   }
 
-  private void ProgressSmartRoutePlans(Entity orchestrator, double now)
+  private void ProgressSmartRoutePlans(double now)
   {
     if (_smartRoutePlans.Count == 0)
     {
@@ -1105,11 +1262,6 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     {
       Entity droppedEntity = entry.Key;
       SmartRoutePlan plan = entry.Value;
-
-      if (plan.Orchestrator != orchestrator)
-      {
-        continue;
-      }
 
       if (now > plan.ExpiresAt ||
           !EntityManager.Exists(droppedEntity) ||
@@ -1125,7 +1277,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
       if (plan.Stage == SmartRouteStage.Reject)
       {
-        if (math.distance(current, plan.ExitTarget) <= SmartRouteExitArrivalRadius)
+        if (math.distancesq(current, plan.ExitTarget) <=
+            SmartRouteExitArrivalRadius * SmartRouteExitArrivalRadius)
         {
           stale ??= new List<Entity>();
           stale.Add(droppedEntity);
@@ -1136,15 +1289,16 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
       if (plan.Stage == SmartRouteStage.ToCenter)
       {
-        float centerDistance = math.distance(current, plan.CenterTarget);
-        if (centerDistance > SmartRouteCenterArrivalRadius)
+        float centerDistanceSq = math.distancesq(current, plan.CenterTarget);
+        if (centerDistanceSq > SmartRouteCenterArrivalRadius * SmartRouteCenterArrivalRadius)
         {
           continue;
         }
 
+        float centerDistance = Mathf.Sqrt(centerDistanceSq);
         int moveTime = CalculateDirectRouteMoveTime(plan.BaseMoveTime, current, plan.ExitTarget);
         bool released = TrySetDroppedEntityRoute(
-            orchestrator,
+            plan.Orchestrator,
             droppedEntity,
             plan.ExitTarget,
             moveTime,
@@ -1155,7 +1309,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         if (ShouldLogRouteProbe())
         {
           LogRouteProbe(
-              $"release-center result={released} orchestrator={orchestrator} dropped={droppedEntity} " +
+              $"release-center result={released} orchestrator={plan.Orchestrator} dropped={droppedEntity} " +
               $"lane={plan.Lane} pos=({current.x:0.000},{current.y:0.000}) " +
               $"center=({plan.CenterTarget.x:0.000},{plan.CenterTarget.y:0.000}) centerDist={centerDistance:0.000} " +
               $"exit=({plan.ExitTarget.x:0.000},{plan.ExitTarget.y:0.000}) moveTime={moveTime} " +
@@ -1177,22 +1331,23 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         continue;
       }
 
-      float exitDistance = math.distance(current, plan.ExitTarget);
-      float distanceFromCenter = math.distance(current, plan.CenterTarget);
-      if (distanceFromCenter <= SmartRouteCenterArrivalRadius &&
-          exitDistance > SmartRouteExitArrivalRadius)
+      float exitDistanceSq = math.distancesq(current, plan.ExitTarget);
+      float distanceFromCenterSq = math.distancesq(current, plan.CenterTarget);
+      if (distanceFromCenterSq <= SmartRouteCenterArrivalRadius * SmartRouteCenterArrivalRadius &&
+          exitDistanceSq > SmartRouteExitArrivalRadius * SmartRouteExitArrivalRadius)
       {
         if (ShouldLogRouteProbe())
         {
+          float exitDistance = Mathf.Sqrt(exitDistanceSq);
           LogRouteProbe(
-              $"waiting-exit orchestrator={orchestrator} dropped={droppedEntity} lane={plan.Lane} " +
+              $"waiting-exit orchestrator={plan.Orchestrator} dropped={droppedEntity} lane={plan.Lane} " +
               $"pos=({current.x:0.000},{current.y:0.000}) exit=({plan.ExitTarget.x:0.000},{plan.ExitTarget.y:0.000}) " +
               $"exitDist={exitDistance:0.000} movee={DescribeAssociatedMovee(droppedEntity, now)}");
         }
       }
 
-      if (exitDistance <= SmartRouteExitArrivalRadius ||
-          distanceFromCenter > 0.85f)
+      if (exitDistanceSq <= SmartRouteExitArrivalRadius * SmartRouteExitArrivalRadius ||
+          distanceFromCenterSq > 0.85f * 0.85f)
       {
         stale ??= new List<Entity>();
         stale.Add(droppedEntity);
@@ -1261,7 +1416,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     bool canSplitStack =
         itemAmount > 1 &&
         _routeLaneScratch.Count > 1 &&
-        PugDatabase.GetEntityObjectInfo(itemObject, databaseBank.databaseBankBlob, itemVariation).isStackable;
+        IsItemStackable(itemObject, itemVariation, databaseBank);
 
     int pieceCount = canSplitStack
         ? math.min(itemAmount, _routeLaneScratch.Count)
@@ -1282,6 +1437,25 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     SmartSplitterLane lastLane = _routePieceScratch[_routePieceScratch.Count - 1].Lane;
     nextRouteStartIndex = ((int)lastLane + 1) % 3;
     return true;
+  }
+
+  private bool IsItemStackable(
+      ObjectID itemObject,
+      int itemVariation,
+      PugDatabase.DatabaseBankCD databaseBank)
+  {
+    long itemKey = GetItemKey(itemObject, itemVariation);
+    if (_stackableByItem.TryGetValue(itemKey, out bool stackable))
+    {
+      return stackable;
+    }
+
+    stackable = PugDatabase.GetEntityObjectInfo(
+        itemObject,
+        databaseBank.databaseBankBlob,
+        itemVariation).isStackable;
+    _stackableByItem[itemKey] = stackable;
+    return stackable;
   }
 
   private bool TrySetDroppedEntityRoute(
@@ -1538,6 +1712,54 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     // and park on a blocked smart splitter.
     return inputDistance >= -0.10f && inputDistance <= AcceptedItemRedirectDistance;
   }
+
+  private static bool IsInsideSplitterCenterWindow(
+      float itemX,
+      float itemY,
+      float centerX,
+      float centerY)
+  {
+    return Mathf.Abs(itemX - centerX) <= CenterDropHalfExtent &&
+           Mathf.Abs(itemY - centerY) <= CenterDropHalfExtent;
+  }
+
+  private bool IsApproachingInputLane(
+      Entity droppedEntity,
+      float3 itemPosition,
+      float centerX,
+      float centerY,
+      float inputAxisX,
+      float inputAxisY,
+      double now)
+  {
+    Entity movee = FindMoveeForDroppedItem(droppedEntity, now);
+    if (movee == Entity.Null ||
+        !EntityManager.Exists(movee) ||
+        !EntityManager.HasComponent<MoveeCD>(movee))
+    {
+      return true;
+    }
+
+    MoveeCD moveeData = EntityManager.GetComponentData<MoveeCD>(movee);
+    if (moveeData.moveTimer <= 0)
+    {
+      return false;
+    }
+
+    float currentInputDistance = Dot(
+        itemPosition.x - centerX,
+        itemPosition.z - centerY,
+        inputAxisX,
+        inputAxisY);
+    float targetInputDistance = Dot(
+        moveeData.target.x - centerX,
+        moveeData.target.y - centerY,
+        inputAxisX,
+        inputAxisY);
+
+    return targetInputDistance < currentInputDistance - 0.01f;
+  }
+
   private void RedirectMoveeToTarget(Entity moveeEntity, float2 target, int moveTime)
   {
     MoveeCD movee = EntityManager.GetComponentData<MoveeCD>(moveeEntity);
@@ -1604,15 +1826,24 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   {
     _moveeByDroppedEntity.Clear();
 
-    using NativeArray<Entity> moveeEntities = _moveeQuery.ToEntityArray(Allocator.Temp);
-    using NativeArray<BigEntityRefCD> moveeRefs = _moveeQuery.ToComponentDataArray<BigEntityRefCD>(Allocator.Temp);
+    EntityTypeHandle entityType = GetEntityTypeHandle();
+    ComponentTypeHandle<BigEntityRefCD> bigEntityRefType = GetComponentTypeHandle<BigEntityRefCD>(true);
 
-    for (int i = 0; i < moveeEntities.Length; i++)
+    using NativeArray<ArchetypeChunk> chunks = _moveeQuery.ToArchetypeChunkArray(Allocator.Temp);
+
+    for (int chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
     {
-      Entity droppedEntity = moveeRefs[i].Value;
-      if (droppedEntity != Entity.Null && !_moveeByDroppedEntity.ContainsKey(droppedEntity))
+      ArchetypeChunk chunk = chunks[chunkIndex];
+      NativeArray<Entity> moveeEntities = chunk.GetNativeArray(entityType);
+      NativeArray<BigEntityRefCD> moveeRefs = chunk.GetNativeArray(ref bigEntityRefType);
+
+      for (int i = 0; i < chunk.Count; i++)
       {
-        _moveeByDroppedEntity.Add(droppedEntity, moveeEntities[i]);
+        Entity droppedEntity = moveeRefs[i].Value;
+        if (droppedEntity != Entity.Null && !_moveeByDroppedEntity.ContainsKey(droppedEntity))
+        {
+          _moveeByDroppedEntity.Add(droppedEntity, moveeEntities[i]);
+        }
       }
     }
 
@@ -1649,10 +1880,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
     return false;
   }
-  private void BlockSmartSplitterState(
-    Entity orchestrator,
-    NativeArray<Entity> allMovers,
-    NativeArray<MoverCD> allMoverData)
+  private void BlockSmartSplitterState(Entity orchestrator)
   {
     if (!EntityManager.Exists(orchestrator) ||
         !EntityManager.HasBuffer<MoversWithSharedStateBuffer>(orchestrator) ||
@@ -1672,7 +1900,7 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
     DynamicBuffer<MoversWithSharedStateBuffer> buffer =
         EntityManager.GetBuffer<MoversWithSharedStateBuffer>(orchestrator);
 
-    ApplyBlocked(orchestrator, buffer, originals, allMovers, allMoverData);
+    ApplyBlocked(orchestrator, buffer, originals);
   }
 
   private void RestoreSmartSplitterToVanillaState(Entity orchestrator)
@@ -1705,42 +1933,13 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   {
     return _smartStateDirty.Contains(orchestrator);
   }
-  private void PruneRecentlyReleasedRoutedEntities(double now)
-  {
-    if (_recentlyReleasedRoutedEntities.Count == 0)
-    {
-      return;
-    }
 
-    List<Entity> stale = null;
-
-    foreach (KeyValuePair<Entity, double> entry in _recentlyReleasedRoutedEntities)
-    {
-      if (now <= entry.Value)
-      {
-        continue;
-      }
-
-      stale ??= new List<Entity>();
-      stale.Add(entry.Key);
-    }
-
-    if (stale == null)
-    {
-      return;
-    }
-
-    foreach (Entity entity in stale)
-    {
-      _recentlyReleasedRoutedEntities.Remove(entity);
-    }
-  }
   private void CollectInputCorridorCandidateItems(int2 centerTile, int2 inputDirection)
   {
     _candidateDroppedItemIndexes.Clear();
 
     int2 perpendicular = new int2(-inputDirection.y, inputDirection.x);
-    int maxSteps = Mathf.CeilToInt(InputDetectDistance) + 1;
+    int maxSteps = Mathf.CeilToInt(InputDetectDistance);
 
     for (int step = 0; step <= maxSteps; step++)
     {
@@ -1766,16 +1965,38 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       }
     }
   }
+
+  private static void AddInputCorridorTiles(
+      int2 centerTile,
+      int2 inputDirection,
+      HashSet<long> tiles)
+  {
+    int2 perpendicular = new int2(-inputDirection.y, inputDirection.x);
+    int maxSteps = Mathf.CeilToInt(InputDetectDistance);
+
+    for (int step = 0; step <= maxSteps; step++)
+    {
+      int2 tile = new int2(
+          centerTile.x - inputDirection.x * step,
+          centerTile.y - inputDirection.y * step);
+
+      for (int side = -1; side <= 1; side++)
+      {
+        tiles.Add(GetTileKey(
+            tile.x + perpendicular.x * side,
+            tile.y + perpendicular.y * side));
+      }
+    }
+  }
+
   private void ApplyBlocked(
       Entity orchestrator,
       DynamicBuffer<MoversWithSharedStateBuffer> buffer,
-      SmartSplitterOriginalOutputsCD originals,
-      NativeArray<Entity> allMovers,
-      NativeArray<MoverCD> allMoverData)
+      SmartSplitterOriginalOutputsCD originals)
   {
     buffer.Clear();
     DisableSharedMoverTriggers(orchestrator);
-    SetAllSplitterMoverSplitCounts(orchestrator, 0, allMovers, allMoverData);
+    SetAllSplitterMoverSplitCounts(orchestrator, 0);
     ForceEnabledMoverFromSharedState(originals, Entity.Null);
     _smartStateDirty.Add(orchestrator);
   }
@@ -1828,10 +2049,10 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
 
   private void SetAllSplitterMoverSplitCounts(
       Entity orchestrator,
-      int splitCount,
-      NativeArray<Entity> allMovers,
-      NativeArray<MoverCD> allMoverData)
+      int splitCount)
   {
+    using NativeArray<Entity> allMovers = _moverQuery.ToEntityArray(Allocator.Temp);
+
     for (int i = 0; i < allMovers.Length; i++)
     {
       Entity moverEntity = allMovers[i];
@@ -1842,13 +2063,6 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         continue;
       }
 
-      // Important:
-      // allMoverData is a snapshot captured at the start of OnUpdate. Forward passthrough
-      // temporarily mutates a real forward conveyor mover into a splitter-owned mover.
-      // During restore, using the stale snapshot here can overwrite the freshly-restored
-      // forward conveyor with its old patched state again.
-      //
-      // Always read the live MoverCD before writing split counts.
       MoverCD mover = EntityManager.GetComponentData<MoverCD>(moverEntity);
 
       if (mover.moverOrchestratorEntity != orchestrator)
@@ -1879,11 +2093,13 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
       Entity orchestrator,
       SmartSplitterOriginalOutputsCD originals,
       out int2 center,
+      out int2 inputDirection,
       out int2 forwardDirection,
       out int2 leftDirection,
       out int2 rightDirection)
   {
     center = default;
+    inputDirection = default;
     forwardDirection = default;
     leftDirection = default;
     rightDirection = default;
@@ -1900,12 +2116,12 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
         Mathf.RoundToInt((leftMover.start.x + rightMover.start.x) * 0.5f),
         Mathf.RoundToInt((leftMover.start.y + rightMover.start.y) * 0.5f));
 
-    if (!TryGetSmartInputDirection(orchestrator, center, out int2 inputSideDirection))
+    if (!TryGetSmartInputDirection(orchestrator, center, out inputDirection))
     {
       return false;
     }
 
-    forwardDirection = new int2(-inputSideDirection.x, -inputSideDirection.y);
+    forwardDirection = new int2(-inputDirection.x, -inputDirection.y);
     leftDirection = new int2(-forwardDirection.y, forwardDirection.x);
     rightDirection = new int2(forwardDirection.y, -forwardDirection.x);
     return true;
@@ -2038,7 +2254,8 @@ public partial class SmartSplitterRuntimeSystem : SystemBase
   private void EnsurePlacedSplitterVariationIndex()
   {
     double now = World.Time.ElapsedTime;
-    if (_placedSplitterVariationIndexBuiltAt == now)
+    if (_placedSplitterVariationByTile.Count > 0 &&
+        now - _placedSplitterVariationIndexBuiltAt < PlacedSplitterVariationIndexRefreshIntervalSeconds)
     {
       return;
     }
