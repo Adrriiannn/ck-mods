@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using PugMod;
 using Unity.Entities;
@@ -8,12 +9,16 @@ using UnityEngine;
 public static class SmartSplitterNetworkState
 {
   private static readonly Dictionary<long, SmartSplitterLaneFiltersCD> FiltersByCenter = new();
+  private static readonly Dictionary<long, bool> PowerByCenter = new();
   private static readonly Dictionary<long, double> LastFilterRequestAt = new();
   private const double FilterRequestCooldownSeconds = 0.50d;
+
+  public static event Action<int2, bool> PowerStateChanged;
 
   public static void Reset()
   {
     FiltersByCenter.Clear();
+    PowerByCenter.Clear();
     LastFilterRequestAt.Clear();
   }
 
@@ -25,6 +30,23 @@ public static class SmartSplitterNetworkState
   public static void RememberFilters(int2 center, SmartSplitterLaneFiltersCD filters)
   {
     FiltersByCenter[GetKey(center)] = filters;
+  }
+
+  public static bool TryGetPower(int2 center, out bool powered)
+  {
+    return PowerByCenter.TryGetValue(GetKey(center), out powered);
+  }
+
+  public static void RememberPower(int2 center, bool powered)
+  {
+    long key = GetKey(center);
+    bool hadPower = PowerByCenter.TryGetValue(key, out bool previousPowered);
+    PowerByCenter[key] = powered;
+
+    if (!hadPower || previousPowered != powered)
+    {
+      PowerStateChanged?.Invoke(center, powered);
+    }
   }
 
   public static void RememberLaneFilter(int2 center, SmartSplitterLane lane, SmartSplitterLaneFilter filter)

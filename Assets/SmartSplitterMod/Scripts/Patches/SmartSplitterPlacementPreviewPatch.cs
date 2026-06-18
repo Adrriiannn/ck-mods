@@ -39,8 +39,8 @@ public static class SmartSplitterPlacementPreviewPatch
 
     if (canRotate)
     {
-      variation = placementCD.rotationVariationToPlace;
-      variation = (variation + __instance.GetIconRotationOffset(placementPrefab, directionLookup) + 3) % 4;
+      variation = SmartSplitterOrientationUtility.GetTCircuitPreviewVariationForPlacementVariation(
+          placementCD.rotationVariationToPlace);
     }
     else if (canToggle)
     {

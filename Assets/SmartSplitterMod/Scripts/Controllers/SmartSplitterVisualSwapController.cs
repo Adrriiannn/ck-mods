@@ -2,9 +2,11 @@ using System.Collections.Generic;
 using Pug.Automation;
 using Pug.ECS.Components;
 using Pug.ECS.Hybrid;
+using PugMod;
 using Pug.Sprite;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
 
@@ -39,6 +41,15 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
   private static SmartSplitterVisualSwapController _instance;
 
   private const float SplitterDiscoveryIntervalSeconds = 1.0f;
+  private const string UgcLitMaterialName = "UGC SpriteObject Lit";
+  private const string VanillaNormalLitMaterialName =
+      "SpriteObject (Lit Opaque, Use Normal)";
+  private const string UseNormalPropertyName = "_UseNormal";
+  private const string UseNormalKeyword = "USE_NORMAL";
+
+  private static Material _runtimeSmartSplitterMaterial;
+  private static bool _runtimeSmartSplitterMaterialResolved;
+  private static bool _runtimeSmartSplitterMaterialLogged;
 
   private readonly Dictionary<SpriteObject, CachedSpriteState> _spriteStates = new();
   private readonly List<CachedSpriteState> _visibleSplitterStates = new();
@@ -54,6 +65,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
   private bool _loggedWaitingForSmartPrefab;
   private float _nextUpdateAt;
   private float _nextDiscoveryAt;
+  private int _lastSpawnPowerFallbackFrame = -1;
 
   public static void EnsureExists()
   {
@@ -65,6 +77,39 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     GameObject controllerObject = new GameObject("SmartSplitterVisualSwapController");
     DontDestroyOnLoad(controllerObject);
     _instance = controllerObject.AddComponent<SmartSplitterVisualSwapController>();
+  }
+
+  public static void HandleObjectSpawnedOnClient(
+      Entity entity,
+      EntityManager entityManager,
+      GameObject graphicalObject)
+  {
+    if (!SmartSplitterDebugSettings.EnableVisualSwap)
+    {
+      return;
+    }
+
+    EnsureExists();
+    _instance.ApplySpawnedGraphicalObject(entity, entityManager, graphicalObject);
+  }
+
+  public static void HandleObjectDespawnedOnClient(
+      Entity entity,
+      EntityManager entityManager,
+      GameObject graphicalObject)
+  {
+    _instance?.CleanupDespawnedGraphicalObject(entity, graphicalObject);
+  }
+
+  private void OnEnable()
+  {
+    SmartSplitterNetworkState.PowerStateChanged -= HandlePowerStateChanged;
+    SmartSplitterNetworkState.PowerStateChanged += HandlePowerStateChanged;
+  }
+
+  private void OnDisable()
+  {
+    SmartSplitterNetworkState.PowerStateChanged -= HandlePowerStateChanged;
   }
 
   private void Update()
@@ -113,7 +158,11 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       _nextDiscoveryAt = Time.time + SplitterDiscoveryIntervalSeconds;
     }
 
-    RebuildPoweredElectricityTileSet();
+    bool needsPowerFallback = NeedsPowerFallback();
+    if (needsPowerFallback)
+    {
+      RebuildPoweredElectricityTileSet();
+    }
 
     for (int i = _visibleSplitterStates.Count - 1; i >= 0; i--)
     {
@@ -124,10 +173,15 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
         continue;
       }
 
-      bool powered = IsSplitterPoweredByAdjacentElectricity(
-          state.SplitterX,
-          state.SplitterY,
-          _poweredElectricityTiles);
+      RefreshStateFromEntity(state);
+
+      int2 center = new int2(state.SplitterX, state.SplitterY);
+      bool powered = SmartSplitterNetworkState.TryGetPower(center, out bool cachedPowered)
+          ? cachedPowered
+          : IsSplitterPoweredByAdjacentElectricity(
+              state.SplitterX,
+              state.SplitterY,
+              _poweredElectricityTiles);
 
       bool changed = ApplyDesiredVisual(
           state,
@@ -181,6 +235,209 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     }
   }
 
+  private void HandlePowerStateChanged(int2 center, bool powered)
+  {
+    if (!SmartSplitterDebugSettings.EnableVisualSwap)
+    {
+      return;
+    }
+
+    ApplyPowerStateNow(center, powered, allowDiscoveryRefresh: true);
+  }
+
+  private bool ApplyPowerStateNow(int2 center, bool powered, bool allowDiscoveryRefresh)
+  {
+    if (!TryEnsureQueries() ||
+        !SmartSplitterAssetRegistry.TryGetSmartVisualPrefabAndFallbacks(
+            out GameObject smartPrefab,
+            out SpriteAsset smartAsset,
+            out Material smartMaterial))
+    {
+      return false;
+    }
+
+    bool applied = false;
+
+    for (int i = _visibleSplitterStates.Count - 1; i >= 0; i--)
+    {
+      CachedSpriteState state = _visibleSplitterStates[i];
+      if (!IsVisualStateUsable(state))
+      {
+        RemoveVisualStateAt(i);
+        continue;
+      }
+
+      RefreshStateFromEntity(state);
+      if (state.SplitterX != center.x || state.SplitterY != center.y)
+      {
+        continue;
+      }
+
+      ApplyDesiredVisual(
+          state,
+          smartPrefab,
+          smartAsset,
+          smartMaterial,
+          powered,
+          state.SpriteVariation);
+
+      state.HasLastPowered = true;
+      state.LastPowered = powered;
+      state.LastVariation = state.SpriteVariation;
+      applied = true;
+    }
+
+    if (applied || !allowDiscoveryRefresh)
+    {
+      return applied;
+    }
+
+    RefreshSplitterVisualCache();
+    return ApplyPowerStateNow(center, powered, allowDiscoveryRefresh: false);
+  }
+
+  private void ApplySpawnedGraphicalObject(
+      Entity splitterEntity,
+      EntityManager entityManager,
+      GameObject graphicalObject)
+  {
+    if (graphicalObject == null ||
+        splitterEntity == Entity.Null ||
+        !entityManager.Exists(splitterEntity) ||
+        !entityManager.HasComponent<ObjectDataCD>(splitterEntity) ||
+        !entityManager.HasComponent<LocalTransform>(splitterEntity))
+    {
+      return;
+    }
+
+    ObjectDataCD objectData = entityManager.GetComponentData<ObjectDataCD>(splitterEntity);
+    if (objectData.objectID != ObjectID.ConveyorBeltSplitter)
+    {
+      return;
+    }
+
+    SpriteObject vanillaSpriteObject = FindPrimarySpriteObject(graphicalObject);
+    if (vanillaSpriteObject == null)
+    {
+      return;
+    }
+
+    LocalTransform splitterTransform = entityManager.GetComponentData<LocalTransform>(splitterEntity);
+    int splitterX = Mathf.RoundToInt(splitterTransform.Position.x);
+    int splitterY = Mathf.RoundToInt(splitterTransform.Position.z);
+    int spriteVariation = ResolveSplitterSpriteVariation(objectData.variation);
+
+    bool hasVisualAssets = SmartSplitterAssetRegistry.TryGetSmartVisualPrefabAndFallbacks(
+        out GameObject smartPrefab,
+        out SpriteAsset smartAsset,
+        out Material smartMaterial);
+
+    int2 center = new int2(splitterX, splitterY);
+    bool powered = TryResolvePowerForSpawn(center, out bool resolvedPowered) && resolvedPowered;
+
+    CachedSpriteState state = RegisterVisibleSplitterState(
+        vanillaSpriteObject,
+        splitterEntity,
+        splitterX,
+        splitterY,
+        spriteVariation);
+
+    ApplyDesiredVisual(
+        state,
+        smartPrefab,
+        smartAsset,
+        smartMaterial,
+        powered && hasVisualAssets,
+        spriteVariation);
+
+    state.HasLastPowered = true;
+    state.LastPowered = powered;
+    state.LastVariation = spriteVariation;
+  }
+
+  private void CleanupDespawnedGraphicalObject(Entity splitterEntity, GameObject graphicalObject)
+  {
+    if (graphicalObject == null)
+    {
+      return;
+    }
+
+    SpriteObject vanillaSpriteObject = FindPrimarySpriteObject(graphicalObject);
+    if (vanillaSpriteObject == null)
+    {
+      return;
+    }
+
+    if (_spriteStates.TryGetValue(vanillaSpriteObject, out CachedSpriteState state))
+    {
+      for (int i = _visibleSplitterStates.Count - 1; i >= 0; i--)
+      {
+        if (_visibleSplitterStates[i] == state)
+        {
+          RemoveVisualStateAt(i);
+          return;
+        }
+      }
+
+      ResetVisualState(state);
+      _spriteStates.Remove(vanillaSpriteObject);
+      return;
+    }
+
+    HideUntrackedSmartVisual(vanillaSpriteObject);
+    if (!vanillaSpriteObject.gameObject.activeSelf)
+    {
+      vanillaSpriteObject.gameObject.SetActive(true);
+    }
+  }
+
+  private bool NeedsPowerFallback()
+  {
+    for (int i = 0; i < _visibleSplitterStates.Count; i++)
+    {
+      CachedSpriteState state = _visibleSplitterStates[i];
+      if (state == null)
+      {
+        continue;
+      }
+
+      if (!SmartSplitterNetworkState.TryGetPower(
+              new int2(state.SplitterX, state.SplitterY),
+              out _))
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private bool TryResolvePowerForSpawn(int2 center, out bool powered)
+  {
+    if (SmartSplitterNetworkState.TryGetPower(center, out powered))
+    {
+      return true;
+    }
+
+    if (!TryEnsureQueries())
+    {
+      powered = false;
+      return false;
+    }
+
+    if (_lastSpawnPowerFallbackFrame != Time.frameCount)
+    {
+      RebuildPoweredElectricityTileSet();
+      _lastSpawnPowerFallbackFrame = Time.frameCount;
+    }
+
+    powered = IsSplitterPoweredByAdjacentElectricity(
+        center.x,
+        center.y,
+        _poweredElectricityTiles);
+    return true;
+  }
+
   private void RefreshSplitterVisualCache()
   {
     if (_world == null || !_world.IsCreated)
@@ -226,24 +483,80 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
           continue;
         }
 
-        CachedSpriteState state = GetOrCreateState(vanillaSpriteObject);
         LocalTransform splitterTransform = splitterTransforms[i];
-        int placedVariation = SmartSplitterOrientationUtility.NormalizeVariation(splitterObjectData[i].variation);
+        int splitterX = Mathf.RoundToInt(splitterTransform.Position.x);
+        int splitterY = Mathf.RoundToInt(splitterTransform.Position.z);
+        int spriteVariation = ResolveSplitterSpriteVariation(splitterObjectData[i].variation);
 
-        state.SplitterEntity = splitterEntity;
-        state.SplitterX = Mathf.RoundToInt(splitterTransform.Position.x);
-        state.SplitterY = Mathf.RoundToInt(splitterTransform.Position.z);
-        state.SpriteVariation = SmartSplitterOrientationUtility.GetSmartSpriteVariationForPlacedVariation(placedVariation);
-
-        if (state.Registered)
-        {
-          continue;
-        }
-
-        state.Registered = true;
-        _visibleSplitterStates.Add(state);
+        RegisterVisibleSplitterState(
+            vanillaSpriteObject,
+            splitterEntity,
+            splitterX,
+            splitterY,
+            spriteVariation);
       }
     }
+  }
+
+  private CachedSpriteState RegisterVisibleSplitterState(
+      SpriteObject vanillaSpriteObject,
+      Entity splitterEntity,
+      int splitterX,
+      int splitterY,
+      int spriteVariation)
+  {
+    CachedSpriteState state = GetOrCreateState(vanillaSpriteObject);
+    bool targetChanged = state.Registered &&
+        (state.SplitterEntity != splitterEntity ||
+         state.SplitterX != splitterX ||
+         state.SplitterY != splitterY);
+
+    state.SplitterEntity = splitterEntity;
+    state.SplitterX = splitterX;
+    state.SplitterY = splitterY;
+    state.SpriteVariation = spriteVariation;
+
+    if (!state.Registered || targetChanged)
+    {
+      state.HasLastPowered = false;
+    }
+
+    if (!_visibleSplitterStates.Contains(state))
+    {
+      _visibleSplitterStates.Add(state);
+    }
+
+    state.Registered = true;
+    TryAttachExistingSmartVisual(state);
+    SmartSplitterNetworkState.RequestFilters(new int2(state.SplitterX, state.SplitterY));
+    return state;
+  }
+
+  private void RefreshStateFromEntity(CachedSpriteState state)
+  {
+    if (state == null ||
+        state.SplitterEntity == Entity.Null ||
+        _world == null ||
+        !_world.IsCreated ||
+        !_world.EntityManager.Exists(state.SplitterEntity) ||
+        !_world.EntityManager.HasComponent<ObjectDataCD>(state.SplitterEntity) ||
+        !_world.EntityManager.HasComponent<LocalTransform>(state.SplitterEntity))
+    {
+      return;
+    }
+
+    ObjectDataCD objectData = _world.EntityManager.GetComponentData<ObjectDataCD>(state.SplitterEntity);
+    LocalTransform transform = _world.EntityManager.GetComponentData<LocalTransform>(state.SplitterEntity);
+    state.SplitterX = Mathf.RoundToInt(transform.Position.x);
+    state.SplitterY = Mathf.RoundToInt(transform.Position.z);
+    state.SpriteVariation = ResolveSplitterSpriteVariation(objectData.variation);
+  }
+
+  private static int ResolveSplitterSpriteVariation(int splitterVariation)
+  {
+    return SmartSplitterOrientationUtility.GetSmartSpriteVariationForForwardVariation(
+        SmartSplitterOrientationUtility.GetSmartForwardVariationForPlacementVariation(
+            splitterVariation));
   }
 
   private bool IsVisualStateUsable(CachedSpriteState state)
@@ -265,7 +578,8 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     CachedSpriteState state = _visibleSplitterStates[index];
     if (state != null)
     {
-      state.Registered = false;
+      ResetVisualState(state);
+
       if (state.VanillaSpriteObject != null)
       {
         _spriteStates.Remove(state.VanillaSpriteObject);
@@ -273,6 +587,21 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     }
 
     _visibleSplitterStates.RemoveAt(index);
+  }
+
+  private void ResetVisualState(CachedSpriteState state)
+  {
+    state.Registered = false;
+    state.HasLastPowered = false;
+    state.LastPowered = false;
+    state.LastVariation = -1;
+
+    RemoveSmartVisual(state);
+    if (state.VanillaSpriteObject != null &&
+        !state.VanillaSpriteObject.gameObject.activeSelf)
+    {
+      state.VanillaSpriteObject.gameObject.SetActive(true);
+    }
   }
 
   private bool TryEnsureQueries()
@@ -357,7 +686,7 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       CachedSpriteState state = _visibleSplitterStates[i];
       if (state != null)
       {
-        state.Registered = false;
+        ResetVisualState(state);
       }
     }
 
@@ -489,10 +818,19 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       return false;
     }
 
+    TryAttachExistingSmartVisual(state);
+
     if (powered)
     {
       bool changed = EnsureSmartVisual(state, smartPrefab, smartAsset, smartMaterial);
-      changed |= ApplyDirectionalVariant(state.SmartSpriteObject, variation);
+      bool forceVariantRefresh = changed;
+
+      if (state.SmartSpriteObject != null && !state.SmartSpriteObject.gameObject.activeSelf)
+      {
+        state.SmartSpriteObject.gameObject.SetActive(true);
+        changed = true;
+        forceVariantRefresh = true;
+      }
 
       if (state.VanillaSpriteObject.gameObject.activeSelf)
       {
@@ -504,19 +842,20 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       {
         state.SmartVisualObject.SetActive(true);
         changed = true;
+        forceVariantRefresh = true;
       }
+
+      changed |= ApplyDirectionalVariant(
+          state.SmartSpriteObject,
+          variation,
+          forceVariantRefresh);
 
       state.AppliedSmartVisual = true;
       return changed;
     }
 
     bool restored = false;
-
-    if (state.SmartVisualObject != null && state.SmartVisualObject.activeSelf)
-    {
-      state.SmartVisualObject.SetActive(false);
-      restored = true;
-    }
+    restored |= RemoveSmartVisual(state);
 
     if (!state.VanillaSpriteObject.gameObject.activeSelf)
     {
@@ -524,8 +863,87 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       restored = true;
     }
 
+    restored |= ApplyDirectionalVariant(
+        state.VanillaSpriteObject,
+        variation);
+
     state.AppliedSmartVisual = false;
     return restored;
+  }
+
+  private bool TryAttachExistingSmartVisual(CachedSpriteState state)
+  {
+    if (state == null || state.VanillaSpriteObject == null)
+    {
+      return false;
+    }
+
+    if (state.SmartVisualObject != null)
+    {
+      if (state.SmartSpriteObject == null)
+      {
+        state.SmartSpriteObject = state.SmartVisualObject.GetComponentInChildren<SpriteObject>(true);
+      }
+
+      return true;
+    }
+
+    Transform parent = state.VanillaSpriteObject.transform.parent;
+    Transform existingSmartVisual = parent != null
+        ? parent.Find("SmartSplitterVisual")
+        : null;
+
+    if (existingSmartVisual == null)
+    {
+      return false;
+    }
+
+    state.SmartVisualObject = existingSmartVisual.gameObject;
+    state.SmartSpriteObject = state.SmartVisualObject.GetComponentInChildren<SpriteObject>(true);
+    return true;
+  }
+
+  private static bool HideUntrackedSmartVisual(SpriteObject vanillaSpriteObject)
+  {
+    if (vanillaSpriteObject == null)
+    {
+      return false;
+    }
+
+    Transform parent = vanillaSpriteObject.transform.parent;
+    Transform existingSmartVisual = parent != null
+        ? parent.Find("SmartSplitterVisual")
+        : null;
+
+    if (existingSmartVisual == null)
+    {
+      return false;
+    }
+
+    GameObject smartVisualObject = existingSmartVisual.gameObject;
+    bool changed = smartVisualObject.activeSelf;
+    if (changed)
+    {
+      smartVisualObject.SetActive(false);
+    }
+
+    return changed;
+  }
+
+  private bool RemoveSmartVisual(CachedSpriteState state)
+  {
+    if (state == null || state.SmartVisualObject == null)
+    {
+      return false;
+    }
+
+    bool changed = state.SmartVisualObject.activeSelf;
+    if (changed)
+    {
+      state.SmartVisualObject.SetActive(false);
+    }
+
+    return changed;
   }
 
   private bool EnsureSmartVisual(
@@ -538,17 +956,9 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
 
     if (state.SmartVisualObject == null || state.SmartSpriteObject == null)
     {
-      Transform parent = state.VanillaSpriteObject.transform.parent;
-      Transform existingSmartVisual = parent != null
-          ? parent.Find("SmartSplitterVisual")
-          : null;
-
-      if (existingSmartVisual != null)
+      if (!TryAttachExistingSmartVisual(state))
       {
-        state.SmartVisualObject = existingSmartVisual.gameObject;
-      }
-      else
-      {
+        Transform parent = state.VanillaSpriteObject.transform.parent;
         state.SmartVisualObject = Instantiate(
             smartPrefab,
             parent);
@@ -561,7 +971,11 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
         state.SmartVisualObject.transform.localScale = Vector3.one;
       }
 
-      state.SmartSpriteObject = state.SmartVisualObject.GetComponentInChildren<SpriteObject>(true);
+      if (state.SmartVisualObject != null && state.SmartSpriteObject == null)
+      {
+        state.SmartSpriteObject = state.SmartVisualObject.GetComponentInChildren<SpriteObject>(true);
+      }
+
       changed = true;
     }
 
@@ -577,10 +991,13 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
       changed = true;
     }
 
-    // Do NOT override the material here.
-    // The SmartSplitterVisual prefab is now the source of truth for lighting/material.
-    // Overriding this from the registry was forcing UGC SpriteObject Lit even when
-    // the prefab's SpriteObject used SpriteObject (Lit Opaque, Use Normal).
+    Material runtimeMaterial = ResolveRuntimeSmartSplitterMaterial();
+    if (runtimeMaterial != null && state.SmartSpriteObject.material != runtimeMaterial)
+    {
+      state.SmartSpriteObject.material = runtimeMaterial;
+      changed = true;
+    }
+
     if (smartAsset != null && state.SmartSpriteObject.asset != smartAsset)
     {
       state.SmartSpriteObject.asset = smartAsset;
@@ -595,7 +1012,70 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
     return changed;
   }
 
-  private static bool ApplyDirectionalVariant(SpriteObject spriteObject, int variation)
+  private static Material ResolveRuntimeSmartSplitterMaterial()
+  {
+    if (_runtimeSmartSplitterMaterialResolved)
+    {
+      return _runtimeSmartSplitterMaterial;
+    }
+
+    if (API.Rendering == null)
+    {
+      return null;
+    }
+
+    _runtimeSmartSplitterMaterial =
+        API.Rendering.GetMaterial(VanillaNormalLitMaterialName);
+
+    if (_runtimeSmartSplitterMaterial == null)
+    {
+      _runtimeSmartSplitterMaterial =
+          CreateNormalLitMaterial(API.Rendering.GetMaterial(UgcLitMaterialName));
+    }
+
+    if (_runtimeSmartSplitterMaterial == null)
+    {
+      return null;
+    }
+
+    _runtimeSmartSplitterMaterialResolved = true;
+    if (!_runtimeSmartSplitterMaterialLogged)
+    {
+      string shaderName = _runtimeSmartSplitterMaterial.shader != null
+          ? _runtimeSmartSplitterMaterial.shader.name
+          : "null";
+      Debug.Log(
+          $"[SmartSplitterVisualSwap] Runtime material resolved " +
+          $"requested={VanillaNormalLitMaterialName} " +
+          $"resolved={_runtimeSmartSplitterMaterial.name} shader={shaderName}");
+      _runtimeSmartSplitterMaterialLogged = true;
+    }
+
+    return _runtimeSmartSplitterMaterial;
+  }
+
+  private static Material CreateNormalLitMaterial(Material baseMaterial)
+  {
+    if (baseMaterial == null)
+    {
+      return null;
+    }
+
+    Material material = Object.Instantiate(baseMaterial);
+    material.name = "SmartSplitter SpriteObject (Lit Opaque, Use Normal)";
+    if (material.HasProperty(UseNormalPropertyName))
+    {
+      material.SetFloat(UseNormalPropertyName, 1.0f);
+    }
+
+    material.EnableKeyword(UseNormalKeyword);
+    return material;
+  }
+
+  private static bool ApplyDirectionalVariant(
+      SpriteObject spriteObject,
+      int variation,
+      bool force = false)
   {
     if (spriteObject == null)
     {
@@ -606,17 +1086,22 @@ public sealed class SmartSplitterVisualSwapController : MonoBehaviour
 
     if (variation == 0)
     {
-      if (spriteObject.currentVariantHash == 0)
+      if (!force && spriteObject.currentVariantHash == 0)
       {
         return false;
       }
 
       spriteObject.ResetVariant();
+      if (force)
+      {
+        spriteObject.ApplyVisualChange();
+      }
+
       return true;
     }
 
     int desiredVariantIndex = variation - 1;
-    if (spriteObject.currentVariantIndex == desiredVariantIndex)
+    if (!force && spriteObject.currentVariantIndex == desiredVariantIndex)
     {
       return false;
     }

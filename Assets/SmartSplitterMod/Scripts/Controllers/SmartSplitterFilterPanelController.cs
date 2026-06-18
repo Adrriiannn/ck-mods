@@ -345,30 +345,13 @@ public sealed class SmartSplitterFilterPanelController : MonoBehaviour
 
     Bounds bounds = default;
     bool hasBounds = false;
+    // Inventory slots move inside the scroll window; only the frame renderers are stable anchors.
     EncapsulateRendererBounds(inventory.backgroundSR, ref bounds, ref hasBounds);
     if (inventory.additionalBackgroundSRs != null)
     {
       for (int i = 0; i < inventory.additionalBackgroundSRs.Length; i++)
       {
         EncapsulateRendererBounds(inventory.additionalBackgroundSRs[i], ref bounds, ref hasBounds);
-      }
-    }
-
-    if (inventory.itemSlots != null)
-    {
-      for (int i = 0; i < inventory.itemSlots.Count; i++)
-      {
-        SlotUIBase slot = inventory.itemSlots[i];
-        if (slot == null || !slot.gameObject.activeInHierarchy)
-        {
-          continue;
-        }
-
-        Renderer[] renderers = slot.GetComponentsInChildren<Renderer>(true);
-        for (int j = 0; j < renderers.Length; j++)
-        {
-          EncapsulateRendererBounds(renderers[j], ref bounds, ref hasBounds);
-        }
       }
     }
 

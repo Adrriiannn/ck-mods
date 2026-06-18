@@ -12,6 +12,7 @@ public partial class SmartSplitterServerFilterRpcSystem : SystemBase
   private EntityQuery _filterRequestQuery;
   private EntityQuery _setFilterQuery;
   private EntityArchetype _stateRpcArchetype;
+  private EntityArchetype _powerStateRpcArchetype;
 
   protected override void OnCreate()
   {
@@ -25,6 +26,9 @@ public partial class SmartSplitterServerFilterRpcSystem : SystemBase
 
     _stateRpcArchetype = EntityManager.CreateArchetype(
         typeof(SmartSplitterFilterStateRpc),
+        typeof(SendRpcCommandRequest));
+    _powerStateRpcArchetype = EntityManager.CreateArchetype(
+        typeof(SmartSplitterPowerStateRpc),
         typeof(SendRpcCommandRequest));
   }
 
@@ -116,6 +120,21 @@ public partial class SmartSplitterServerFilterRpcSystem : SystemBase
     {
       TargetConnection = targetConnection
     });
+
+    if (SmartSplitterNetworkState.TryGetPower(center, out bool powered))
+    {
+      Entity powerEntity = EntityManager.CreateEntity(_powerStateRpcArchetype);
+      EntityManager.SetComponentData(powerEntity, new SmartSplitterPowerStateRpc
+      {
+        CenterX = center.x,
+        CenterY = center.y,
+        Powered = powered ? (byte)1 : (byte)0
+      });
+      EntityManager.SetComponentData(powerEntity, new SendRpcCommandRequest
+      {
+        TargetConnection = targetConnection
+      });
+    }
   }
 
   private static SmartSplitterFilterStateRpc ToStateRpc(
@@ -196,15 +215,26 @@ public partial class SmartSplitterServerFilterRpcSystem : SystemBase
 public partial class SmartSplitterClientFilterStateRpcSystem : SystemBase
 {
   private EntityQuery _stateQuery;
+  private EntityQuery _powerStateQuery;
 
   protected override void OnCreate()
   {
     _stateQuery = GetEntityQuery(
         ComponentType.ReadOnly<SmartSplitterFilterStateRpc>(),
         ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
+
+    _powerStateQuery = GetEntityQuery(
+        ComponentType.ReadOnly<SmartSplitterPowerStateRpc>(),
+        ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
   }
 
   protected override void OnUpdate()
+  {
+    HandleFilterStates();
+    HandlePowerStates();
+  }
+
+  private void HandleFilterStates()
   {
     using NativeArray<Entity> entities = _stateQuery.ToEntityArray(Allocator.Temp);
     using NativeArray<SmartSplitterFilterStateRpc> states =
@@ -216,6 +246,22 @@ public partial class SmartSplitterClientFilterStateRpcSystem : SystemBase
       SmartSplitterNetworkState.RememberFilters(
           new int2(state.CenterX, state.CenterY),
           FromStateRpc(state));
+      EntityManager.DestroyEntity(entities[i]);
+    }
+  }
+
+  private void HandlePowerStates()
+  {
+    using NativeArray<Entity> entities = _powerStateQuery.ToEntityArray(Allocator.Temp);
+    using NativeArray<SmartSplitterPowerStateRpc> states =
+        _powerStateQuery.ToComponentDataArray<SmartSplitterPowerStateRpc>(Allocator.Temp);
+
+    for (int i = 0; i < entities.Length; i++)
+    {
+      SmartSplitterPowerStateRpc state = states[i];
+      SmartSplitterNetworkState.RememberPower(
+          new int2(state.CenterX, state.CenterY),
+          state.Powered != 0);
       EntityManager.DestroyEntity(entities[i]);
     }
   }

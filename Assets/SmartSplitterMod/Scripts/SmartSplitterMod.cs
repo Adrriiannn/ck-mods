@@ -14,6 +14,8 @@ public class SmartSplitterModEntry : IMod
 
   public void Init()
   {
+    SmartSplitterPlacementCompatibility.RefreshLoadedMods();
+
     if (API.Server != null)
     {
       API.Server.OnWorldCreated -= RegisterServerSystems;
@@ -28,6 +30,10 @@ public class SmartSplitterModEntry : IMod
       API.Client.OnWorldCreated += RegisterClientSystems;
       API.Client.OnWorldDestroyed -= OnClientWorldDestroyed;
       API.Client.OnWorldDestroyed += OnClientWorldDestroyed;
+      API.Client.OnObjectSpawnedOnClient -= SmartSplitterVisualSwapController.HandleObjectSpawnedOnClient;
+      API.Client.OnObjectSpawnedOnClient += SmartSplitterVisualSwapController.HandleObjectSpawnedOnClient;
+      API.Client.OnObjectDespawnedOnClient -= SmartSplitterVisualSwapController.HandleObjectDespawnedOnClient;
+      API.Client.OnObjectDespawnedOnClient += SmartSplitterVisualSwapController.HandleObjectDespawnedOnClient;
     }
 
     RegisterServerSystems();
@@ -51,6 +57,8 @@ public class SmartSplitterModEntry : IMod
     {
       API.Client.OnWorldCreated -= RegisterClientSystems;
       API.Client.OnWorldDestroyed -= OnClientWorldDestroyed;
+      API.Client.OnObjectSpawnedOnClient -= SmartSplitterVisualSwapController.HandleObjectSpawnedOnClient;
+      API.Client.OnObjectDespawnedOnClient -= SmartSplitterVisualSwapController.HandleObjectDespawnedOnClient;
     }
   }
 
@@ -66,6 +74,8 @@ public class SmartSplitterModEntry : IMod
 
   private void RegisterServerSystems()
   {
+    SmartSplitterPlacementCompatibility.RefreshLoadedMods();
+
     if (API.Server == null ||
         API.Server.World == null ||
         !API.Server.World.IsCreated)
@@ -85,6 +95,8 @@ public class SmartSplitterModEntry : IMod
         serverWorld.GetOrCreateSystemManaged<SmartSplitterRuntimeSystem>();
     API.Server.AddScheduledSystem(system);
 
+    SchedulePlacementCompatibilitySystems(serverWorld);
+
     SmartSplitterServerFilterRpcSystem rpcSystem =
         serverWorld.GetOrCreateSystemManaged<SmartSplitterServerFilterRpcSystem>();
     API.Server.AddScheduledSystem(rpcSystem);
@@ -97,6 +109,8 @@ public class SmartSplitterModEntry : IMod
 
   private void RegisterClientSystems()
   {
+    SmartSplitterPlacementCompatibility.RefreshLoadedMods();
+
     if (API.Client == null ||
         API.Client.World == null ||
         !API.Client.World.IsCreated)
@@ -115,9 +129,54 @@ public class SmartSplitterModEntry : IMod
         clientWorld.GetOrCreateSystemManaged<SmartSplitterClientFilterStateRpcSystem>();
     API.Client.AddScheduledSystem(rpcSystem);
 
+    SchedulePlacementCompatibilitySystems(clientWorld);
+
     _registeredClientWorld = clientWorld;
     SmartSplitterNetworkState.Reset();
     Debug.Log("[SmartSplitterMod] Registered client Smart Splitter RPC systems in client SimulationSystemGroup");
+  }
+
+  private static void SchedulePlacementCompatibilitySystems(World world)
+  {
+    SmartSplitterPlacementRequestSystem system =
+        world.GetOrCreateSystemManaged<SmartSplitterPlacementRequestSystem>();
+
+    EndPredictedSimulationSystemGroup group =
+        world.GetExistingSystemManaged<EndPredictedSimulationSystemGroup>();
+
+    if (group != null)
+    {
+      group.AddSystemToUpdateList(system);
+      group.SortSystems();
+    }
+    else
+    {
+      SimulationSystemGroup simulationGroup =
+          world.GetExistingSystemManaged<SimulationSystemGroup>();
+
+      if (simulationGroup != null)
+      {
+        simulationGroup.AddSystemToUpdateList(system);
+        simulationGroup.SortSystems();
+      }
+    }
+
+    SchedulePlacementDirectionSyncSystem(world);
+  }
+
+  private static void SchedulePlacementDirectionSyncSystem(World world)
+  {
+    SmartSplitterPlacementDirectionSyncSystem system =
+        world.GetOrCreateSystemManaged<SmartSplitterPlacementDirectionSyncSystem>();
+
+    SimulationSystemGroup simulationGroup =
+        world.GetExistingSystemManaged<SimulationSystemGroup>();
+
+    if (simulationGroup != null)
+    {
+      simulationGroup.AddSystemToUpdateList(system);
+      simulationGroup.SortSystems();
+    }
   }
 
   private void OnServerWorldDestroyed()

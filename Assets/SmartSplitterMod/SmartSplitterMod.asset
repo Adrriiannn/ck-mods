@@ -28,16 +28,24 @@ MonoBehaviour:
       guid: 6f3d2e5a9b2c4f0a8d1e7c9b5a4f2d63
     - path: Scripts/Scripts/Utilities/SmartSplitterOrientationUtility.cs
       guid: e384ab56509e1c84686516553d5f3fa3
+    - path: Scripts/Scripts/Utilities/SmartSplitterPlacementCompatibility.cs
+      guid: 5e1fe2f6da874a28a6ad38d7ce56f0cd
     - path: Scripts/Scripts/Utilities/SmartSplitterNetworkState.cs
       guid: 1630ac5eb45c4aa39fb0746910d12553
     - path: Scripts/Scripts/Utilities/SmartSplitterLaneFilterUtility.cs
       guid: 1c2c729d33af4d1d8df3b0c869dfdf08
     - path: Scripts/Scripts/Systems/SmartSplitterRuntimeSystem.cs
       guid: 6ba95d807c5d38b4a82493b02e35796b
+    - path: Scripts/Scripts/Systems/SmartSplitterPlacementRequestSystem.cs
+      guid: 8d3e53f1a6c94e97a8cddfb7d520c41a
+    - path: Scripts/Scripts/Systems/SmartSplitterPlacementDirectionSyncSystem.cs
+      guid: 7605a5c0b9c24d7ca02cc5c351875ad6
     - path: Scripts/Scripts/Systems/SmartSplitterNetworkSystems.cs
       guid: 2d01d1a87c5145968f46d4d059e51d36
     - path: Scripts/Scripts/SmartSplitterMod.cs
       guid: 0354c6f94ab3e1e4081d5e79fea29fb4
+    - path: Scripts/Scripts/Patches/SmartSplitterEntityUtilityPlacementPatch.cs
+      guid: 407de1c33a4b489a8832337d5c3b88d2
     - path: Scripts/Scripts/Patches/SmartSplitterPlacementPreviewPatch.cs
       guid: c6f00d4f8ac9f7d48a077b3dbdb9f59f
     - path: Scripts/Scripts/Debug/SmartSplitterDebugSettings.cs
@@ -54,11 +62,17 @@ MonoBehaviour:
       guid: a24c8a6b94bd4da783c4dba9d12e7f91
     - path: Scripts/Generated/SmartSplitterNetworkSystems__System_3557657430.g.cs
       guid: 
+    - path: Scripts/Generated/SmartSplitterPlacementRequestSystem__System_3703646120.g.cs
+      guid: 
     - path: Scripts/Generated/SmartSplitterRuntimeSystem__System_14395466820.g.cs
+      guid: 
+    - path: Scripts/Generated/SmartSplitterRuntimeSystem__System_14395466821.g.cs
       guid: 
     - path: Scripts/Generated/SmartSplitterFilterRequestRpcCommandSerializer.cs
       guid: 
     - path: Scripts/Generated/SmartSplitterFilterStateRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/SmartSplitterPowerStateRpcCommandSerializer.cs
       guid: 
     - path: Scripts/Generated/SmartSplitterSetLaneFilterRpcCommandSerializer.cs
       guid: 
@@ -92,9 +106,9 @@ MonoBehaviour:
   - path: Assets/SmartSplitterMod/Prefabs/SmartSplitterPanel.prefab
     hash: 450C72C5350135806737F4DE8CC8CB068D040A1A30A456BD60073CEA4EC2800D
   - path: Assets/SmartSplitterMod/Prefabs/SmartSplitterVisual.prefab
-    hash: F15CDDFB2F0DDC1A4554829CC9D6933B92F484B61FB02F160C472B920F4F7F95
+    hash: C873A7B73DB6C6550EEB07FD0AC2EEB754A546E49AAAA16233EF580CB8BD802A
   - path: Assets/SmartSplitterMod/SmartSplitterMod.asset
-    hash: BE9577F33F6B4C2A967E73522BB8718F1F2828F1BD3E06AB81129C30D9854DE2
+    hash: 8F9B4B1FD8C29AA3AB378D3E0C087248E6282CD52A395C3C8F040E63D294BBE8
   - path: Assets/SmartSplitterMod/SmartSplitterMod_modio.asset
     hash: 7A160D525A607EE9A4944336BA0D21F013FB002C7EF57E427585A28B5E09AB18
   - path: Assets/SmartSplitterMod/SmartSplitterModData.asset

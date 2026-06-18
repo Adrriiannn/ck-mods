@@ -33,3 +33,10 @@ public struct SmartSplitterFilterStateRpc : IRpcCommand
   public int RightObjectID;
   public int RightVariation;
 }
+
+public struct SmartSplitterPowerStateRpc : IRpcCommand
+{
+  public int CenterX;
+  public int CenterY;
+  public byte Powered;
+}

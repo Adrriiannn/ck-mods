@@ -1,0 +1,26 @@
+outside tunnel rim: 076451
+first inside tunnel rim: 073c31
+second inside tunnel rim: 052a22
+third inside tunnel rim: 041f19
+
+
+first inside regular belt: 485979
+second inside regular belt: 3b4964
+third inside regular belt: 222838
+fourth inside regular belt: 1a1f2b
+
+first inside bright belt: 3e5a6d
+second inside bright belt: 2d414f
+third inside bright belt: 1d2933
+fourth inside bright belt: 172027
+
+first inside dim belt: 254641
+second inside dim belt: 203d38
+third inside dim belt: 162825
+fourth inside dim belt: 111e1d
+
+
+Up position: end (done) start (done)
+Left position: end (done) start (done)
+Right position: end (done) start (done)
+Down position: end (not done) start (not done)

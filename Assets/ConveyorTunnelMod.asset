@@ -1,0 +1,234 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc43e4983a160e543856e5ba0421c9e1, type: 3}
+  m_Name: ConveyorTunnelMod
+  m_EditorClassIdentifier: 
+  metadata:
+    guid: f52ef99ce42c4e779565ae6cf9510a10
+    name: ConveyorTunnelMod
+    displayName: 
+    skipSafetyChecks: 0
+    disableScripts: 0
+    accessesExtraAssemblies: 1
+    disableHarmonyPatching: 0
+    requiredOn: 3
+    files:
+    - path: Scripts/Scripts/Visuals/ConveyorTunnelVisual.cs
+      guid: 6f4e9f12d8be4d048a7b574866c31a4f
+    - path: Scripts/Scripts/Visuals/ConveyorTunnelPlacementGuideController.cs
+      guid: 1d4a2ea95987480ca389d34208c95a46
+    - path: Scripts/Scripts/Visuals/ConveyorTunnelItemVisualEffects.cs
+      guid: a943cfb6d9e49c44bbc62a2b32cbd73c
+    - path: Scripts/Scripts/Visuals/ConveyorTunnelHelperSpriteRegistry.cs
+      guid: eeb8b83b73419d44fa24366d3610569e
+    - path: Scripts/Scripts/Visuals/ConveyorTunnelHelperSpriteLibrary.cs
+      guid: 5be323d819ed4f208fb5a6f8ee523cab
+    - path: Scripts/Scripts/Utilities/ConveyorTunnelPersistence.cs
+      guid: dc719f6c418b45da9839172dbe15f5ca
+    - path: Scripts/Scripts/Utilities/ConveyorTunnelNetworkState.cs
+      guid: 439f6537b0154ce783fc781d73048bd7
+    - path: Scripts/Scripts/Utilities/ConveyorTunnelIds.cs
+      guid: 4dcb757986df401fbfba68aaf8a9c797
+    - path: Scripts/Scripts/Utilities/ConveyorTunnelDirectionUtility.cs
+      guid: ab038846316a46f4b754133eda15015f
+    - path: Scripts/Scripts/Systems/ConveyorTunnelRuntimeSystem.cs
+      guid: c1cbff30f2c94701be8830cc2e3bdc24
+    - path: Scripts/Scripts/Patches/ConveyorTunnelPlacementPreviewPatch.cs
+      guid: 6e466155820d44b9b72d25c8a72ebcc2
+    - path: Scripts/Scripts/Patches/ConveyorTunnelDroppedItemVisualPatch.cs
+      guid: f4417f8cc63a66645b319a02749ec323
+    - path: Scripts/Scripts/Patches/ConveyorTunnelBeltVisualConnectionPatch.cs
+      guid: 2c792d9309f048bda4a9130595868ec4
+    - path: Scripts/Scripts/Debug/ConveyorTunnelDebugSettings.cs
+      guid: c07070908d9845d7906c150d69323931
+    - path: Scripts/Scripts/ConveyorTunnelModEntry.cs
+      guid: 7a8c1ffe43cf4458aefad5eefda6de6a
+    - path: Scripts/Scripts/Converters/ConveyorTunnelRecipeInjectionConverter.cs
+      guid: 762e8f7a18d449a3a6d8eba898b58901
+    - path: Scripts/Scripts/Converters/ConveyorTunnelAdvancedAutomationRecipeInjector.cs
+      guid: 692997efd51950d4a86c5fa21ae57eba
+    - path: Scripts/Scripts/Components/ConveyorTunnelState.cs
+      guid: 8114b0eb417843469f520c36fdbf3b22
+    - path: Scripts/Generated/ConveyorTunnelRuntimeSystem__System_1880257360.g.cs
+      guid: 
+    - path: Scripts/Generated/ConveyorTunnelEndpointStateRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ConveyorTunnelItemVisualEffectRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ConveyorTunnelSnapshotBeginRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ConveyorTunnelSnapshotEndRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ConveyorTunnelStateRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Bundles/ConveyorTunnelMod_Windows.assetbundle
+      guid: 
+    - path: Bundles/ConveyorTunnelMod_Windows.assetbundle.manifest
+      guid: 
+    - path: Bundles/ConveyorTunnelMod_Linux.assetbundle
+      guid: 
+    - path: Bundles/ConveyorTunnelMod_Linux.assetbundle.manifest
+      guid: 
+    dependencies: []
+  modPath: Assets\ConveyorTunnelMod
+  forceReimport: 1
+  buildBundles: 1
+  cacheBundles: 0
+  buildLinux: 1
+  assets:
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Down/conveyorBelt_tunnel2_down_end_0.png
+    hash: 44DAB78DD27D4663D59EFC4DD9895C6A0017699238C8D7E5251C1CD1D92A1FB3
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Down/conveyorBelt_tunnel2_down_start_0.png
+    hash: ADBD7556591F92CF2C8CB21C63C087CE8932C21DCEAD860FE440C843CC8F187D
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Down/conveyorBelt_tunnel_down_end_0.png
+    hash: 6E2AA3CD6D48061F36184186CB66968B38C0EFF51F5D81D320283ABBBD03788C
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Down/conveyorBelt_tunnel_down_start_0.png
+    hash: 36E38DB8C2909E490474AC3FD3354BDA2D908C4795A4213FE0C17D86DB2B7302
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Left/conveyorBelt_tunnel2_left_end_0.png
+    hash: 167B7494463EAE03F58CA295D5144D93CE52581F3E7A12D9371F6677E982F346
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Left/conveyorBelt_tunnel2_left_start_0.png
+    hash: 968FC0163D32049036BEB039172A05704037945BEA000185F362A10ABB9AA1A8
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Left/conveyorBelt_tunnel_left_end_0.png
+    hash: 3E39937BE24C538EC64E164224870928D826A3DDA9AD1731F158B70BBCD3BFED
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Left/conveyorBelt_tunnel_left_start_0.png
+    hash: E4E39CDF0BE811D7D527328F6B4B1B75BA566E35491CB36B07A8025C0FF130A1
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Right/conveyorBelt_tunnel2_right_end_0.png
+    hash: FBF95592763D28B28B3825F8D4BB7F62DBD927541ABF2EAB72C8D16113F6A184
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Right/conveyorBelt_tunnel2_right_start_0.png
+    hash: 4E141444A0CB697348E0C3DA00DD7D4A6227B0073C4A9F0E1082B3D05862A8D1
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Right/conveyorBelt_tunnel_right_end_0.png
+    hash: B89AE47E1CEC05A84EBCBEE07E22B9E9CE8A45CF0E51C03CB40767E31A7E4F8A
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Right/conveyorBelt_tunnel_right_start_0.png
+    hash: BE38EB4808BF08DD5E230E6DB677BE2C4571FF5A39BACB2890B5CDC6AA922455
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Up/conveyorBelt_tunnel2_up_end_0.png
+    hash: 6DBF117D88D756727EAA254BDF8F2995C0BEDBD48C87071DEBE681B595553E55
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Up/conveyorBelt_tunnel2_up_start_0.png
+    hash: 6DA5E0451BE7164940FEB260E500231F12805381DE8B66B088EAA66FE389E1A9
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Up/conveyorBelt_tunnel_up_end_0.png
+    hash: B884BFD172A87F47ACFEDC6B5467F4A1FDD3A890B773360ED58CE82E702F7394
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/Up/conveyorBelt_tunnel_up_start_0.png
+    hash: 9C0E4AD6DBC55600973F2BBE7602E09FA61F98E4DA50D77496178E564836F464
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down.png
+    hash: 3DA8920E943808A1B8F6C30E740D3427C5FCC59236FFD311AC3D3276A95AFDF1
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_0.png
+    hash: 3DA8920E943808A1B8F6C30E740D3427C5FCC59236FFD311AC3D3276A95AFDF1
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_end.png
+    hash: 6D0D5961880CD8DD63B7361D7DE0BDDE36ECE9A842AB9E1A5122B92628B9BFDC
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_end_0.png
+    hash: 6D0D5961880CD8DD63B7361D7DE0BDDE36ECE9A842AB9E1A5122B92628B9BFDC
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_middle.png
+    hash: 606CA481732B31B57DF3268F06CDECB1507ED631087A353375176325E18D4589
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_middle_0.png
+    hash: 606CA481732B31B57DF3268F06CDECB1507ED631087A353375176325E18D4589
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_start.png
+    hash: 472A6183D094C116E5FEAD9F2A07A9CDD12BE4745F03B3A153160F69FCC879A7
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaDown/conveyorBelt_down_start_0.png
+    hash: 472A6183D094C116E5FEAD9F2A07A9CDD12BE4745F03B3A153160F69FCC879A7
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left.png
+    hash: 8A3821EAAF677E0367095C82599F4B709EBEB6DA78C5B0FCDBFA9B9E8F9E2F9B
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_0.png
+    hash: 8A3821EAAF677E0367095C82599F4B709EBEB6DA78C5B0FCDBFA9B9E8F9E2F9B
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_end.png
+    hash: 5B86491D549D6C98CB7844DBA9EC0DDDD392B77A4B364F3CE56A6AC3D287F417
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_end_0.png
+    hash: 5B86491D549D6C98CB7844DBA9EC0DDDD392B77A4B364F3CE56A6AC3D287F417
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_middle.png
+    hash: 47AEDE378FF398DC265C0F1CEE13508148C298A3B4A1E252B1002FB061AD738B
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_middle_0.png
+    hash: 47AEDE378FF398DC265C0F1CEE13508148C298A3B4A1E252B1002FB061AD738B
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_start.png
+    hash: BEA601F98F0FBD0946B417D2BBE0A11AE41581B7AD8DA38ED07EA46C6F89D2BC
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaLeft/conveyorBelt_left_start_0.png
+    hash: BEA601F98F0FBD0946B417D2BBE0A11AE41581B7AD8DA38ED07EA46C6F89D2BC
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right.png
+    hash: 424C617100682B5B21614ADC61DA297DF61D81758E1DE1FD15E230EDF447198B
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_0.png
+    hash: 424C617100682B5B21614ADC61DA297DF61D81758E1DE1FD15E230EDF447198B
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_end.png
+    hash: 97DECD2ACD0D9FD80D1892BA7690975656813DE0AE07542F66A71348156DD434
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_end_0.png
+    hash: 97DECD2ACD0D9FD80D1892BA7690975656813DE0AE07542F66A71348156DD434
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_middle.png
+    hash: FED99C3F9AB3061B7D4C2B292A8C09DD1E4A2EA05EF855C9302849B5E3EC9A04
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_middle_0.png
+    hash: FED99C3F9AB3061B7D4C2B292A8C09DD1E4A2EA05EF855C9302849B5E3EC9A04
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_start.png
+    hash: 51664A35A441899FAD896A931A5D036A847F3A7529CCFE030549B1E952CF9663
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaRight/conveyorBelt_right_start_0.png
+    hash: 51664A35A441899FAD896A931A5D036A847F3A7529CCFE030549B1E952CF9663
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up.png
+    hash: 544FBBAA786129870B9949D7BAB30F89057B7BBEF21DC3A768BED64AF9053E75
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_0.png
+    hash: 544FBBAA786129870B9949D7BAB30F89057B7BBEF21DC3A768BED64AF9053E75
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_end.png
+    hash: E45EB2E179BA17182456CA9C97E45763CDF6F6B886C36762E38D50BCE776B868
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_end_0.png
+    hash: E45EB2E179BA17182456CA9C97E45763CDF6F6B886C36762E38D50BCE776B868
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_middle.png
+    hash: 8B4485CD42F6DD476BF7D03D191BD553CD760FBF1CA2A05E5384EA405C9063B0
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_middle_0.png
+    hash: 8B4485CD42F6DD476BF7D03D191BD553CD760FBF1CA2A05E5384EA405C9063B0
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_start.png
+    hash: 6AA133972F55A1704AA7ABC6671617B2F3F962E0B85CD51ADB2E0A9A711AFD43
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorBelt/VanillaUp/conveyorBelt_up_start_0.png
+    hash: 6AA133972F55A1704AA7ABC6671617B2F3F962E0B85CD51ADB2E0A9A711AFD43
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorTunnelIcon.png
+    hash: 4F93807014D5F397579D17F9E6C101B7538C331991A0A602FDA2FE531219A7CF
+  - path: Assets/ConveyorTunnelMod/Assets/ConveyorTunnelIcon_inHand.png
+    hash: 4BFA98B275C5128B305D919ABAE4C2519E18F236E80D2F45961325D240EFB545
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperArrowDown.png
+    hash: E3C4A25AB9EE112797DE060CFF5950564D44016A666BF40F09AE53E435A92B8A
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperArrowLeft.png
+    hash: 8B3D536EC7AAF2129EFD3E56FEED617F2FC9515FC2B563ACE2F1D604CEA09C4E
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperArrowRight.png
+    hash: EC1D128774B40F660B4DA8A7FD3420BC7B302D31412C819E6D6C20BF31108735
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperArrowUp.png
+    hash: C359502E806B5537AC54B9FCD2F7D4C795705346AC56A003988512413D97DA80
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperBGHorizontal.png
+    hash: B404D7BB0FF9AB4642E6E6AB911A6DA7F0B7420B7EB15D8ACC5DCF81B46CAEF5
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperBGVertical.png
+    hash: C0896109B9EF728F46B5DC5CCBCB7D03F5AB2699786E94E92DAE1B5A21FA366D
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperNoArrowDown.png
+    hash: 910DAFB918887D240CC08D48ED31EEBCBBD2C91E48478E6EBC95E9DE5C2E8B3E
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperNoArrowLeft.png
+    hash: 724AB23B205723E4B658880F913CAC891183EA7075A2BFA8DE5F7857F154FEF8
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperNoArrowRight.png
+    hash: FA62B6C33FDBD18FE4FD5F323D14E6410145723A55D6DF52C8D308410D607A75
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperNoArrowUp.png
+    hash: ED2C8EDA48A9D32701A3D7781201D126DFC70D4468239CF7FDA92F4A693E25B9
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperNoBGHorizontal.png
+    hash: 14EAD73A0A6E74DA79C92099F312844E6F021E5264F767419A4607BF6EA35935
+  - path: Assets/ConveyorTunnelMod/Assets/Helper/HelperNoBGVertical.png
+    hash: C4685637989D6D328116AB77E7E6DC40A939AE2D28733C8E0AC478541DD67ED2
+  - path: Assets/ConveyorTunnelMod/colorpalette.txt
+    hash: 2313AFA409D4C3C13022B859C41C0CA2B45D7AA944B3EB39CCB2B11F675A6F29
+  - path: Assets/ConveyorTunnelMod/Data/ConveyorTunnelHelperSprites.asset
+    hash: F0243F9343DAC5FB2AB41D307A6470505CF57C15ECC91FA1891BD6B5744F9B0A
+  - path: Assets/ConveyorTunnelMod/Data/ConveyorTunnelMod.asset
+    hash: 6C7218C20B3577DDE68D3530B12CA25C4027533786FCE0B99D1477FAED4AABA8
+  - path: Assets/ConveyorTunnelMod/Data/SpriteAsset/conveyorTunnel.asset
+    hash: 165463C775BF9D3129C9F680480A178409A465B9D463BB12580BFFC51277F21C
+  - path: Assets/ConveyorTunnelMod/Data/TextDataBlock/Items/ConveyorTunnel.asset
+    hash: 0A0C9926B7D842948DCDB2505C83BA8CF3BB128AFDB7590472DB6BA3F663ADF8
+  - path: Assets/ConveyorTunnelMod/Prefabs/ConveyorTunnelBackwardEntity.prefab
+    hash: 4C233E6287ADE44AD5325F4CB73FE3EF7DC6464A3CCBD6B34185F4AADBC5F7D4
+  - path: Assets/ConveyorTunnelMod/Prefabs/ConveyorTunnelForwardEntity.prefab
+    hash: 1478D479584C1082D4987FBCE64D3CED1ED196AF7C667CF2E2F8F07E91106344
+  - path: Assets/ConveyorTunnelMod/Prefabs/ConveyorTunnelLeftEntity.prefab
+    hash: 98E39A0B5099A36C63EECA0F753E4453BC5CEA753AED05A436C72899B35A9491
+  - path: Assets/ConveyorTunnelMod/Prefabs/ConveyorTunnelRightEntity.prefab
+    hash: B7BD79B4FD7ECB013B8F6CC854F86C12C64F77AA60FC9EB369B409F11412C580
+  - path: Assets/ConveyorTunnelMod/Prefabs/ConveyorTunnelVisual.prefab
+    hash: C346B171D41D055DFFECC96D2ABC331F753E80C7EF03DA1A4A83ABFA35A8E1D8
+  - path: Assets/ConveyorTunnelMod/SpriteAssetManifest.asset
+    hash: 48467415849737CEE292840CCA2188F31DB4A5DD0AAD768A5C508FAAEE788925
+  lastBuildLinux: 1

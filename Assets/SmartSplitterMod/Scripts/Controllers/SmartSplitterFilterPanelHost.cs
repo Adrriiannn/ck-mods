@@ -519,6 +519,11 @@ public sealed class SmartSplitterFilterPanelHost : MonoBehaviour
 
   private bool IsSplitterCenterPowered(World world, int2 center)
   {
+    if (SmartSplitterNetworkState.TryGetPower(center, out bool cachedPowered))
+    {
+      return cachedPowered;
+    }
+
     if (world == null || !world.IsCreated)
     {
       return false;
