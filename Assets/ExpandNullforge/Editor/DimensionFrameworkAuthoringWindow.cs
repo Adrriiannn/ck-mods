@@ -2209,6 +2209,9 @@ namespace ExpandNullforge.EditorTools
 
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
+
+            DrawItemGenerationBar();
+
             GUILayout.Space(6f);
             int biomeResources = biome == null ? 0 : CountBiomeResources(biome);
             int globalResourceNodes = CountAssets(selectedTemplate.GlobalResourceNodes);
@@ -2480,6 +2483,108 @@ namespace ExpandNullforge.EditorTools
 
                 DrawItemArchetypeSummary(item);
             }
+        }
+
+        /// <summary>
+        /// Generation bar for items: reports how many are ready and how many are blocked, and
+        /// only offers the action when there is something valid to build.
+        /// </summary>
+        private void DrawItemGenerationBar()
+        {
+            DimensionItemAsset[] items = selectedTemplate == null
+                ? null
+                : selectedTemplate.GlobalItems;
+
+            int ready = 0;
+            int blocked = 0;
+            if (items != null)
+            {
+                for (int i = 0; i < items.Length; i++)
+                {
+                    DimensionItemAsset item = items[i];
+                    if (item == null || !item.Enabled)
+                    {
+                        continue;
+                    }
+
+                    if (DimensionItemArchetypeValidator.CanGenerate(item))
+                    {
+                        ready++;
+                    }
+                    else
+                    {
+                        blocked++;
+                    }
+                }
+            }
+
+            GUILayout.Space(4f);
+            EditorGUILayout.BeginHorizontal();
+            using (new EditorGUI.DisabledScope(ready <= 0))
+            {
+                if (GUILayout.Button(
+                    "Generate " + ready + " Item Prefab" + (ready == 1 ? string.Empty : "s"),
+                    GUILayout.Width(210f)))
+                {
+                    GenerateItemPrefabs(items);
+                }
+            }
+
+            if (blocked > 0)
+            {
+                Color previousColor = GUI.color;
+                GUI.color = new Color(1f, 0.55f, 0.5f);
+                EditorGUILayout.LabelField(
+                    "● " + blocked + " item(s) blocked — see the errors below.",
+                    EditorStyles.miniLabel);
+                GUI.color = previousColor;
+            }
+
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        /// <summary>
+        /// Generates the item prefabs into the consumer's own mod folder, then reports exactly
+        /// what was written and anything that needs a manual pass.
+        /// </summary>
+        private void GenerateItemPrefabs(DimensionItemAsset[] items)
+        {
+            string templatePath = AssetDatabase.GetAssetPath(selectedTemplate);
+            string modRoot =
+                DimensionApiModFolderUtility.ResolveModRootFolderForAssetPath(templatePath);
+            if (string.IsNullOrEmpty(modRoot))
+            {
+                EditorUtility.DisplayDialog(
+                    "Generate Items",
+                    "Could not resolve the mod folder that owns this template, so there is " +
+                    "nowhere to put the generated prefabs. Save the template inside a mod " +
+                    "folder first.",
+                    "OK");
+                return;
+            }
+
+            string outputFolder = modRoot + "/Items";
+            DimensionItemGenerationReport report =
+                DimensionItemGenerator.Generate(items, outputFolder);
+
+            for (int i = 0; i < report.Errors.Count; i++)
+            {
+                Debug.LogError("[Dimensions API] " + report.Errors[i]);
+            }
+
+            for (int i = 0; i < report.Warnings.Count; i++)
+            {
+                Debug.LogWarning("[Dimensions API] " + report.Warnings[i]);
+            }
+
+            EditorUtility.DisplayDialog(
+                "Generate Items",
+                report.Summarize() + "\n\nOutput: " + outputFolder +
+                (report.HasProblems
+                    ? "\n\nDetails were written to the Console."
+                    : string.Empty),
+                "OK");
         }
 
         /// <summary>

@@ -158,8 +158,8 @@ namespace ExpandNullforge.Api
             new DimensionCapability(
                 "custom-items",
                 "Custom items",
-                DimensionCapabilityMaturity.AuthoringModelOnly,
-                "Archetypes declare the required components and the validator blocks incomplete items, but no prefab/ObjectAuthoring/SpriteAsset/localization/recipe generation runs yet."),
+                DimensionCapabilityMaturity.PartialVerticalSlice,
+                "Archetypes drive prefab generation (ObjectAuthoring, localization, inventory, placement, durability, damage, cooldown, health, loot) and the validator blocks incomplete items, but the generator has not yet been executed in Unity or verified in-game, and SpriteAsset, localization tables, recipes, and ScriptableData registration are still missing."),
             new DimensionCapability(
                 "recipes-workbenches-loot",
                 "Recipes, workbenches, and loot",
