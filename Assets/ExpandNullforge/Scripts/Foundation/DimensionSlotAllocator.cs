@@ -8,6 +8,26 @@ namespace ExpandNullforge.Foundation
   {
     private const int ProtectedOverworldCoordinateRadiusTiles = 5000;
 
+    // Default radial allocation: dimensions start 5000 tiles from the global origin and each
+    // completed ring steps out by another 5000. Used when the request does not override them.
+    private const int DefaultRingRadiusTiles = 5000;
+    private const int DefaultRingStepTiles = 5000;
+
+    // Deterministic 8-direction order around global (0,0): N, NE, E, SE, S, SW, W, NW. Each
+    // unit direction is scaled by the current ring radius to produce the candidate origin, so
+    // the first ever slot is (5000, 0) (north) and collisions fall through to the next slot.
+    private static readonly int2[] RingDirections =
+    {
+        new int2(1, 0),
+        new int2(1, 1),
+        new int2(0, 1),
+        new int2(-1, 1),
+        new int2(-1, 0),
+        new int2(-1, -1),
+        new int2(0, -1),
+        new int2(1, -1),
+    };
+
     private static readonly DimensionBounds ProtectedOverworldCoordinateBounds =
         new DimensionBounds(
             new int2(-ProtectedOverworldCoordinateRadiusTiles, -ProtectedOverworldCoordinateRadiusTiles),
@@ -70,60 +90,32 @@ namespace ExpandNullforge.Foundation
             "Fixed dimension slot accepted.");
       }
 
-      int baseOffset = math.max(1, request.BaseOffsetTiles);
-      int step = math.max(baseOffset, request.StepTiles);
+      int baseOffset = request.BaseOffsetTiles > 0
+          ? request.BaseOffsetTiles
+          : DefaultRingRadiusTiles;
+      int step = request.StepTiles > 0
+          ? request.StepTiles
+          : DefaultRingStepTiles;
       int maximumRings = math.max(1, request.MaximumSearchRings);
       int candidateIndex = 0;
 
       for (int ring = 1; ring <= maximumRings; ring++)
       {
-        int coordinate = baseOffset + ((ring - 1) * step);
-        if (TryCandidate(
-            request,
-            new int2(coordinate, coordinate),
-            safetyMargin,
-            existingDimensions,
-            existingSlots,
-            candidateIndex++,
-            out DimensionSlotAllocationResult result))
+        int radius = baseOffset + ((ring - 1) * step);
+        for (int direction = 0; direction < RingDirections.Length; direction++)
         {
-          return result;
-        }
-
-        if (TryCandidate(
-            request,
-            new int2(coordinate, -coordinate),
-            safetyMargin,
-            existingDimensions,
-            existingSlots,
-            candidateIndex++,
-            out result))
-        {
-          return result;
-        }
-
-        if (TryCandidate(
-            request,
-            new int2(-coordinate, coordinate),
-            safetyMargin,
-            existingDimensions,
-            existingSlots,
-            candidateIndex++,
-            out result))
-        {
-          return result;
-        }
-
-        if (TryCandidate(
-            request,
-            new int2(-coordinate, -coordinate),
-            safetyMargin,
-            existingDimensions,
-            existingSlots,
-            candidateIndex++,
-            out result))
-        {
-          return result;
+          int2 origin = RingDirections[direction] * radius;
+          if (TryCandidate(
+              request,
+              origin,
+              safetyMargin,
+              existingDimensions,
+              existingSlots,
+              candidateIndex++,
+              out DimensionSlotAllocationResult result))
+          {
+            return result;
+          }
         }
       }
 
