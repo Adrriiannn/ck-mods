@@ -88,12 +88,16 @@ namespace ExpandNullforge.EditorTools
                 return report;
             }
 
+            List<string> generatedIds = new List<string>();
             try
             {
                 AssetDatabase.StartAssetEditing();
                 foreach (DimensionItemAsset item in items)
                 {
-                    GenerateOne(item, outputFolder, report);
+                    if (GenerateOne(item, outputFolder, report) && item != null)
+                    {
+                        generatedIds.Add(item.ItemId);
+                    }
                 }
             }
             finally
@@ -103,24 +107,73 @@ namespace ExpandNullforge.EditorTools
                 AssetDatabase.Refresh();
             }
 
+            RecordGeneratedItemIds(outputFolder, generatedIds, report);
             return report;
         }
 
-        private static void GenerateOne(
+        /// <summary>
+        /// Writes the generated ids into the mod's runtime manifest so the runtime can declare
+        /// them and name any prefab that fails to register in-game. Without this the manifest and
+        /// the generated prefabs would drift apart silently.
+        /// </summary>
+        private static void RecordGeneratedItemIds(
+            string outputFolder,
+            List<string> generatedIds,
+            DimensionItemGenerationReport report)
+        {
+            string modRoot = outputFolder.EndsWith("/Items", StringComparison.Ordinal)
+                ? outputFolder.Substring(0, outputFolder.Length - "/Items".Length)
+                : outputFolder;
+
+            string[] guids = AssetDatabase.IsValidFolder(modRoot)
+                ? AssetDatabase.FindAssets("t:DimensionRuntimeManifestAsset", new[] { modRoot })
+                : null;
+            if (guids == null || guids.Length == 0)
+            {
+                if (generatedIds.Count > 0)
+                {
+                    report.Warnings.Add(
+                        "No runtime manifest was found under '" + modRoot +
+                        "', so the generated items cannot be declared at runtime. Export the " +
+                        "dimension manifest, then generate again.");
+                }
+
+                return;
+            }
+
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                DimensionRuntimeManifestAsset manifest =
+                    AssetDatabase.LoadAssetAtPath<DimensionRuntimeManifestAsset>(path);
+                if (manifest == null)
+                {
+                    continue;
+                }
+
+                manifest.SetGeneratedItemIds(generatedIds.ToArray());
+                EditorUtility.SetDirty(manifest);
+            }
+
+            AssetDatabase.SaveAssets();
+        }
+
+        /// <returns>True when a prefab was written for this item.</returns>
+        private static bool GenerateOne(
             DimensionItemAsset item,
             string outputFolder,
             DimensionItemGenerationReport report)
         {
             if (item == null)
             {
-                return;
+                return false;
             }
 
             if (!item.Enabled)
             {
                 report.Skipped.Add(
                     Describe(item) + " is disabled and was not generated.");
-                return;
+                return false;
             }
 
             List<DimensionItemArchetypeValidator.Finding> findings =
@@ -138,7 +191,7 @@ namespace ExpandNullforge.EditorTools
             if (blocked)
             {
                 report.Skipped.Add(Describe(item) + " was skipped until its errors are fixed.");
-                return;
+                return false;
             }
 
             string prefabPath = outputFolder + "/" + SanitizeFileName(item.ItemId) + ".prefab";
@@ -149,10 +202,12 @@ namespace ExpandNullforge.EditorTools
                 ? PrefabUtility.LoadPrefabContents(prefabPath)
                 : new GameObject(item.ItemId);
 
+            bool written = false;
             try
             {
                 Configure(root, item, report);
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                written = true;
                 if (updating)
                 {
                     report.Updated.Add(prefabPath);
@@ -178,6 +233,8 @@ namespace ExpandNullforge.EditorTools
                     Object.DestroyImmediate(root);
                 }
             }
+
+            return written;
         }
 
         private static void Configure(

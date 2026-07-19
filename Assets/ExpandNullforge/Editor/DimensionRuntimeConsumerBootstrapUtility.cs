@@ -5806,6 +5806,7 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("using System.Collections.Generic;");
             builder.AppendLine("using ExpandNullforge.Api;");
             builder.AppendLine("using ExpandNullforge.Authoring;");
+            builder.AppendLine("using ExpandNullforge.Foundation;");
             builder.AppendLine("using ExpandNullforge.Portals;");
             builder.AppendLine("using PugMod;");
             builder.AppendLine("using Unity.Mathematics;");
@@ -6194,6 +6195,12 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      {");
             builder.AppendLine("        continue;");
             builder.AppendLine("      }");
+            builder.AppendLine();
+            builder.AppendLine("      // Declare generated items so the framework can name any that never");
+            builder.AppendLine("      // registered with the game. Reporting is deliberately not done here:");
+            builder.AppendLine("      // object ids can still arrive after this point.");
+            builder.AppendLine("      DimensionItemObjectRegistry.Declare(");
+            builder.AppendLine("          manifest.GeneratedFromContentPackId, manifest.GeneratedItemIds);");
             builder.AppendLine();
             builder.AppendLine("      DimensionContentManifestResult applyResult;");
             builder.AppendLine("      DimensionOperationResult buildResult;");

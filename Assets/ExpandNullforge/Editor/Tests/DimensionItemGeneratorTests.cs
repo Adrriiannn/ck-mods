@@ -199,6 +199,36 @@ namespace ExpandNullforge.EditorTools
         }
 
         [Test]
+        public void GeneratedIds_AreRecordedIntoTheRuntimeManifest()
+        {
+            // The runtime declares these ids, so the manifest must learn about every prefab that
+            // was written - otherwise a failed registration has nothing to report against.
+            AssetDatabase.CreateFolder("Assets", "ExpandNullforgeGeneratorTests");
+            DimensionRuntimeManifestAsset manifest =
+                ScriptableObject.CreateInstance<DimensionRuntimeManifestAsset>();
+            AssetDatabase.CreateAsset(manifest, TestFolder + "/RuntimeManifest.asset");
+
+            DimensionItemAsset first = MakeItem(DimensionItemArchetype.Material, "mod_one");
+            DimensionItemAsset second = MakeItem(DimensionItemArchetype.Material, "mod_two");
+            DimensionItemAsset disabled = MakeItem(
+                DimensionItemArchetype.Material,
+                "mod_off",
+                serialized => serialized.FindProperty("enabled").boolValue = false);
+
+            DimensionItemGenerator.Generate(
+                new[] { first, second, disabled }, TestFolder + "/Items");
+
+            DimensionRuntimeManifestAsset reloaded =
+                AssetDatabase.LoadAssetAtPath<DimensionRuntimeManifestAsset>(
+                    TestFolder + "/RuntimeManifest.asset");
+            Assert.That(reloaded, Is.Not.Null);
+            Assert.That(
+                reloaded.GeneratedItemIds,
+                Is.EquivalentTo(new[] { "mod_one", "mod_two" }),
+                "Only items that actually produced a prefab should be declared.");
+        }
+
+        [Test]
         public void AnInvalidOutputFolder_IsRefused()
         {
             DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_thing");

@@ -29,9 +29,36 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private int ownershipBindingCount;
         [SerializeField] private int assetReferenceCount;
 
+        [Tooltip("Item ids whose prefabs were generated for this dimension. The runtime declares these so it can report any that never registered with the game.")]
+        [SerializeField] private string[] generatedItemIds = new string[0];
+
         public string ManifestId
         {
             get { return manifestId ?? string.Empty; }
+        }
+
+        /// <summary>Content pack that owns this manifest.</summary>
+        public string GeneratedFromContentPackId
+        {
+            get { return generatedFromContentPackId ?? string.Empty; }
+        }
+
+        /// <summary>
+        /// Item ids the generator produced prefabs for. The runtime declares these so a prefab
+        /// that failed to register can be named instead of silently missing from the game.
+        /// </summary>
+        public string[] GeneratedItemIds
+        {
+            get { return generatedItemIds ?? new string[0]; }
+        }
+
+        /// <summary>
+        /// Records which items were generated. Called by the editor generator; kept separate from
+        /// <see cref="Configure"/> because generation and manifest export run independently.
+        /// </summary>
+        public void SetGeneratedItemIds(string[] itemIds)
+        {
+            generatedItemIds = itemIds ?? new string[0];
         }
 
         public string DisplayName
