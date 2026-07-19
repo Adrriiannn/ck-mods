@@ -1183,6 +1183,8 @@ namespace ExpandNullforge.EditorTools
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandHeight(true));
 
+            DrawSectionMaturityBadge(activeSectionId);
+
             if (activeSectionId == "dimension")
             {
                 DrawDimensionEditor();
@@ -1233,6 +1235,83 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>
+        /// Shows an honest maturity label for the active section, read from the capability
+        /// registry, so a creator can see at a glance whether the controls below are proven,
+        /// preview-only, or experimental before investing time in them.
+        /// </summary>
+        private void DrawSectionMaturityBadge(string sectionId)
+        {
+            string capabilityId = MaturityCapabilityForSection(sectionId);
+            if (string.IsNullOrEmpty(capabilityId) ||
+                !DimensionCapabilityRegistry.TryGet(
+                    capabilityId,
+                    out DimensionCapability capability))
+            {
+                return;
+            }
+
+            Color previousColor = GUI.color;
+            GUI.color = MaturityColor(capability.Maturity);
+            EditorGUILayout.LabelField(
+                "● Maturity: " + DimensionCapabilityRegistry.Describe(capability.Maturity),
+                EditorStyles.miniBoldLabel);
+            GUI.color = previousColor;
+            EditorGUILayout.LabelField(capability.Note, EditorStyles.wordWrappedMiniLabel);
+            GUILayout.Space(4f);
+        }
+
+        private static string MaturityCapabilityForSection(string sectionId)
+        {
+            switch (sectionId)
+            {
+                case "dimension":
+                    return "dimension-identity-registry";
+                case "portals":
+                    return "portal-studio";
+                case "layout":
+                    return "coordinate-translation";
+                case "biomes":
+                    return "biomes-zones";
+                case "terrain":
+                case "generation":
+                    return "generation";
+                case "scenes":
+                case "resources":
+                case "spawns":
+                    return "scenes-resources-spawns-events";
+                case "export":
+                    return "manifest-ownership";
+                case "diagnostics":
+                    return "diagnostics-readiness";
+                default:
+                    return "dashboard-wizard";
+            }
+        }
+
+        private static Color MaturityColor(DimensionCapabilityMaturity maturity)
+        {
+            switch (maturity)
+            {
+                case DimensionCapabilityMaturity.ImplementedAndEvidenced:
+                    return new Color(0.45f, 1.0f, 0.55f);
+                case DimensionCapabilityMaturity.ImplementedNotFullyProven:
+                    return new Color(0.6f, 0.9f, 1.0f);
+                case DimensionCapabilityMaturity.PartialVerticalSlice:
+                    return new Color(1.0f, 0.92f, 0.5f);
+                case DimensionCapabilityMaturity.ContractExtensionSeam:
+                    return new Color(1.0f, 0.85f, 0.5f);
+                case DimensionCapabilityMaturity.AuthoringModelOnly:
+                    return new Color(1.0f, 0.7f, 0.4f);
+                case DimensionCapabilityMaturity.ExperimentalUnstable:
+                    return new Color(1.0f, 0.55f, 0.45f);
+                case DimensionCapabilityMaturity.NotImplemented:
+                    return new Color(0.72f, 0.72f, 0.72f);
+                default:
+                    return Color.white;
+            }
         }
 
         private void DrawOverviewEditor()

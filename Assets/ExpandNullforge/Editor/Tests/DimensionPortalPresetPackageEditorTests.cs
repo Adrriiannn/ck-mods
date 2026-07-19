@@ -707,12 +707,36 @@ namespace ExpandNullforge.EditorTools
                 "Vanilla flecks must use the independent white gradient, not the center palette.");
             Assert.That(
                 serialized.FindProperty("centerParticleTint").colorValue,
-                Is.EqualTo(Color.white),
-                "The independent fleck path must preserve the exact vanilla gradient via a white tint.");
+                Is.EqualTo(DimensionPortalVisualProfileAsset.VanillaSwirlTint),
+                "The neutral white swirl sheet is tinted the vanilla cyan-blue by default.");
             Assert.That(
                 serialized.FindProperty("readyFlashFollowsCenterPalette").boolValue,
                 Is.True,
                 "The one-shot ready burst deliberately follows the center palette.");
+        }
+
+        [Test]
+        public void PortalParityValidator_ReportsAllLayersAndCleanSwirl()
+        {
+            List<DimensionPortalParityValidator.Finding> findings =
+                DimensionPortalParityValidator.Validate(template, sourceProfile, out string report);
+            Assert.That(report, Does.Contain("portal parity"), report);
+            foreach (string layer in new[] { "Frame", "Charge", "Milestones", "Center", "Swirls" })
+            {
+                Assert.That(
+                    findings.Exists(f => f.Layer == layer),
+                    Is.True,
+                    "No parity finding for " + layer + ". Report:\n" + report);
+            }
+
+            // With override off (the default), the swirl uses vanilla particles — a clean OK
+            // with no custom SpriteAsset to resolve.
+            DimensionPortalParityValidator.Finding swirl = findings.Find(f => f.Layer == "Swirls");
+            Assert.That(
+                swirl.Severity,
+                Is.EqualTo(DimensionPortalParityValidator.Severity.Ok),
+                report);
+            Assert.That(swirl.Message, Does.Contain("Vanilla"), report);
         }
 
         [Test]
@@ -842,496 +866,100 @@ namespace ExpandNullforge.EditorTools
         }
 
         [Test]
-        public void BakeProfileColorsImmediately_RecolorsStableSwirlAssetFromPreservedSource()
+        public void CustomSwirlColor_BakesIntoProfileOwnedAsset()
         {
+            // Customizing the swirl color must create a profile-owned SpriteAsset (like every
+            // other layer) whose pixels carry the color. The shipped starter sheet is neutral
+            // white, so a red tint bakes to red pixels with the green/blue channels driven to
+            // ~0 — the exact behaviour a blue source could never produce.
             Assert.That(
                 DimensionPortalPresetEditorUtility.SaveAs(
                     template,
-                    "Baked Swirl Colors",
+                    "Baked Swirl Package",
                     false,
                     out DimensionPortalVisualProfileAsset created,
-                    out string createMessage),
+                    out string saveMessage),
                 Is.True,
-                createMessage);
-            Assert.That(created, Is.Not.Null);
+                saveMessage);
+
+            SerializedObject authored = new SerializedObject(created);
+            authored.Update();
+            authored.FindProperty("centerSwirlOverrideVanilla").boolValue = true;
+            authored.FindProperty("centerParticleTint").colorValue = new Color(1f, 0f, 0f, 1f);
+            authored.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
+
+            Assert.That(
+                DimensionPortalSwirlArtworkEditorUtility.FlushSwirlBake(
+                    template,
+                    created,
+                    out string bakeMessage),
+                Is.True,
+                bakeMessage);
 
             string packageRoot = NormalizePath(
                 Path.GetDirectoryName(AssetDatabase.GetAssetPath(created)));
-            SpriteAsset initialAsset = ResolveSwirlReference(created, packageRoot);
-            Assert.That(initialAsset, Is.Not.Null);
-
-            SpriteAsset frameworkSource = AssetDatabase.LoadAssetAtPath<SpriteAsset>(
-                FrameworkSwirlPath);
-            Assert.That(frameworkSource, Is.Not.Null, FrameworkSwirlPath);
-            FrameAnimation frameworkAnimation = frameworkSource.GetAnimationAt(0);
-            Assert.That(frameworkAnimation, Is.Not.Null);
-            Assert.That(frameworkAnimation.spriteData, Is.Not.Null);
-            Texture2D frameworkColorTexture = frameworkAnimation.spriteData.texture;
-            Texture2D frameworkEmissiveTexture =
-                frameworkAnimation.spriteData.emissiveTexture;
-            Color32[] frameworkColorPixels = ReadPixels(frameworkColorTexture);
-            Color32[] frameworkEmissivePixels = frameworkEmissiveTexture == null
-                ? null
-                : ReadPixels(frameworkEmissiveTexture);
-
+            SerializedObject serialized = new SerializedObject(created);
+            serialized.Update();
             Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
+                DimensionPortalSwirlArtworkEditorUtility.TryResolveReference(
                     created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        initialSlot,
-                    out string initialSlotMessage),
-                Is.True,
-                initialSlotMessage);
-            Assert.That(initialSlot, Is.Not.Null);
-            Color32[] pristineColor = ReadPixels(initialSlot.ColorTexture);
-            Color32[] pristineEmissive = initialSlot.EmissiveTexture == null
-                ? null
-                : ReadPixels(initialSlot.EmissiveTexture);
-            Color32[] pristineNormal = initialSlot.NormalTexture == null
-                ? null
-                : ReadPixels(initialSlot.NormalTexture);
-
+                    serialized.FindProperty("centerSwirlSpriteAsset"),
+                    packageRoot,
+                    out SpriteAsset owned),
+                Is.True);
+            Assert.That(owned, Is.Not.Null);
             Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    initialAsset,
-                    out _,
-                    out _),
+                DimensionPortalSwirlArtworkEditorUtility.IsFrameworkAsset(owned),
                 Is.False,
-                "A merely localized blue starter must not claim that profile colors are baked.");
+                "Customizing the swirl color must create a profile-owned asset, not reuse the framework starter.");
 
-            Color redTint = new Color(1.0f, 0.0f, 0.0f, 1.0f);
-            Color authoredGlow = new Color(2.0f, 1.0f, 0.5f, 1.0f);
-            const float emissionMultiplier = 1.5f;
-            SetSwirlBakeColors(
-                created,
-                redTint,
-                authoredGlow,
-                emissionMultiplier);
+            Texture2D colorSheet = owned.GetAnimationAt(0).spriteData.texture;
+            Assert.That(colorSheet, Is.Not.Null, "The baked swirl is missing its color sheet.");
             Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.BakeProfileColorsImmediately(
-                    template,
-                    created,
-                    out string redBakeMessage),
-                Is.True,
-                redBakeMessage);
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset redAsset = ResolveSwirlReference(created, packageRoot);
-            string redAssetPath = NormalizePath(AssetDatabase.GetAssetPath(redAsset));
-            Assert.That(
-                redAssetPath,
+                NormalizePath(AssetDatabase.GetAssetPath(colorSheet)),
                 Does.StartWith(packageRoot + "/Artwork/Swirls/"),
-                "The first color bake must materialize framework artwork inside the portal package.");
-            ReadAddress(redAsset, out long redLow, out long redHigh);
-            Assert.That(redLow == 0L && redHigh == 0L, Is.False);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        redSlot,
-                    out string redSlotMessage),
-                Is.True,
-                redSlotMessage);
-            Assert.That(redSlot.ColorTexture, Is.Not.Null);
-            Assert.That(redSlot.EmissiveTexture, Is.Not.Null);
-            Assert.That(
-                redSlot.EmissiveTexture,
-                Is.Not.SameAs(redSlot.ColorTexture),
-                "Color and Emissive need distinct baked PNGs even when the source shared one sheet.");
-            AssertTintedPixels(
-                pristineColor,
-                ReadPixels(redSlot.ColorTexture),
-                0,
-                "red Swirls color sheet");
-            if (pristineEmissive != null)
-            {
-                AssertTintedPixels(
-                    pristineEmissive,
-                    ReadPixels(redSlot.EmissiveTexture),
-                    0,
-                    "red Swirls emissive sheet");
-            }
+                "The baked swirl color sheet must be package-owned.");
 
-            if (pristineNormal != null)
-            {
-                Assert.That(redSlot.NormalTexture, Is.Not.Null);
-                Assert.That(
-                    ReadPixels(redSlot.NormalTexture),
-                    Is.EqualTo(pristineNormal),
-                    "Tint baking must never recolor the authored normal sheet.");
-            }
-
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    redAsset,
-                    out Color redRuntimeTint,
-                    out Color redRuntimeEmission),
-                Is.True);
-            AssertColorApproximately(redRuntimeTint, Color.white, "red runtime tint");
-            AssertColorApproximately(
-                redRuntimeEmission,
-                new Color(3.0f, 3.0f, 3.0f, 1.0f),
-                "red runtime emission");
-
-            string replacementFolder = DataFolder + "/Texture2D/SwirlNormal";
-            EnsureFolder(replacementFolder);
-            Texture2D replacementNormal = CreateSheetTexture(
-                replacementFolder + "/ReplacementNormal.png",
-                redSlot.FrameCount,
-                new Color32(64, 128, 255, 255));
-            Assert.That(replacementNormal, Is.Not.Null);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility
-                    .CreateOrUpdateAnimationZeroTextures(
-                        template,
-                        created,
-                        redSlot.ColorTexture,
-                        redSlot.EmissiveTexture,
-                        replacementNormal,
-                        out string normalUpdateMessage),
-                Is.True,
-                normalUpdateMessage);
-            // Keep this test synchronous and prove the later green SaveProfile call is
-            // the only operation responsible for the next durable color bake.
-            DimensionPortalSwirlArtworkEditorUtility.CancelPendingColorBake(created);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset normalUpdatedAsset = ResolveSwirlReference(created, packageRoot);
-            AssertStableSwirlIdentity(
-                normalUpdatedAsset,
-                redAssetPath,
-                redLow,
-                redHigh);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        normalUpdatedSlot,
-                    out string normalSlotMessage),
-                Is.True,
-                normalSlotMessage);
-            Assert.That(normalUpdatedSlot.NormalTexture, Is.Not.Null);
-            AssertTexturePixelsEqual(
-                replacementNormal,
-                normalUpdatedSlot.NormalTexture,
-                "Normal-only Swirls texture update");
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    normalUpdatedAsset,
-                    out _,
-                    out _),
-                Is.False,
-                "Changing only Normal must invalidate stale bake metadata until colors are rebaked.");
-
-            Color greenTint = new Color(0.0f, 1.0f, 0.0f, 1.0f);
-            SetSwirlBakeColors(
-                created,
-                greenTint,
-                authoredGlow,
-                emissionMultiplier);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    redAsset,
-                    out _,
-                    out _),
-                Is.False,
-                "Changing the profile must invalidate the previous bake metadata until rebaked.");
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.QueueProfileColorBake(
-                    template,
-                    created,
-                    true),
-                Is.True,
-                "A stale saved Swirls palette must queue one durable recolor.");
-            Assert.That(
-                DimensionPortalPresetEditorUtility.SaveProfile(
-                    template,
-                    created,
-                    out string greenBakeMessage),
-                Is.True,
-                greenBakeMessage +
-                " Save & Update must flush the queued Swirls color bake.");
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset greenAsset = ResolveSwirlReference(created, packageRoot);
-            AssertStableSwirlIdentity(
-                greenAsset,
-                redAssetPath,
-                redLow,
-                redHigh);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        greenSlot,
-                    out string greenSlotMessage),
-                Is.True,
-                greenSlotMessage);
-            AssertTintedPixels(
-                pristineColor,
-                ReadPixels(greenSlot.ColorTexture),
-                1,
-                "green Swirls color sheet");
-            if (pristineEmissive != null)
-            {
-                AssertTintedPixels(
-                    pristineEmissive,
-                    ReadPixels(greenSlot.EmissiveTexture),
-                    1,
-                    "green Swirls emissive sheet");
-            }
-
-            Assert.That(greenSlot.NormalTexture, Is.Not.Null);
-            AssertTexturePixelsEqual(
-                replacementNormal,
-                greenSlot.NormalTexture,
-                "Green rebake must retain the Normal-only texture update");
-
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    greenAsset,
-                    out Color greenRuntimeTint,
-                    out Color greenRuntimeEmission),
-                Is.True);
-            AssertColorApproximately(greenRuntimeTint, Color.white, "green runtime tint");
-            AssertColorApproximately(
-                greenRuntimeEmission,
-                new Color(1.5f, 1.5f, 1.5f, 1.0f),
-                "green runtime emission");
-
-            Assert.That(
-                ReadPixels(frameworkColorTexture),
-                Is.EqualTo(frameworkColorPixels),
-                "Profile color baking must never modify the framework Swirls color sheet.");
-            if (frameworkEmissivePixels != null)
+            Texture2D decoded = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            try
             {
                 Assert.That(
-                    ReadPixels(frameworkEmissiveTexture),
-                    Is.EqualTo(frameworkEmissivePixels),
-                    "Profile color baking must never modify the framework Swirls emissive sheet.");
+                    decoded.LoadImage(File.ReadAllBytes(
+                        Path.GetFullPath(AssetDatabase.GetAssetPath(colorSheet)))),
+                    Is.True,
+                    "Could not decode the baked swirl color sheet.");
+                Color32[] pixels = decoded.GetPixels32();
+                int litRed = 0;
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    Color32 pixel = pixels[i];
+                    if (pixel.a <= 40)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        pixel.g,
+                        Is.LessThan(48),
+                        "Green survived a red bake — the color was not baked from a neutral source.");
+                    Assert.That(
+                        pixel.b,
+                        Is.LessThan(48),
+                        "Blue survived a red bake — the color was not baked from a neutral source.");
+                    if (pixel.r > 150)
+                    {
+                        litRed++;
+                    }
+                }
+
+                Assert.That(litRed, Is.GreaterThan(0), "The baked swirl has no lit red pixels.");
             }
-
-            Assert.That(
-                HasPristineSwirlSidecar(
-                    packageRoot + "/Artwork/Swirls",
-                    greenSlot,
-                    pristineColor),
-                Is.True,
-                "The package must keep an untinted source sidecar for non-destructive rebakes.");
-        }
-
-        [Test]
-        public void SaveProfile_WithoutQueuedSwirlWork_RepairsClearedAndStaleBakeMetadataInPlace()
-        {
-            Assert.That(
-                DimensionPortalPresetEditorUtility.SaveAs(
-                    template,
-                    "Swirl Metadata Repair",
-                    false,
-                    out DimensionPortalVisualProfileAsset created,
-                    out string createMessage),
-                Is.True,
-                createMessage);
-            Assert.That(created, Is.Not.Null);
-
-            string packageRoot = NormalizePath(
-                Path.GetDirectoryName(AssetDatabase.GetAssetPath(created)));
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        initialSlot,
-                    out string initialSlotMessage),
-                Is.True,
-                initialSlotMessage);
-            Color32[] pristineColor = ReadPixels(initialSlot.ColorTexture);
-            Color32[] pristineEmissive = initialSlot.EmissiveTexture == null
-                ? null
-                : ReadPixels(initialSlot.EmissiveTexture);
-
-            Color initialTint = new Color(0.5f, 0.25f, 0.75f, 0.8f);
-            Color glow = new Color(2.0f, 1.0f, 0.5f, 1.0f);
-            const float emissionMultiplier = 1.2f;
-            SetSwirlBakeColors(created, initialTint, glow, emissionMultiplier);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.BakeProfileColorsImmediately(
-                    template,
-                    created,
-                    out string initialBakeMessage),
-                Is.True,
-                initialBakeMessage);
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset bakedAsset = ResolveSwirlReference(created, packageRoot);
-            string bakedPath = NormalizePath(AssetDatabase.GetAssetPath(bakedAsset));
-            ReadAddress(bakedAsset, out long bakedLow, out long bakedHigh);
-            Assert.That(bakedLow == 0L && bakedHigh == 0L, Is.False);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        bakedSlot,
-                    out string bakedSlotMessage),
-                Is.True,
-                bakedSlotMessage);
-            Color32[] bakedColorBeforeRepair = ReadPixels(bakedSlot.ColorTexture);
-            Color32[] bakedEmissiveBeforeRepair = bakedSlot.EmissiveTexture == null
-                ? null
-                : ReadPixels(bakedSlot.EmissiveTexture);
-
-            AssetImporter bakedImporter = AssetImporter.GetAtPath(bakedPath);
-            Assert.That(bakedImporter, Is.Not.Null);
-            Assert.That(bakedImporter.userData, Is.Not.Empty);
-            bakedImporter.userData = string.Empty;
-            bakedImporter.SaveAndReimport();
-            DimensionPortalSwirlArtworkEditorUtility.CancelPendingColorBake(created);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset metadataClearedAsset = ResolveSwirlReference(created, packageRoot);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    metadataClearedAsset,
-                    out _,
-                    out _),
-                Is.False,
-                "Clearing saved bake metadata must make neutral runtime colors unsafe.");
-            Assert.That(
-                DimensionPortalPresetEditorUtility.SaveProfile(
-                    template,
-                    created,
-                    out string clearRepairMessage),
-                Is.True,
-                clearRepairMessage +
-                " Save & Update must repair missing Swirls metadata without queued work.");
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset repairedAsset = ResolveSwirlReference(created, packageRoot);
-            AssertStableSwirlIdentity(repairedAsset, bakedPath, bakedLow, bakedHigh);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        repairedSlot,
-                    out string repairedSlotMessage),
-                Is.True,
-                repairedSlotMessage);
-            Assert.That(
-                ReadPixels(repairedSlot.ColorTexture),
-                Is.EqualTo(bakedColorBeforeRepair),
-                "Metadata repair must not tint the already-baked Color sheet a second time.");
-            if (bakedEmissiveBeforeRepair != null)
+            finally
             {
-                Assert.That(repairedSlot.EmissiveTexture, Is.Not.Null);
-                Assert.That(
-                    ReadPixels(repairedSlot.EmissiveTexture),
-                    Is.EqualTo(bakedEmissiveBeforeRepair),
-                    "Metadata repair must not tint the already-baked Emissive sheet a second time.");
+                UnityEngine.Object.DestroyImmediate(decoded);
             }
-
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    repairedAsset,
-                    out Color repairedRuntimeTint,
-                    out Color repairedRuntimeEmission),
-                Is.True,
-                "Save & Update must restore current bake metadata even with no queued work.");
-            AssertColorApproximately(
-                repairedRuntimeTint,
-                Color.white,
-                "repaired runtime tint");
-            AssertColorApproximately(
-                repairedRuntimeEmission,
-                new Color(1.2f, 1.2f, 1.2f, 1.0f),
-                "repaired runtime emission");
-
-            Color staleTint = new Color(0.25f, 0.75f, 0.5f, 1.0f);
-            SetSwirlBakeColors(created, staleTint, glow, emissionMultiplier);
-            DimensionPortalSwirlArtworkEditorUtility.CancelPendingColorBake(created);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    repairedAsset,
-                    out _,
-                    out _),
-                Is.False,
-                "Changing the saved profile directly must make its previous metadata stale.");
-            Assert.That(
-                DimensionPortalPresetEditorUtility.SaveProfile(
-                    template,
-                    created,
-                    out string staleRepairMessage),
-                Is.True,
-                staleRepairMessage +
-                " Save & Update must repair stale Swirls metadata without queued work.");
-
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-            ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-            DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-
-            SpriteAsset staleRepairedAsset = ResolveSwirlReference(created, packageRoot);
-            AssertStableSwirlIdentity(staleRepairedAsset, bakedPath, bakedLow, bakedHigh);
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetAnimationZeroTextureSlot(
-                    created,
-                    out DimensionPortalSwirlArtworkEditorUtility.AnimationZeroTextureSlot
-                        staleRepairedSlot,
-                    out string staleSlotMessage),
-                Is.True,
-                staleSlotMessage);
-            AssertMultipliedPixels(
-                pristineColor,
-                ReadPixels(staleRepairedSlot.ColorTexture),
-                staleTint,
-                true,
-                "stale-metadata Color repair");
-            if (pristineEmissive != null)
-            {
-                AssertMultipliedPixels(
-                    pristineEmissive,
-                    ReadPixels(staleRepairedSlot.EmissiveTexture),
-                    new Color(0.6f, 0.9f, 0.3f, 1.0f),
-                    false,
-                    "stale-metadata Emissive repair");
-            }
-
-            Assert.That(
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    created,
-                    staleRepairedAsset,
-                    out Color staleRuntimeTint,
-                    out Color staleRuntimeEmission),
-                Is.True);
-            AssertColorApproximately(staleRuntimeTint, Color.white, "stale runtime tint");
-            AssertColorApproximately(
-                staleRuntimeEmission,
-                Color.white,
-                "stale runtime emission");
         }
 
         [Test]

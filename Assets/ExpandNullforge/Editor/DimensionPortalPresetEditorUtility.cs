@@ -178,6 +178,14 @@ namespace ExpandNullforge.EditorTools
                 return false;
             }
 
+            if (!DimensionPortalSwirlArtworkEditorUtility.FlushSwirlBake(
+                    template,
+                    profile,
+                    out message))
+            {
+                return false;
+            }
+
             DimensionPortalPackageAsset package = null;
             if (DimensionPortalPackageEditorUtility.TryGetPackage(
                     profile,

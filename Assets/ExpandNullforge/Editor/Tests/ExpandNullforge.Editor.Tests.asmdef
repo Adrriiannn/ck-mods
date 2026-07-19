@@ -6,7 +6,8 @@
         "ExpandNullforge",
         "ExpandNullforge.API",
         "ModSDK.Editor",
-        "PugMod.SDK"
+        "PugMod.SDK",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [
         "Editor"

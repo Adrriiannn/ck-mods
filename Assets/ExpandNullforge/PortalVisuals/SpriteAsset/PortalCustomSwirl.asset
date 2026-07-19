@@ -54,13 +54,29 @@ MonoBehaviour:
       pivot: {x: 0.5, y: 0.5}
       positionalData: []
       inheritPivot: 1
-    srcFrameCount: 8
-    fps: 12
+    srcFrameCount: 16
+    fps: 24
     loop: 1
-    m_exitAnimationGuid: 
+    m_exitAnimationGuid:
     m_variants: []
     m_transitions: []
     frameData:
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
     - holdFrames: 0
       eventMask: 0
     - holdFrames: 0

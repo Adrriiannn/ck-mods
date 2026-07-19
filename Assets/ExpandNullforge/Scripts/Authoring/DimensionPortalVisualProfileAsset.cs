@@ -34,6 +34,11 @@ namespace ExpandNullforge.Authoring
             new Color(25.0f / 255.0f, 189.0f / 255.0f, 198.0f / 255.0f, 1.0f);
         public static readonly Color VanillaCenterPaletteDeep =
             new Color(29.0f / 255.0f, 48.0f / 255.0f, 137.0f / 255.0f, 1.0f);
+        // Default tint for the neutral (white) inner-swirl sheet. Multiplying the white
+        // flecks by this cyan-blue reproduces the vanilla GatherEnergy energy color, while
+        // any other tint recolors the flecks cleanly.
+        public static readonly Color VanillaSwirlTint =
+            new Color(0.28627455f, 0.8524765f, 1.0f, 1.0f);
 
         [Tooltip("Optional static SpriteAsset data-block reference for the portal frame. Leave empty for the vanilla portal frame.")]
         [SerializeField] private DataBlockRef<SpriteAsset> portalFrameSpriteAsset;
@@ -153,8 +158,8 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private bool centerParticlesEnabled = true;
         [Tooltip("Automatically derive the moving GatherEnergy flecks from the activated center palette. The exact vanilla particle gradient is preserved while the center palette is vanilla.")]
         [SerializeField] private bool centerParticlesFollowCenterPalette = true;
-        [Tooltip("Color of the persistent animated GatherEnergy flecks inside the portal. White preserves the vanilla blue/cyan gradient.")]
-        [SerializeField] private Color centerParticleTint = Color.white;
+        [Tooltip("Color multiplied over the neutral white inner-swirl sheet. The default cyan-blue reproduces the vanilla energy color; any other color recolors the flecks cleanly.")]
+        [SerializeField] private Color centerParticleTint = new Color(0.28627455f, 0.8524765f, 1.0f, 1.0f);
         [Tooltip("Optional animated SpriteAsset used by the custom inner swirl. Animation 0 must contain at least one frame and loop.")]
         [SerializeField] private DataBlockRef<SpriteAsset> centerSwirlSpriteAsset;
         [Tooltip("Replace the vanilla GatherEnergy particle effect with the animated custom swirl SpriteAsset.")]

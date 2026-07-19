@@ -1509,9 +1509,9 @@ namespace ExpandNullforge.EditorTools
             }
 
             RemoveUpdateHookIfIdle();
-            return DimensionPortalSwirlArtworkEditorUtility.FlushPendingColorBake(
-                profile,
-                out message);
+            // Swirls no longer bake per-color textures; their tint is applied at runtime.
+            message = string.Empty;
+            return true;
         }
 
         public static void CancelPending(
@@ -1526,7 +1526,6 @@ namespace ExpandNullforge.EditorTools
                 NormalizeAssetPath(AssetDatabase.GetAssetPath(profile)));
             if (string.IsNullOrEmpty(profileGuid))
             {
-                DimensionPortalSwirlArtworkEditorUtility.CancelPendingColorBake(profile);
                 return;
             }
 
@@ -1545,7 +1544,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             RemoveUpdateHookIfIdle();
-            DimensionPortalSwirlArtworkEditorUtility.CancelPendingColorBake(profile);
         }
 
         public static void CancelPending(
@@ -2439,10 +2437,17 @@ namespace ExpandNullforge.EditorTools
                 return true;
             }
 
-            return layer == DimensionPortalArtworkLayer.Center &&
-                   candidateWidth == frameCount *
-                       DimensionPortalVisualContract.CanonicalFramePixels &&
-                   candidateHeight == DimensionPortalVisualContract.CanonicalFramePixels;
+            // Beyond the exact vanilla-native size, allow any evenly-framed custom sheet whose
+            // frames fit within the 48x48 portal canvas. Creators can make an overlay larger,
+            // smaller, or differently proportioned than vanilla as long as it stays inside the
+            // artboard; the Studio and generated portal clip anything beyond it.
+            int cap = DimensionPortalVisualContract.CanonicalFramePixels;
+            return frameCount > 0 &&
+                   candidateWidth > 0 &&
+                   candidateHeight > 0 &&
+                   candidateWidth % frameCount == 0 &&
+                   candidateWidth / frameCount <= cap &&
+                   candidateHeight <= cap;
         }
 
         private static bool TextureMatchesSize(Texture2D texture, int width, int height)
@@ -2456,16 +2461,10 @@ namespace ExpandNullforge.EditorTools
             int nativeWidth,
             int nativeHeight)
         {
-            if (layer != DimensionPortalArtworkLayer.Center)
-            {
-                return nativeWidth + " x " + nativeHeight + " pixels";
-            }
-
+            int cap = DimensionPortalVisualContract.CanonicalFramePixels;
             return nativeWidth + " x " + nativeHeight +
-                   " pixels (native 16 x 25 frames) or " +
-                   frameCount * DimensionPortalVisualContract.CanonicalFramePixels + " x " +
-                   DimensionPortalVisualContract.CanonicalFramePixels +
-                   " pixels (full-canvas 48 x 48 frames)";
+                   " pixels (native), or any evenly-framed sheet whose frames fit within " +
+                   cap + " x " + cap + " pixels";
         }
 
         private static bool TryReadSpriteDataTextures(
@@ -3986,39 +3985,6 @@ namespace ExpandNullforge.EditorTools
         internal const string PackageRole = "Swirls";
         internal const int NativeFrameSize = 48;
 
-        private const int ColorBakeSchemaVersion = 2;
-        private const string ColorBakeMetadataPrefix =
-            "ExpandNullforge.PortalSwirlColor:";
-        private const double ColorBakeDebounceSeconds = 0.16d;
-
-        [Serializable]
-        private sealed class ColorBakeMetadata
-        {
-            public int schemaVersion;
-            public string owner;
-            public string sourceColorGuid;
-            public string sourceEmissiveGuid;
-            public string outputColorGuid;
-            public string outputEmissiveGuid;
-            public Color tint;
-            public Color emissiveColor;
-            public float emissionMultiplier;
-            public float runtimeEmissionScalar;
-        }
-
-        private sealed class PendingColorBake
-        {
-            public DimensionTemplateAsset Template;
-            public DimensionPortalVisualProfileAsset Profile;
-            public double DueTime;
-            public long ExpectedAddressLow;
-            public long ExpectedAddressHigh;
-            public int ExpectedColorHash;
-        }
-
-        private static readonly Dictionary<int, PendingColorBake>
-            PendingColorBakes = new Dictionary<int, PendingColorBake>();
-        private static bool colorBakeUpdateHookInstalled;
 
         internal sealed class TextureDependency
         {
@@ -4107,194 +4073,6 @@ namespace ExpandNullforge.EditorTools
                 out message);
         }
 
-        /// <summary>
-        /// Debounces a saved-artwork recolor for the custom Swirls layer. Unlike the
-        /// preview tint, this operation writes package-owned Color and Emissive sheets so
-        /// the SpriteAsset, generated prefab, and Portal Studio all consume the same pixels.
-        /// </summary>
-        internal static bool QueueProfileColorBake(
-            DimensionTemplateAsset template,
-            DimensionPortalVisualProfileAsset profile,
-            bool immediate = false)
-        {
-            if (template == null || profile == null)
-            {
-                return false;
-            }
-
-            // This method runs directly from the color picker hot path. Keep it free of
-            // AssetDatabase/DataBlock resolution: a drag should only replace one small
-            // pending record. The due callback (or Save & Update flush) performs the
-            // package, metadata, SpriteAsset, and texture checks once interaction settles.
-            int profileInstanceId = profile.GetInstanceID();
-
-            if (!profile.CenterSwirlOverrideVanilla)
-            {
-                PendingColorBakes.Remove(profileInstanceId);
-                RemoveColorBakeUpdateHookIfIdle();
-                return false;
-            }
-
-            DataBlockRef<SpriteAsset> reference = profile.CenterSwirlSpriteAsset;
-            long low = reference.hasAddress ? reference.address.lowBits : 0L;
-            long high = reference.hasAddress ? reference.address.highBits : 0L;
-            int colorHash = GetProfileColorHash(profile);
-
-            PendingColorBakes[profileInstanceId] = new PendingColorBake
-            {
-                Template = template,
-                Profile = profile,
-                DueTime = immediate
-                    ? EditorApplication.timeSinceStartup
-                    : EditorApplication.timeSinceStartup + ColorBakeDebounceSeconds,
-                ExpectedAddressLow = low,
-                ExpectedAddressHigh = high,
-                ExpectedColorHash = colorHash
-            };
-            InstallColorBakeUpdateHook();
-            return true;
-        }
-
-        internal static bool FlushPendingColorBake(
-            DimensionPortalVisualProfileAsset profile,
-            out string message)
-        {
-            message = string.Empty;
-            if (profile == null)
-            {
-                return true;
-            }
-
-            int profileInstanceId = profile.GetInstanceID();
-            if (!PendingColorBakes.TryGetValue(
-                    profileInstanceId,
-                    out PendingColorBake pending))
-            {
-                return true;
-            }
-
-            PendingColorBakes.Remove(profileInstanceId);
-            RemoveColorBakeUpdateHookIfIdle();
-            if (!IsPendingColorBakeCurrent(pending))
-            {
-                return true;
-            }
-
-            return BakeProfileColorsImmediately(pending.Template, pending.Profile, out message);
-        }
-
-        internal static void CancelPendingColorBake(
-            DimensionPortalVisualProfileAsset profile)
-        {
-            if (profile == null)
-            {
-                return;
-            }
-
-            PendingColorBakes.Remove(profile.GetInstanceID());
-
-            RemoveColorBakeUpdateHookIfIdle();
-        }
-
-        /// <summary>
-        /// Materializes and recolors the package-owned Swirls SpriteAsset immediately.
-        /// Untinted source sheets are retained as editor-only sidecars so every later
-        /// recolor starts from the authored pixels instead of compounding the previous tint.
-        /// </summary>
-        internal static bool BakeProfileColorsImmediately(
-            DimensionTemplateAsset template,
-            DimensionPortalVisualProfileAsset profile,
-            out string message)
-        {
-            message = string.Empty;
-            if (template == null || profile == null)
-            {
-                message = "The active Dimension Asset and portal profile are required.";
-                return false;
-            }
-
-            // A queued bake can execute after another editor has changed the SDK's
-            // global Scriptable Data selection. Re-establish the owning mod before any
-            // DataBlockRef lookup or clone so artwork can never leak into another mod.
-            if (!DimensionScriptableDataContextUtility.TryScopeToTemplate(
-                    template,
-                    out message))
-            {
-                return false;
-            }
-
-            if (!DimensionPortalPackageEditorUtility.TryGetPackage(
-                    profile,
-                    out _,
-                    out string packageFolder) ||
-                string.IsNullOrEmpty(packageFolder))
-            {
-                message = "Save this portal as a managed profile before recoloring Swirls.";
-                return false;
-            }
-
-            packageFolder = NormalizeAssetPath(packageFolder);
-            string templatePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(template));
-            string modRoot = NormalizeAssetPath(
-                DimensionApiModFolderUtility.ResolveModRootFolderForAssetPath(templatePath));
-            if (string.IsNullOrEmpty(modRoot) ||
-                !AssetPathIsWithin(packageFolder, modRoot))
-            {
-                message =
-                    "The portal profile package does not belong to the selected Dimension Asset's mod.";
-                return false;
-            }
-
-            string expectedFolder = NormalizeAssetPath(
-                packageFolder + "/" + PackageRelativeFolder);
-            if (!DimensionPortalPackageEditorUtility.EnsureFolder(
-                    expectedFolder,
-                    out message) ||
-                !TryResolveManagedAssetForTextureEdit(
-                    template,
-                    profile,
-                    packageFolder,
-                    expectedFolder,
-                    out SpriteAsset managed,
-                    out message))
-            {
-                return false;
-            }
-
-            return BakeManagedProfileColors(
-                profile,
-                managed,
-                packageFolder,
-                expectedFolder,
-                modRoot,
-                out message);
-        }
-
-        /// <summary>
-        /// Returns the neutral runtime multipliers for an asset whose saved texture sheets
-        /// already contain this profile's tint and emissive hue. A mismatch deliberately
-        /// falls back to the legacy runtime multipliers until the pending bake completes.
-        /// </summary>
-        internal static bool TryGetBakedRuntimeColors(
-            DimensionPortalVisualProfileAsset profile,
-            SpriteAsset asset,
-            out Color spriteTint,
-            out Color emissiveColor)
-        {
-            spriteTint = Color.white;
-            emissiveColor = Color.white;
-            if (profile == null || asset == null ||
-                !TryReadColorBakeMetadata(asset, out ColorBakeMetadata metadata) ||
-                !MetadataMatchesProfile(metadata, profile) ||
-                !MetadataMatchesCurrentTextures(metadata, asset))
-            {
-                return false;
-            }
-
-            float scalar = Mathf.Max(1f, metadata.runtimeEmissionScalar);
-            emissiveColor = new Color(scalar, scalar, scalar, 1f);
-            return true;
-        }
 
         /// <summary>
         /// Returns the visible artwork selector to the framework starter and selects exact
@@ -4446,8 +4224,29 @@ namespace ExpandNullforge.EditorTools
                 return false;
             }
 
-            int requiredWidth = current.FrameCount * NativeFrameSize;
-            int requiredHeight = NativeFrameSize;
+            if (colorTexture == null ||
+                current.FrameCount <= 0 ||
+                colorTexture.width <= 0 ||
+                colorTexture.width % current.FrameCount != 0)
+            {
+                message = "A Swirls color sheet that divides evenly into its " +
+                          current.FrameCount + " animation frames is required.";
+                return false;
+            }
+
+            int selectedFrameWidth = colorTexture.width / current.FrameCount;
+            if (selectedFrameWidth > NativeFrameSize ||
+                colorTexture.height > NativeFrameSize)
+            {
+                message = "Swirls frames must fit within the " + NativeFrameSize + " x " +
+                          NativeFrameSize + " portal canvas. Found " + selectedFrameWidth +
+                          " x " + colorTexture.height + ".";
+                return false;
+            }
+
+            // The emissive and normal sheets must match the chosen color sheet's dimensions.
+            int requiredWidth = colorTexture.width;
+            int requiredHeight = colorTexture.height;
             if (!TryValidateSelectedTexture(
                     colorTexture,
                     "Swirls color sheet",
@@ -4473,67 +4272,13 @@ namespace ExpandNullforge.EditorTools
                 return false;
             }
 
-            // The visible texture fields point at the baked outputs after a palette
-            // change. If the author changes only one channel, treat unchanged output
-            // references as aliases for their preserved untinted sources. Otherwise the
-            // next recolor would bake red-on-red (or red-to-green into black) and destroy
-            // the non-destructive editing contract.
+            // The swirl is a plain tinted SpriteObject at runtime, so the package-owned
+            // sheets stay pristine: the selected artwork is deep-copied verbatim and the
+            // creator's CenterParticleTint/CenterSwirlEmissiveColor are applied by the game
+            // shader at draw time. No per-color pixel bake or untinted sidecar is written.
             string managedPath = NormalizeAssetPath(AssetDatabase.GetAssetPath(managed));
-            GetColorBakePaths(
-                managedPath,
-                expectedFolder,
-                out string sourceColorPath,
-                out string sourceEmissivePath,
-                out string colorOutputPath,
-                out string emissiveOutputPath);
-            if (!TryResolvePreservedColorSources(
-                    managed,
-                    current,
-                    sourceColorPath,
-                    sourceEmissivePath,
-                    colorOutputPath,
-                    emissiveOutputPath,
-                    out Texture2D preservedColorSource,
-                    out Texture2D preservedEmissiveSource,
-                    out message))
-            {
-                return false;
-            }
-
             Texture2D colorSource = colorTexture;
             Texture2D emissiveSource = emissiveTexture;
-            if (TextureAssetsEqual(colorTexture, current.ColorTexture))
-            {
-                if (preservedColorSource != null)
-                {
-                    colorSource = preservedColorSource;
-                }
-                else if (TextureAssetIsAtPath(current.ColorTexture, colorOutputPath))
-                {
-                    message =
-                        "The preserved untinted Swirls Color source is missing. " +
-                        "Re-select the intended Color texture before editing another channel.";
-                    return false;
-                }
-            }
-
-            if (current.EmissiveTexture != null &&
-                TextureAssetsEqual(emissiveTexture, current.EmissiveTexture))
-            {
-                if (preservedEmissiveSource != null)
-                {
-                    emissiveSource = preservedEmissiveSource;
-                }
-                else if (TextureAssetIsAtPath(
-                             current.EmissiveTexture,
-                             emissiveOutputPath))
-                {
-                    message =
-                        "The preserved untinted Swirls Emissive source is missing. " +
-                        "Re-select the intended Emissive texture before editing another channel.";
-                    return false;
-                }
-            }
 
             SpriteAsset snapshot = UnityEngine.Object.Instantiate(managed);
             DimensionPortalArtworkEditorUtility.ArtworkFileTransaction transaction =
@@ -4583,26 +4328,6 @@ namespace ExpandNullforge.EditorTools
                     throw new InvalidOperationException(message);
                 }
 
-                // Refresh the deterministic pristine sidecars before clearing importer
-                // metadata. If Unity reloads between this edit and the queued recolor,
-                // Save & Update can still recover the new authored source rather than
-                // treating the prior generated output as source art.
-                EnsureColorSourceCopy(
-                    managedColor,
-                    sourceColorPath,
-                    requiredWidth,
-                    requiredHeight,
-                    transaction);
-                if (managedEmissive != null)
-                {
-                    EnsureColorSourceCopy(
-                        managedEmissive,
-                        sourceEmissivePath,
-                        requiredWidth,
-                        requiredHeight,
-                        transaction);
-                }
-
                 SerializedObject serializedManaged = new SerializedObject(managed);
                 serializedManaged.Update();
                 if (!TryGetAnimationZeroSpriteData(
@@ -4643,11 +4368,12 @@ namespace ExpandNullforge.EditorTools
                 EditorUtility.SetDirty(managed);
                 AssetDatabase.SaveAssetIfDirty(managed);
                 EnsureManifestContains(modRoot, managedPath);
-                ClearColorBakeMetadata(managed);
                 AssetDatabase.SaveAssets();
                 ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
                 transaction.Commit();
-                QueueProfileColorBake(template, profile, true);
+                // The shape changed, so any previously preserved untinted source is stale.
+                // Drop it so the next color bake recaptures from the new pristine artwork.
+                DeleteSwirlSourceSheet(managedPath, expectedFolder);
                 message = "Updated animation zero on the package-owned Swirls SpriteAsset.";
                 return true;
             }
@@ -4669,29 +4395,118 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static void InstallColorBakeUpdateHook()
+        // ------------------------------------------------------------------
+        // Profile-owned Swirls color bake.
+        //
+        // Mirrors the palette layers: a customized swirl becomes a profile-owned
+        // SpriteAsset whose pixels carry the chosen color, so it is saved and inspectable
+        // like every other layer instead of pointing at the shared framework starter.
+        // The bake is deliberately sidecar-light because the shipped starter sheet is
+        // neutral white: a plain per-pixel multiply by the tint reproduces any hue, so a
+        // red tint no longer collapses a blue source to black. One immutable untinted
+        // source sheet ("_Source_Anim0.png") is preserved beside the generated output so
+        // repeated recolors always start from the pristine shape, never a prior tint.
+        // ------------------------------------------------------------------
+        private const string SwirlSourceSuffix = "_Source_Anim0.png";
+        private const string SwirlOutputSuffix = "_Anim0.png";
+        private const double SwirlBakeDebounceSeconds = 0.28d;
+
+        private sealed class PendingSwirlBake
         {
-            if (colorBakeUpdateHookInstalled)
+            public DimensionTemplateAsset Template;
+            public DimensionPortalVisualProfileAsset Profile;
+            public double DueTime;
+        }
+
+        private static readonly Dictionary<int, PendingSwirlBake> PendingSwirlBakes =
+            new Dictionary<int, PendingSwirlBake>();
+        private static bool swirlBakeHookInstalled;
+
+        /// <summary>
+        /// Debounces a profile-owned Swirls recolor. Called from the color-picker hot path,
+        /// so it only replaces one small pending record; the due callback (or an explicit
+        /// Save &amp; Update flush) performs the package/asset/texture work once interaction
+        /// settles. Vanilla mode clears any pending bake.
+        /// </summary>
+        internal static void QueueSwirlBake(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile,
+            bool immediate = false)
+        {
+            if (template == null || profile == null)
             {
                 return;
             }
 
-            EditorApplication.update += ProcessPendingColorBakes;
-            colorBakeUpdateHookInstalled = true;
+            int profileInstanceId = profile.GetInstanceID();
+            if (!profile.CenterSwirlOverrideVanilla)
+            {
+                PendingSwirlBakes.Remove(profileInstanceId);
+                RemoveSwirlBakeHookIfIdle();
+                return;
+            }
+
+            PendingSwirlBakes[profileInstanceId] = new PendingSwirlBake
+            {
+                Template = template,
+                Profile = profile,
+                DueTime = immediate
+                    ? EditorApplication.timeSinceStartup
+                    : EditorApplication.timeSinceStartup + SwirlBakeDebounceSeconds
+            };
+            InstallSwirlBakeHook();
         }
 
-        private static void RemoveColorBakeUpdateHookIfIdle()
+        /// <summary>
+        /// Synchronously runs any pending Swirls bake for this profile. Used by Save &amp;
+        /// Update so the profile-owned artwork is always current before the package is saved.
+        /// </summary>
+        internal static bool FlushSwirlBake(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile,
+            out string message)
         {
-            if (!colorBakeUpdateHookInstalled || PendingColorBakes.Count > 0)
+            message = string.Empty;
+            if (template == null || profile == null)
+            {
+                return true;
+            }
+
+            PendingSwirlBakes.Remove(profile.GetInstanceID());
+            RemoveSwirlBakeHookIfIdle();
+            return BakeSwirlProfileAsset(template, profile, out message);
+        }
+
+        internal static void CancelSwirlBake(DimensionPortalVisualProfileAsset profile)
+        {
+            if (profile == null)
             {
                 return;
             }
 
-            EditorApplication.update -= ProcessPendingColorBakes;
-            colorBakeUpdateHookInstalled = false;
+            PendingSwirlBakes.Remove(profile.GetInstanceID());
+            RemoveSwirlBakeHookIfIdle();
         }
 
-        private static void ProcessPendingColorBakes()
+        private static void InstallSwirlBakeHook()
+        {
+            if (!swirlBakeHookInstalled)
+            {
+                EditorApplication.update += ProcessPendingSwirlBakes;
+                swirlBakeHookInstalled = true;
+            }
+        }
+
+        private static void RemoveSwirlBakeHookIfIdle()
+        {
+            if (swirlBakeHookInstalled && PendingSwirlBakes.Count == 0)
+            {
+                EditorApplication.update -= ProcessPendingSwirlBakes;
+                swirlBakeHookInstalled = false;
+            }
+        }
+
+        private static void ProcessPendingSwirlBakes()
         {
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
             {
@@ -4700,7 +4515,7 @@ namespace ExpandNullforge.EditorTools
 
             double now = EditorApplication.timeSinceStartup;
             List<int> ready = new List<int>();
-            foreach (KeyValuePair<int, PendingColorBake> pair in PendingColorBakes)
+            foreach (KeyValuePair<int, PendingSwirlBake> pair in PendingSwirlBakes)
             {
                 if (pair.Value == null || pair.Value.DueTime <= now)
                 {
@@ -4710,58 +4525,104 @@ namespace ExpandNullforge.EditorTools
 
             for (int i = 0; i < ready.Count; i++)
             {
-                if (!PendingColorBakes.TryGetValue(
-                        ready[i],
-                        out PendingColorBake pending))
+                if (!PendingSwirlBakes.TryGetValue(ready[i], out PendingSwirlBake pending))
                 {
                     continue;
                 }
 
-                PendingColorBakes.Remove(ready[i]);
-                if (!IsPendingColorBakeCurrent(pending))
+                PendingSwirlBakes.Remove(ready[i]);
+                if (pending == null || pending.Template == null || pending.Profile == null)
                 {
                     continue;
                 }
 
-                if (!BakeProfileColorsImmediately(
-                        pending.Template,
-                        pending.Profile,
-                        out string error))
+                if (!BakeSwirlProfileAsset(pending.Template, pending.Profile, out string error))
                 {
                     Debug.LogError(
-                        "Dimensions API could not update custom Swirls colors: " + error,
+                        "Dimensions API could not update the custom Swirls colors: " + error,
                         pending.Profile);
                 }
             }
 
-            RemoveColorBakeUpdateHookIfIdle();
+            RemoveSwirlBakeHookIfIdle();
         }
 
-        private static bool IsPendingColorBakeCurrent(PendingColorBake pending)
+        private static void DeleteSwirlSourceSheet(string managedPath, string expectedFolder)
         {
-            if (pending == null || pending.Template == null || pending.Profile == null ||
-                GetProfileColorHash(pending.Profile) != pending.ExpectedColorHash)
+            if (string.IsNullOrEmpty(managedPath) || string.IsNullOrEmpty(expectedFolder))
+            {
+                return;
+            }
+
+            string stem = Path.GetFileNameWithoutExtension(managedPath);
+            string sourcePath =
+                NormalizeAssetPath(expectedFolder) + "/" + stem + SwirlSourceSuffix;
+            if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(sourcePath)))
+            {
+                AssetDatabase.DeleteAsset(sourcePath);
+            }
+        }
+
+        internal static bool BakeSwirlProfileAsset(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile,
+            out string message)
+        {
+            message = string.Empty;
+            if (template == null || profile == null)
+            {
+                message = "The active Dimension Asset and portal profile are required.";
+                return false;
+            }
+
+            if (!profile.CenterSwirlOverrideVanilla)
+            {
+                // The exact vanilla particles are in use; there is no custom sheet to bake.
+                return true;
+            }
+
+            if (!DimensionScriptableDataContextUtility.TryScopeToTemplate(
+                    template,
+                    out message))
             {
                 return false;
             }
 
-            DataBlockRef<SpriteAsset> reference = pending.Profile.CenterSwirlSpriteAsset;
-            long low = reference.hasAddress ? reference.address.lowBits : 0L;
-            long high = reference.hasAddress ? reference.address.highBits : 0L;
-            return low == pending.ExpectedAddressLow &&
-                   high == pending.ExpectedAddressHigh;
-        }
+            if (!DimensionPortalPackageEditorUtility.TryGetPackage(
+                    profile,
+                    out _,
+                    out string packageFolder) ||
+                string.IsNullOrEmpty(packageFolder))
+            {
+                message = "Save this portal as a managed profile before customizing Swirls.";
+                return false;
+            }
 
-        private static bool BakeManagedProfileColors(
-            DimensionPortalVisualProfileAsset profile,
-            SpriteAsset managed,
-            string packageFolder,
-            string expectedFolder,
-            string modRoot,
-            out string message)
-        {
-            message = string.Empty;
-            if (!TryBuildAnimationZeroTextureSlot(
+            packageFolder = NormalizeAssetPath(packageFolder);
+            string templatePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(template));
+            string modRoot = NormalizeAssetPath(
+                DimensionApiModFolderUtility.ResolveModRootFolderForAssetPath(templatePath));
+            if (string.IsNullOrEmpty(modRoot) ||
+                !AssetPathIsWithin(packageFolder, modRoot))
+            {
+                message =
+                    "The portal profile package does not belong to the selected Dimension Asset's mod.";
+                return false;
+            }
+
+            string expectedFolder = NormalizeAssetPath(
+                packageFolder + "/" + PackageRelativeFolder);
+            if (!DimensionPortalPackageEditorUtility.EnsureFolder(
+                    expectedFolder,
+                    out message) ||
+                !TryResolveManagedAssetForTextureEdit(
+                    template,
+                    profile,
+                    packageFolder,
+                    expectedFolder,
+                    out SpriteAsset managed,
+                    out message) ||
+                !TryBuildAnimationZeroTextureSlot(
                     managed,
                     packageFolder,
                     out AnimationZeroTextureSlot current,
@@ -4771,28 +4632,10 @@ namespace ExpandNullforge.EditorTools
             }
 
             string managedPath = NormalizeAssetPath(AssetDatabase.GetAssetPath(managed));
-            if (string.IsNullOrEmpty(managedPath) ||
-                !AssetPathIsWithin(managedPath, expectedFolder))
-            {
-                message =
-                    "Swirls colors may only be baked into this portal's package-owned SpriteAsset.";
-                return false;
-            }
+            string stem = Path.GetFileNameWithoutExtension(managedPath);
+            string sourcePath = expectedFolder + "/" + stem + SwirlSourceSuffix;
+            string outputPath = expectedFolder + "/" + stem + SwirlOutputSuffix;
 
-            // Save/Profile operations can reach this method more than once during a
-            // single editor interaction (materialize, then flush). Avoid rewriting and
-            // reimporting identical PNGs when the managed asset already contains the
-            // current palette.
-            if (IsColorBakeCurrent(profile, managed))
-            {
-                message = "The package-owned Swirls artwork already matches the saved profile colors.";
-                return true;
-            }
-
-            AssetImporter managedImporter = AssetImporter.GetAtPath(managedPath);
-            string previousUserData = managedImporter == null
-                ? string.Empty
-                : managedImporter.userData;
             SpriteAsset snapshot = UnityEngine.Object.Instantiate(managed);
             DimensionPortalArtworkEditorUtility.ArtworkFileTransaction transaction =
                 new DimensionPortalArtworkEditorUtility.ArtworkFileTransaction(
@@ -4800,99 +4643,19 @@ namespace ExpandNullforge.EditorTools
                     false);
             try
             {
-                GetColorBakePaths(
-                    managedPath,
-                    expectedFolder,
-                    out string sourceColorPath,
-                    out string sourceEmissivePath,
-                    out string colorOutputPath,
-                    out string emissiveOutputPath);
-                if (!TryResolvePreservedColorSources(
-                        managed,
-                        current,
-                        sourceColorPath,
-                        sourceEmissivePath,
-                        colorOutputPath,
-                        emissiveOutputPath,
-                        out Texture2D sourceColor,
-                        out Texture2D sourceEmissive,
-                        out message))
-                {
-                    throw new InvalidOperationException(message);
-                }
-
-                if (sourceColor == null)
-                {
-                    if (TextureAssetIsAtPath(current.ColorTexture, colorOutputPath))
-                    {
-                        throw new InvalidOperationException(
-                            "The untinted Swirls Color sidecar is missing, and the active " +
-                            "Color texture is the generated bake output. Re-select the " +
-                            "intended Color texture before recoloring so an already-tinted " +
-                            "sheet is never used as a source.");
-                    }
-
-                    sourceColor = current.ColorTexture;
-                }
-
-                if (current.EmissiveTexture != null && sourceEmissive == null)
-                {
-                    if (TextureAssetIsAtPath(
-                            current.EmissiveTexture,
-                            emissiveOutputPath))
-                    {
-                        throw new InvalidOperationException(
-                            "The untinted Swirls Emissive sidecar is missing, and the active " +
-                            "Emissive texture is the generated bake output. Re-select the " +
-                            "intended Emissive texture before recoloring so an already-tinted " +
-                            "sheet is never used as a source.");
-                    }
-
-                    sourceEmissive = current.EmissiveTexture;
-                }
-
-                // Always converge on deterministic package-owned sidecars. Importer
-                // metadata accelerates the common path, but the sidecars remain the
-                // durable source of truth if a domain reload or manual importer edit
-                // clears that metadata before Save & Update.
-                sourceColor = EnsureColorSourceCopy(
-                    sourceColor,
-                    sourceColorPath,
-                    current.SheetWidth,
-                    current.SheetHeight,
+                Texture2D source = EnsureSwirlSourceSheet(
+                    current,
+                    sourcePath,
+                    outputPath,
                     transaction);
-                sourceEmissive = sourceEmissive == null
-                    ? null
-                    : EnsureColorSourceCopy(
-                        sourceEmissive,
-                        sourceEmissivePath,
-                        current.SheetWidth,
-                        current.SheetHeight,
-                        transaction);
-
-                Texture2D bakedColor = BakeSwirlColorTexture(
-                    sourceColor,
-                    colorOutputPath,
+                Texture2D baked = BakeSwirlColorTexture(
+                    source,
+                    outputPath,
                     profile.CenterParticleTint,
                     true,
                     current.SheetWidth,
                     current.SheetHeight,
                     transaction);
-
-                GetEmissionBakeFactor(
-                    profile,
-                    out Color emissionFactor,
-                    out float runtimeEmissionScalar);
-                Texture2D bakedEmissive = sourceEmissive == null
-                    ? null
-                    : BakeSwirlColorTexture(
-                        sourceEmissive,
-                        emissiveOutputPath,
-                        emissionFactor,
-                        false,
-                        current.SheetWidth,
-                        current.SheetHeight,
-                        transaction);
 
                 SerializedObject serializedManaged = new SerializedObject(managed);
                 serializedManaged.Update();
@@ -4905,40 +4668,24 @@ namespace ExpandNullforge.EditorTools
                     throw new InvalidOperationException(message);
                 }
 
-                SerializedProperty colorProperty = spriteData.FindPropertyRelative("texture");
-                SerializedProperty emissiveProperty =
-                    spriteData.FindPropertyRelative("emissiveTexture");
-                if (colorProperty == null || emissiveProperty == null)
-                {
-                    throw new InvalidOperationException(
-                        "The managed Swirls SpriteAsset does not expose its Color/Emissive slots.");
-                }
-
-                colorProperty.objectReferenceValue = bakedColor;
-                emissiveProperty.objectReferenceValue = bakedEmissive;
+                // Color now lives in the pixels; the runtime draws the swirl with a neutral
+                // material tint and re-applies only the emissive glow/intensity, so the
+                // emissive slot shares the baked color sheet.
+                spriteData.FindPropertyRelative("texture").objectReferenceValue = baked;
+                spriteData.FindPropertyRelative("emissiveTexture").objectReferenceValue = baked;
                 serializedManaged.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(managed);
                 AssetDatabase.SaveAssetIfDirty(managed);
                 EnsureManifestContains(modRoot, managedPath);
-                WriteColorBakeMetadata(
-                    managed,
-                    sourceColor,
-                    sourceEmissive,
-                    bakedColor,
-                    bakedEmissive,
-                    profile,
-                    runtimeEmissionScalar);
                 AssetDatabase.SaveAssets();
                 ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
                 transaction.Commit();
-                message =
-                    "Updated the package-owned Swirls Color and Emissive sheets from the saved profile colors.";
+                message = "Updated the profile-owned Swirls artwork from the saved colors.";
                 return true;
             }
             catch (Exception exception)
             {
                 string rollbackError = transaction.Rollback(managed, snapshot);
-                RestoreImporterUserData(managedPath, previousUserData);
                 message = "Could not bake the custom Swirls colors. " + exception.Message;
                 if (!string.IsNullOrEmpty(rollbackError))
                 {
@@ -4954,228 +4701,63 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static Texture2D EnsureColorSourceCopy(
-            Texture2D source,
-            string targetPath,
-            int width,
-            int height,
+        /// <summary>
+        /// Returns the immutable untinted source sheet, materializing it once from the
+        /// managed asset's current pristine artwork. Once a bake has run, the active color
+        /// texture is the generated output, so the preserved source stays authoritative and
+        /// recolors never compound. Selecting new custom artwork clears the source so it is
+        /// recaptured from the new shape.
+        /// </summary>
+        private static Texture2D EnsureSwirlSourceSheet(
+            AnimationZeroTextureSlot current,
+            string sourcePath,
+            string outputPath,
             DimensionPortalArtworkEditorUtility.ArtworkFileTransaction transaction)
         {
-            string sourcePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(source));
-            string absoluteSource =
-                DimensionPortalArtworkEditorUtility.AssetPathToAbsolutePath(sourcePath);
-            if (source == null || transaction == null ||
-                string.IsNullOrEmpty(absoluteSource) ||
-                !sourcePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                !File.Exists(absoluteSource))
+            string normalizedSource = NormalizeAssetPath(sourcePath);
+            Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(normalizedSource);
+            if (existing != null &&
+                existing.width == current.SheetWidth &&
+                existing.height == current.SheetHeight)
+            {
+                return existing;
+            }
+
+            Texture2D pristine = current.ColorTexture;
+            string pristinePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(pristine));
+            string pristineAbsolute =
+                DimensionPortalArtworkEditorUtility.AssetPathToAbsolutePath(pristinePath);
+            if (pristine == null ||
+                string.Equals(
+                    pristinePath,
+                    NormalizeAssetPath(outputPath),
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrEmpty(pristineAbsolute) ||
+                !pristinePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                !File.Exists(pristineAbsolute))
             {
                 throw new InvalidOperationException(
-                    "Custom Swirls source textures must be saved PNG files inside Assets.");
+                    "The untinted Swirls source sheet is missing. Re-select the intended " +
+                    "Swirls artwork before recoloring so an already-tinted sheet is never " +
+                    "used as the source.");
             }
 
-            string normalizedTarget = NormalizeAssetPath(targetPath);
-            if (string.Equals(
-                    sourcePath,
-                    normalizedTarget,
-                    StringComparison.OrdinalIgnoreCase) &&
-                source.width == width && source.height == height)
-            {
-                // The deterministic sidecar is already the immutable input. Reading it
-                // for another palette bake must not trigger a redundant write/import.
-                return source;
-            }
-
-            transaction.ReplaceAssetBytes(normalizedTarget, File.ReadAllBytes(absoluteSource));
+            transaction.ReplaceAssetBytes(
+                normalizedSource,
+                File.ReadAllBytes(pristineAbsolute));
             DimensionPortalArtworkEditorUtility.ConfigureSpriteTextureImporter(
-                normalizedTarget,
-                width,
-                height);
-            Texture2D copied = AssetDatabase.LoadAssetAtPath<Texture2D>(normalizedTarget);
-            if (copied == null || copied.width != width || copied.height != height)
+                normalizedSource,
+                current.SheetWidth,
+                current.SheetHeight);
+            Texture2D created = AssetDatabase.LoadAssetAtPath<Texture2D>(normalizedSource);
+            if (created == null)
             {
                 throw new InvalidOperationException(
                     "Could not preserve the untinted Swirls source sheet at " +
-                    normalizedTarget + ".");
+                    normalizedSource + ".");
             }
 
-            return copied;
-        }
-
-        private static void GetColorBakePaths(
-            string managedPath,
-            string expectedFolder,
-            out string sourceColorPath,
-            out string sourceEmissivePath,
-            out string colorOutputPath,
-            out string emissiveOutputPath)
-        {
-            string stem = Path.GetFileNameWithoutExtension(managedPath);
-            string folder = NormalizeAssetPath(expectedFolder);
-            sourceColorPath = folder + "/" + stem + "_Source_Anim0.png";
-            sourceEmissivePath =
-                folder + "/" + stem + "_Source_Anim0_Emissive.png";
-            colorOutputPath = folder + "/" + stem + "_Anim0.png";
-            emissiveOutputPath = folder + "/" + stem + "_Anim0_Emissive.png";
-        }
-
-        /// <summary>
-        /// Resolves the immutable inputs for a Swirls color bake. Importer metadata is
-        /// useful while intact, but deterministic package sidecars are deliberately the
-        /// fallback authority. Generated output paths are never accepted as source art.
-        /// </summary>
-        private static bool TryResolvePreservedColorSources(
-            SpriteAsset managed,
-            AnimationZeroTextureSlot current,
-            string sourceColorPath,
-            string sourceEmissivePath,
-            string colorOutputPath,
-            string emissiveOutputPath,
-            out Texture2D sourceColor,
-            out Texture2D sourceEmissive,
-            out string message)
-        {
-            sourceColor = null;
-            sourceEmissive = null;
-            message = string.Empty;
-            if (managed == null || current == null)
-            {
-                message = "The managed Swirls animation-zero texture slot is missing.";
-                return false;
-            }
-
-            bool hasMetadata = TryReadColorBakeMetadata(
-                managed,
-                out ColorBakeMetadata metadata);
-            if (hasMetadata)
-            {
-                Texture2D metadataColor = ResolveTextureGuid(metadata.sourceColorGuid);
-                if (IsUsableColorSource(
-                        metadataColor,
-                        current.SheetWidth,
-                        current.SheetHeight) &&
-                    !TextureAssetIsAtPath(metadataColor, colorOutputPath))
-                {
-                    sourceColor = metadataColor;
-                }
-
-                Texture2D metadataEmissive = ResolveTextureGuid(
-                    metadata.sourceEmissiveGuid);
-                if (IsUsableColorSource(
-                        metadataEmissive,
-                        current.SheetWidth,
-                        current.SheetHeight) &&
-                    !TextureAssetIsAtPath(metadataEmissive, emissiveOutputPath))
-                {
-                    sourceEmissive = metadataEmissive;
-                }
-            }
-
-            if (!TryLoadPreservedSourceSidecar(
-                    sourceColorPath,
-                    current.SheetWidth,
-                    current.SheetHeight,
-                    "Color",
-                    out Texture2D sidecarColor,
-                    out message))
-            {
-                return false;
-            }
-
-            Texture2D sidecarEmissive = null;
-            if (current.EmissiveTexture != null &&
-                !TryLoadPreservedSourceSidecar(
-                    sourceEmissivePath,
-                    current.SheetWidth,
-                    current.SheetHeight,
-                    "Emissive",
-                    out sidecarEmissive,
-                    out message))
-            {
-                return false;
-            }
-
-            // When metadata is absent or unusable, prefer the deterministic sidecar
-            // rather than the active SpriteAsset slot, which may already be a bake.
-            if (sourceColor == null)
-            {
-                sourceColor = sidecarColor;
-            }
-
-            if (current.EmissiveTexture != null && sourceEmissive == null)
-            {
-                sourceEmissive = sidecarEmissive;
-            }
-
-            return true;
-        }
-
-        private static bool TryLoadPreservedSourceSidecar(
-            string assetPath,
-            int requiredWidth,
-            int requiredHeight,
-            string channel,
-            out Texture2D texture,
-            out string message)
-        {
-            texture = null;
-            message = string.Empty;
-            string normalized = NormalizeAssetPath(assetPath);
-            string absolute =
-                DimensionPortalArtworkEditorUtility.AssetPathToAbsolutePath(normalized);
-            bool fileExists = !string.IsNullOrEmpty(absolute) && File.Exists(absolute);
-            bool assetExists = !string.IsNullOrEmpty(
-                AssetDatabase.AssetPathToGUID(normalized));
-            if (!fileExists && !assetExists)
-            {
-                return true;
-            }
-
-            texture = AssetDatabase.LoadAssetAtPath<Texture2D>(normalized);
-            if (!IsUsableColorSource(texture, requiredWidth, requiredHeight) ||
-                !fileExists)
-            {
-                texture = null;
-                message = "The preserved untinted Swirls " + channel +
-                          " sidecar is invalid at " + normalized + ".";
-                return false;
-            }
-
-            return true;
-        }
-
-        private static bool IsUsableColorSource(
-            Texture2D texture,
-            int requiredWidth,
-            int requiredHeight)
-        {
-            if (texture == null || texture.width != requiredWidth ||
-                texture.height != requiredHeight)
-            {
-                return false;
-            }
-
-            string path = NormalizeAssetPath(AssetDatabase.GetAssetPath(texture));
-            string absolute =
-                DimensionPortalArtworkEditorUtility.AssetPathToAbsolutePath(path);
-            return !string.IsNullOrEmpty(path) &&
-                   path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) &&
-                   !string.IsNullOrEmpty(absolute) &&
-                   File.Exists(absolute);
-        }
-
-        private static bool TextureAssetIsAtPath(
-            Texture2D texture,
-            string assetPath)
-        {
-            if (texture == null || string.IsNullOrEmpty(assetPath))
-            {
-                return false;
-            }
-
-            return string.Equals(
-                NormalizeAssetPath(AssetDatabase.GetAssetPath(texture)),
-                NormalizeAssetPath(assetPath),
-                StringComparison.OrdinalIgnoreCase);
+            return created;
         }
 
         private static Texture2D BakeSwirlColorTexture(
@@ -5234,9 +4816,11 @@ namespace ExpandNullforge.EditorTools
                     false);
                 output.SetPixels32(outputPixels);
                 output.Apply(false, false);
-                transaction.ReplaceAssetBytes(targetPath, output.EncodeToPNG());
+                transaction.ReplaceAssetBytes(
+                    NormalizeAssetPath(targetPath),
+                    output.EncodeToPNG());
                 DimensionPortalArtworkEditorUtility.ConfigureSpriteTextureImporter(
-                    targetPath,
+                    NormalizeAssetPath(targetPath),
                     requiredWidth,
                     requiredHeight);
             }
@@ -5249,7 +4833,8 @@ namespace ExpandNullforge.EditorTools
                 }
             }
 
-            Texture2D baked = AssetDatabase.LoadAssetAtPath<Texture2D>(targetPath);
+            Texture2D baked = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                NormalizeAssetPath(targetPath));
             if (baked == null)
             {
                 throw new InvalidOperationException(
@@ -5259,250 +4844,6 @@ namespace ExpandNullforge.EditorTools
             return baked;
         }
 
-        private static void GetEmissionBakeFactor(
-            DimensionPortalVisualProfileAsset profile,
-            out Color factor,
-            out float runtimeScalar)
-        {
-            Color tint = profile == null ? Color.white : profile.CenterParticleTint;
-            Color glow = profile == null ? Color.white : profile.CenterSwirlEmissiveColor;
-            float multiplier = profile == null
-                ? 1f
-                : Mathf.Max(0f, profile.CenterParticleEmissionMultiplier);
-            Color effective = new Color(
-                Mathf.Max(0f, tint.r * glow.r * multiplier),
-                Mathf.Max(0f, tint.g * glow.g * multiplier),
-                Mathf.Max(0f, tint.b * glow.b * multiplier),
-                1f);
-            runtimeScalar = Mathf.Max(1f, effective.r, effective.g, effective.b);
-            factor = new Color(
-                effective.r / runtimeScalar,
-                effective.g / runtimeScalar,
-                effective.b / runtimeScalar,
-                1f);
-        }
-
-        private static void WriteColorBakeMetadata(
-            SpriteAsset asset,
-            Texture2D sourceColor,
-            Texture2D sourceEmissive,
-            Texture2D outputColor,
-            Texture2D outputEmissive,
-            DimensionPortalVisualProfileAsset profile,
-            float runtimeEmissionScalar)
-        {
-            string assetPath = NormalizeAssetPath(AssetDatabase.GetAssetPath(asset));
-            AssetImporter importer = AssetImporter.GetAtPath(assetPath);
-            if (importer == null)
-            {
-                throw new InvalidOperationException(
-                    "Could not attach saved-color metadata to the Swirls SpriteAsset.");
-            }
-
-            ColorBakeMetadata metadata = new ColorBakeMetadata
-            {
-                schemaVersion = ColorBakeSchemaVersion,
-                owner = "Dimensions API",
-                sourceColorGuid = GetTextureGuid(sourceColor),
-                sourceEmissiveGuid = GetTextureGuid(sourceEmissive),
-                outputColorGuid = GetTextureGuid(outputColor),
-                outputEmissiveGuid = GetTextureGuid(outputEmissive),
-                tint = profile.CenterParticleTint,
-                emissiveColor = profile.CenterSwirlEmissiveColor,
-                emissionMultiplier = profile.CenterParticleEmissionMultiplier,
-                runtimeEmissionScalar = runtimeEmissionScalar
-            };
-            importer.userData = ColorBakeMetadataPrefix + JsonUtility.ToJson(metadata);
-            importer.SaveAndReimport();
-        }
-
-        private static bool TryReadColorBakeMetadata(
-            SpriteAsset asset,
-            out ColorBakeMetadata metadata)
-        {
-            metadata = null;
-            string assetPath = asset == null
-                ? string.Empty
-                : NormalizeAssetPath(AssetDatabase.GetAssetPath(asset));
-            AssetImporter importer = string.IsNullOrEmpty(assetPath)
-                ? null
-                : AssetImporter.GetAtPath(assetPath);
-            string userData = importer == null ? string.Empty : importer.userData;
-            if (string.IsNullOrEmpty(userData) ||
-                !userData.StartsWith(ColorBakeMetadataPrefix, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            try
-            {
-                metadata = JsonUtility.FromJson<ColorBakeMetadata>(
-                    userData.Substring(ColorBakeMetadataPrefix.Length));
-                return metadata != null &&
-                       metadata.schemaVersion >= 1 &&
-                       metadata.schemaVersion <= ColorBakeSchemaVersion &&
-                       !string.IsNullOrEmpty(metadata.sourceColorGuid);
-            }
-            catch
-            {
-                metadata = null;
-                return false;
-            }
-        }
-
-        private static bool MetadataMatchesProfile(
-            ColorBakeMetadata metadata,
-            DimensionPortalVisualProfileAsset profile)
-        {
-            return metadata != null && profile != null &&
-                   ColorsApproximately(metadata.tint, profile.CenterParticleTint) &&
-                   ColorsApproximately(
-                       metadata.emissiveColor,
-                       profile.CenterSwirlEmissiveColor) &&
-                   Mathf.Abs(
-                       metadata.emissionMultiplier -
-                       profile.CenterParticleEmissionMultiplier) <= 0.0001f;
-        }
-
-        private static bool IsColorBakeCurrent(
-            DimensionPortalVisualProfileAsset profile,
-            SpriteAsset asset)
-        {
-            return TryReadColorBakeMetadata(asset, out ColorBakeMetadata metadata) &&
-                   MetadataMatchesProfile(metadata, profile) &&
-                   MetadataMatchesCurrentTextures(metadata, asset);
-        }
-
-        private static bool MetadataMatchesCurrentTextures(
-            ColorBakeMetadata metadata,
-            SpriteAsset asset)
-        {
-            if (metadata == null || asset == null ||
-                metadata.schemaVersion < 2 ||
-                string.IsNullOrEmpty(metadata.outputColorGuid))
-            {
-                return false;
-            }
-
-            FrameAnimation animation = asset.GetAnimationAt(0);
-            if (animation == null || animation.spriteData == null)
-            {
-                return false;
-            }
-
-            return string.Equals(
-                       metadata.outputColorGuid,
-                       GetTextureGuid(animation.spriteData.texture),
-                       StringComparison.Ordinal) &&
-                   string.Equals(
-                       metadata.outputEmissiveGuid ?? string.Empty,
-                       GetTextureGuid(animation.spriteData.emissiveTexture),
-                       StringComparison.Ordinal);
-        }
-
-        private static bool ColorsApproximately(Color left, Color right)
-        {
-            return Mathf.Abs(left.r - right.r) <= 0.0001f &&
-                   Mathf.Abs(left.g - right.g) <= 0.0001f &&
-                   Mathf.Abs(left.b - right.b) <= 0.0001f &&
-                   Mathf.Abs(left.a - right.a) <= 0.0001f;
-        }
-
-        private static int GetProfileColorHash(
-            DimensionPortalVisualProfileAsset profile)
-        {
-            unchecked
-            {
-                int hash = profile == null ? 0 : profile.CenterParticleTint.GetHashCode();
-                hash = (hash * 397) ^
-                       (profile == null
-                           ? 0
-                           : profile.CenterSwirlEmissiveColor.GetHashCode());
-                hash = (hash * 397) ^
-                       (profile == null
-                           ? 0
-                           : profile.CenterParticleEmissionMultiplier.GetHashCode());
-                return hash;
-            }
-        }
-
-        private static string GetTextureGuid(Texture2D texture)
-        {
-            string path = texture == null
-                ? string.Empty
-                : NormalizeAssetPath(AssetDatabase.GetAssetPath(texture));
-            return string.IsNullOrEmpty(path)
-                ? string.Empty
-                : AssetDatabase.AssetPathToGUID(path);
-        }
-
-        private static bool TextureAssetsEqual(Texture2D left, Texture2D right)
-        {
-            if (ReferenceEquals(left, right))
-            {
-                return true;
-            }
-
-            if (left == null || right == null)
-            {
-                return false;
-            }
-
-            string leftGuid = GetTextureGuid(left);
-            return !string.IsNullOrEmpty(leftGuid) &&
-                   string.Equals(
-                       leftGuid,
-                       GetTextureGuid(right),
-                       StringComparison.Ordinal);
-        }
-
-        private static Texture2D ResolveTextureGuid(string guid)
-        {
-            if (string.IsNullOrEmpty(guid))
-            {
-                return null;
-            }
-
-            string path = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guid));
-            return string.IsNullOrEmpty(path)
-                ? null
-                : AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-        }
-
-        private static void RestoreImporterUserData(
-            string assetPath,
-            string userData)
-        {
-            AssetImporter importer = AssetImporter.GetAtPath(assetPath);
-            if (importer == null || importer.userData == userData)
-            {
-                return;
-            }
-
-            importer.userData = userData ?? string.Empty;
-            importer.SaveAndReimport();
-        }
-
-        private static void ClearColorBakeMetadata(SpriteAsset asset)
-        {
-            string assetPath = asset == null
-                ? string.Empty
-                : NormalizeAssetPath(AssetDatabase.GetAssetPath(asset));
-            AssetImporter importer = string.IsNullOrEmpty(assetPath)
-                ? null
-                : AssetImporter.GetAtPath(assetPath);
-            if (importer == null ||
-                string.IsNullOrEmpty(importer.userData) ||
-                !importer.userData.StartsWith(
-                    ColorBakeMetadataPrefix,
-                    StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            importer.userData = string.Empty;
-            importer.SaveAndReimport();
-        }
 
         private static bool TryResolveManagedAssetForTextureEdit(
             DimensionTemplateAsset template,
@@ -5628,11 +4969,13 @@ namespace ExpandNullforge.EditorTools
             }
 
             int frameWidth = color.width / frameCount;
-            if (frameWidth != NativeFrameSize || color.height != NativeFrameSize)
+            if (frameWidth <= 0 ||
+                frameWidth > NativeFrameSize ||
+                color.height > NativeFrameSize)
             {
-                message = "Swirls animation zero must use " + NativeFrameSize + " x " +
-                          NativeFrameSize + " full-canvas frames. Found " + frameWidth +
-                          " x " + color.height + ".";
+                message = "Swirls animation zero frames must fit within the " +
+                          NativeFrameSize + " x " + NativeFrameSize +
+                          " portal canvas. Found " + frameWidth + " x " + color.height + ".";
                 return false;
             }
 
@@ -6037,18 +5380,10 @@ namespace ExpandNullforge.EditorTools
             if (ReferenceEquals(source, target) &&
                 AssetPathIsWithin(sourcePath, expectedFolder))
             {
-                // Save & Update is the durable repair boundary as well as an
-                // idempotent save. A lost debounce/domain reload must never leave a
-                // blue or otherwise stale package asset behind a differently-colored
-                // profile. Metadata-current artwork returns immediately inside the
-                // bake, so the common path still performs no file writes/imports.
-                return !overrideVanilla || BakeManagedProfileColors(
-                    target,
-                    sourceAsset,
-                    packageFolder,
-                    expectedFolder,
-                    modRoot,
-                    out message);
+                // The package already owns this profile's pristine Swirls artwork. The tint
+                // is applied at runtime from the profile colors, so an in-place Save & Update
+                // needs no texture rewrite or import here.
+                return true;
             }
 
             if (!TryValidateAnimationContract(
@@ -6185,11 +5520,13 @@ namespace ExpandNullforge.EditorTools
 
                 int frameWidth = color.width / frameCount;
                 if (requirePackageFrameSize &&
-                    (frameWidth != NativeFrameSize || color.height != NativeFrameSize))
+                    (frameWidth <= 0 ||
+                     frameWidth > NativeFrameSize ||
+                     color.height > NativeFrameSize))
                 {
-                    message = "Swirls animation " + i + " must use " +
+                    message = "Swirls animation " + i + " frames must fit within the " +
                               NativeFrameSize + " x " + NativeFrameSize +
-                              " full-canvas frames. Found " + frameWidth + " x " +
+                              " portal canvas. Found " + frameWidth + " x " +
                               color.height + ".";
                     return false;
                 }
@@ -6329,22 +5666,6 @@ namespace ExpandNullforge.EditorTools
                 serializedClone.Update();
                 Dictionary<string, Texture2D> localizedTextures =
                     new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
-                Texture2D preservedSourceColor = null;
-                Texture2D preservedSourceEmissive = null;
-                if (TryReadColorBakeMetadata(
-                        sourceAsset,
-                        out ColorBakeMetadata sourceColorMetadata))
-                {
-                    preservedSourceColor = ResolveTextureGuid(
-                        sourceColorMetadata.sourceColorGuid);
-                    preservedSourceEmissive = ResolveTextureGuid(
-                        sourceColorMetadata.sourceEmissiveGuid);
-                    if (preservedSourceColor == null)
-                    {
-                        throw new InvalidOperationException(
-                            "The source portal's preserved untinted Swirls Color sheet is missing.");
-                    }
-                }
 
                 if (!CopySpriteDataTextures(
                         serializedSource.FindProperty("m_staticSpriteData"),
@@ -6382,8 +5703,8 @@ namespace ExpandNullforge.EditorTools
                             assetStem + "_Anim" + i,
                             localizedTextures,
                             createdPaths,
-                            i == 0 ? preservedSourceColor : null,
-                            i == 0 ? preservedSourceEmissive : null,
+                            null,
+                            null,
                             out message))
                     {
                         throw new InvalidOperationException(message);
@@ -6414,100 +5735,35 @@ namespace ExpandNullforge.EditorTools
                 if (!TryBuildAnimationZeroTextureSlot(
                         clone,
                         clonePackageFolder,
-                        out AnimationZeroTextureSlot pristineSlot,
+                        out _,
                         out message))
                 {
                     throw new InvalidOperationException(message);
                 }
 
-                GetColorBakePaths(
-                    destinationPath,
-                    destinationFolder,
-                    out string cloneSourceColorPath,
-                    out string cloneSourceEmissivePath,
-                    out _,
-                    out _);
-                SpriteAsset cloneSnapshot = UnityEngine.Object.Instantiate(clone);
-                DimensionPortalArtworkEditorUtility.ArtworkFileTransaction
-                    sourceTransaction =
-                        new DimensionPortalArtworkEditorUtility.ArtworkFileTransaction(
-                            destinationPath,
-                            false);
-                try
+                // Carry the pristine untinted source sheet across the clone so the duplicated
+                // profile can be recolored without re-selecting artwork. Otherwise the clone
+                // would hold only the already-baked (tinted) output and the next color bake
+                // would have no clean source to start from.
+                string sourceAssetPath =
+                    NormalizeAssetPath(AssetDatabase.GetAssetPath(sourceAsset));
+                string sourceSourceSheet =
+                    NormalizeAssetPath(Path.GetDirectoryName(sourceAssetPath)) + "/" +
+                    Path.GetFileNameWithoutExtension(sourceAssetPath) + SwirlSourceSuffix;
+                if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(sourceSourceSheet)))
                 {
-                    EnsureColorSourceCopy(
-                        pristineSlot.ColorTexture,
-                        cloneSourceColorPath,
-                        pristineSlot.SheetWidth,
-                        pristineSlot.SheetHeight,
-                        sourceTransaction);
-                    if (pristineSlot.EmissiveTexture != null)
+                    string cloneSourceSheet = NormalizeAssetPath(destinationFolder) + "/" +
+                        Path.GetFileNameWithoutExtension(destinationPath) + SwirlSourceSuffix;
+                    if (AssetDatabase.CopyAsset(sourceSourceSheet, cloneSourceSheet))
                     {
-                        EnsureColorSourceCopy(
-                            pristineSlot.EmissiveTexture,
-                            cloneSourceEmissivePath,
-                            pristineSlot.SheetWidth,
-                            pristineSlot.SheetHeight,
-                            sourceTransaction);
+                        createdPaths.Add(cloneSourceSheet);
                     }
-
-                    sourceTransaction.Commit();
-                }
-                catch
-                {
-                    sourceTransaction.Rollback(clone, cloneSnapshot);
-                    throw;
-                }
-                finally
-                {
-                    UnityEngine.Object.DestroyImmediate(cloneSnapshot);
-                }
-
-                if (!createdPaths.Contains(cloneSourceColorPath))
-                {
-                    createdPaths.Add(cloneSourceColorPath);
-                }
-
-                if (pristineSlot.EmissiveTexture != null &&
-                    !createdPaths.Contains(cloneSourceEmissivePath))
-                {
-                    createdPaths.Add(cloneSourceEmissivePath);
                 }
 
                 EnsureManifestContains(modRoot, destinationPath);
                 if (!AssignReference(target, clone, out message))
                 {
                     throw new InvalidOperationException(message);
-                }
-
-                if (!BakeManagedProfileColors(
-                        target,
-                        clone,
-                        clonePackageFolder,
-                        destinationFolder,
-                        modRoot,
-                        out message))
-                {
-                    throw new InvalidOperationException(message);
-                }
-
-                string cloneStem = Path.GetFileNameWithoutExtension(destinationPath);
-                string[] colorBakePaths =
-                {
-                    destinationFolder + "/" + cloneStem + "_Source_Anim0.png",
-                    destinationFolder + "/" + cloneStem +
-                    "_Source_Anim0_Emissive.png",
-                    destinationFolder + "/" + cloneStem + "_Anim0.png",
-                    destinationFolder + "/" + cloneStem + "_Anim0_Emissive.png"
-                };
-                for (int i = 0; i < colorBakePaths.Length; i++)
-                {
-                    if (!string.IsNullOrEmpty(
-                            AssetDatabase.AssetPathToGUID(colorBakePaths[i])) &&
-                        !createdPaths.Contains(colorBakePaths[i]))
-                    {
-                        createdPaths.Add(colorBakePaths[i]);
-                    }
                 }
 
                 AssetDatabase.SaveAssetIfDirty(target);

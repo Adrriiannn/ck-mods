@@ -854,14 +854,17 @@ namespace ExpandNullforge.EditorTools
             Texture2D sourceTexture = animation.spriteData.GetSrcTexture();
             int frameCount = animation.srcFrameCount;
             if (sourceTexture == null ||
+                frameCount <= 0 ||
                 sourceTexture.width % frameCount != 0 ||
-                sourceTexture.width / frameCount !=
+                sourceTexture.width / frameCount <= 0 ||
+                sourceTexture.width / frameCount >
                     DimensionPortalVisualContract.CanonicalFramePixels ||
-                sourceTexture.height != DimensionPortalVisualContract.CanonicalFramePixels)
+                sourceTexture.height > DimensionPortalVisualContract.CanonicalFramePixels)
             {
                 throw new System.InvalidOperationException(
                     "Animation 0 of the custom portal center swirl must use horizontal " +
-                    "48 x 48 full-canvas frames: " + AssetDatabase.GetAssetPath(configured) + ".");
+                    "frames that fit within the 48 x 48 portal canvas: " +
+                    AssetDatabase.GetAssetPath(configured) + ".");
             }
 
             return ResolvePortalSpriteAssetOverride(
@@ -2379,14 +2382,16 @@ namespace ExpandNullforge.EditorTools
             bool customSwirlEnabled = visualProfile != null &&
                 visualProfile.CenterSwirlOverrideVanilla &&
                 visualProfile.CenterSwirlVisible;
+            // Anchor the swirl to the activated center/aperture (not the outer frame) so a
+            // full-canvas sheet whose flecks are drawn about its own centre lands exactly in
+            // the inner circle with no manual offset. CenterParticleOffsetPixels then nudges
+            // from that natural anchor.
             Vector3 customSwirlPosition = DimensionPortalVisualContract.GetLocalPosition(
-                DimensionPortalVisualContract.Layer.Frame,
+                DimensionPortalVisualContract.Layer.Center,
                 visualProfile == null
                     ? Vector2.zero
                     : visualProfile.CenterParticleOffsetPixels);
-            // Keep the exact projected center anchor while placing custom artwork just
-            // behind the activated ring. The ring and physical frame then form a stable
-            // pixel aperture instead of the later-created swirl painting over them.
+            // Place the artwork just behind the activated ring at the same projected point.
             const float customSwirlDepthInset = 0.0002f;
             float customSwirlTargetDepth =
                 DimensionPortalVisualContract.CenterLocalPosition.z +
@@ -2406,24 +2411,15 @@ namespace ExpandNullforge.EditorTools
                     : visualProfile.CenterParticleScale,
                 visualProfile != null && visualProfile.CenterSwirlFlipX,
                 visualProfile != null && visualProfile.CenterSwirlFlipY);
-            Color customSwirlTint = ResolvePortalParticleTint(visualProfile, false);
+            // The swirl color is baked into the profile-owned sheet, so the SpriteObject is
+            // drawn with a neutral tint. Only the emissive glow hue and intensity remain
+            // runtime material properties (the game shader adds emissiveColor * pixels).
+            Color customSwirlTint = Color.white;
             Color customSwirlEmission = visualProfile == null
                 ? Color.white
                 : ScalePortalColor(
-                    MultiplyPortalColors(
-                        visualProfile.CenterSwirlEmissiveColor,
-                        customSwirlTint),
+                    visualProfile.CenterSwirlEmissiveColor,
                     visualProfile.CenterParticleEmissionMultiplier);
-            if (customSwirlEnabled &&
-                DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    visualProfile,
-                    visualAssets.CustomSwirl.Asset,
-                    out Color bakedSwirlTint,
-                    out Color bakedSwirlEmission))
-            {
-                customSwirlTint = bakedSwirlTint;
-                customSwirlEmission = bakedSwirlEmission;
-            }
             Transform staleCustomSwirl = spriteRoot.Find("PortalCustomSwirlSO");
             if (!customSwirlEnabled && staleCustomSwirl != null)
             {

@@ -927,7 +927,10 @@ namespace ExpandNullforge.EditorTools
 
                 if (selectedLayer == StudioLayer.InnerFlecks)
                 {
-                    DimensionPortalSwirlArtworkEditorUtility.QueueProfileColorBake(
+                    // Bake the chosen color into the profile-owned Swirls SpriteAsset (like
+                    // every other layer). Debounced so a color drag only replaces a pending
+                    // record; the neutral white starter makes any hue reproduce correctly.
+                    DimensionPortalSwirlArtworkEditorUtility.QueueSwirlBake(
                         template,
                         profile);
                 }
@@ -2798,30 +2801,19 @@ namespace ExpandNullforge.EditorTools
                 profile,
                 "centerSwirlEmissiveColor",
                 Color.white);
-            Color previewTint = GetColor(
-                profile,
-                "centerParticleTint",
-                Color.white);
+            // A profile-owned swirl bakes the color into its pixels, so preview it neutral.
+            // The shared white framework starter is still tinted live so a color drag reads
+            // immediately, before the debounced bake materializes the owned asset.
+            Color previewTint =
+                DimensionPortalSwirlArtworkEditorUtility.IsFrameworkAsset(swirlAsset)
+                    ? GetColor(profile, "centerParticleTint", Color.white)
+                    : Color.white;
             float emissionMultiplier = Mathf.Max(
                 0f,
                 GetFloat(profile, "centerParticleEmissionMultiplier", 1f));
-            DimensionPortalVisualProfileAsset profileAsset =
-                profile.targetObject as DimensionPortalVisualProfileAsset;
-            if (DimensionPortalSwirlArtworkEditorUtility.TryGetBakedRuntimeColors(
-                    profileAsset,
-                    swirlAsset,
-                    out Color bakedTint,
-                    out Color bakedEmission))
-            {
-                previewTint = bakedTint;
-                previewEmission = bakedEmission;
-            }
-            else
-            {
-                previewEmission.r *= emissionMultiplier;
-                previewEmission.g *= emissionMultiplier;
-                previewEmission.b *= emissionMultiplier;
-            }
+            previewEmission.r *= emissionMultiplier;
+            previewEmission.g *= emissionMultiplier;
+            previewEmission.b *= emissionMultiplier;
             Color compositeEmission = new Color(
                 previewEmission.r * previewTint.r,
                 previewEmission.g * previewTint.g,
@@ -2838,21 +2830,26 @@ namespace ExpandNullforge.EditorTools
                 display = animation.Sheet;
             }
 
-            // Saved Swirl sheets bake Tint into Color and Tint * Glow into Emissive,
-            // then render with neutral runtime multipliers. Apply that same ordering to
-            // the unbaked preview before its bounded nonlinear emission response. This
-            // prevents the visible hue/brightness jump when the debounce finishes.
+            // The runtime multiplies the untinted swirl pixels by CenterParticleTint and
+            // adds the emissive at draw time. When GetFrameCompositeSheet has already
+            // composited that tint into the preview sheet, draw it neutral; otherwise apply
+            // the tint here so the Studio preview matches the in-game material tint exactly.
             Color drawTint = ReferenceEquals(display, animation.Sheet)
                 ? previewTint
                 : Color.white;
 
+            // Centre the full-canvas swirl sheet on the aperture (the same anchor the vanilla
+            // fleck preview and the runtime SpriteObject use), not the outer 48x48 frame
+            // centre, so its flecks land inside the inner circle by default.
             AddVisibleFrame(
                 StudioLayer.InnerFlecks,
                 display,
                 animation.Sheet,
                 new Rect(
                     offset.x,
-                    offset.y,
+                    offset.y + 2f +
+                        DimensionPortalVisualContract.CanonicalCenterHeight * 0.5f -
+                        CanonicalCanvasPixels * 0.5f,
                     CanonicalCanvasPixels,
                     CanonicalCanvasPixels),
                 frame,
@@ -2963,12 +2960,13 @@ namespace ExpandNullforge.EditorTools
             }
 
             int frameWidth = texture.width / frameCount;
-            if (frameWidth != CanonicalCanvasPixels ||
-                texture.height != CanonicalCanvasPixels)
+            if (frameWidth <= 0 ||
+                frameWidth > CanonicalCanvasPixels ||
+                texture.height > CanonicalCanvasPixels)
             {
                 error =
-                    "Swirl Artwork override animation 0 must use 48 x 48 full-canvas " +
-                    "frames. Current frames are " + frameWidth + " x " +
+                    "Swirl Artwork override animation 0 frames must fit within the 48 x 48 " +
+                    "portal canvas. Current frames are " + frameWidth + " x " +
                     texture.height + ".";
                 return false;
             }
@@ -4349,8 +4347,7 @@ namespace ExpandNullforge.EditorTools
                 }
                 else if (selectedLayer == StudioLayer.InnerFlecks)
                 {
-                    DimensionPortalSwirlArtworkEditorUtility.CancelPendingColorBake(
-                        restoreProfile);
+                    DimensionPortalSwirlArtworkEditorUtility.CancelSwirlBake(restoreProfile);
                 }
 
                 if (!RestoreLayerToVanilla(
@@ -7770,7 +7767,7 @@ namespace ExpandNullforge.EditorTools
                 case StudioLayer.Milestones:
                     return "The lit pillar pairs that remain visible as activation progress advances.";
                 case StudioLayer.Center:
-                    return "The ready-state center. Use vanilla-native 16 x 25 frames or 48 x 48 full-canvas frames for freely positioned artwork.";
+                    return "The ready-state center. Vanilla-native 16 x 25 frames, or any custom frame size that fits within the 48 x 48 canvas.";
                 case StudioLayer.InnerFlecks:
                     return "Use Core Keeper's original inner particles, or place a looping custom SpriteAsset behind the activated ring.";
                 case StudioLayer.ReadyBurst:
@@ -7889,7 +7886,10 @@ namespace ExpandNullforge.EditorTools
                     SetBool(profile, "centerSwirlOverrideVanilla", false);
                     SetBool(profile, "centerSwirlVisible", true);
                     SetBool(profile, "centerParticlesFollowCenterPalette", false);
-                    SetColor(profile, "centerParticleTint", Color.white);
+                    SetColor(
+                        profile,
+                        "centerParticleTint",
+                        DimensionPortalVisualProfileAsset.VanillaSwirlTint);
                     SetObjectReference(profile, "centerParticleSprite", null);
                     SetObjectReference(profile, "centerParticleTexture", null);
                     SetFloat(profile, "centerParticleEmissionMultiplier", 1f);
