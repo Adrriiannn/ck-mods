@@ -1,0 +1,1097 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc43e4983a160e543856e5ba0421c9e1, type: 3}
+  m_Name: ExpandNullforge
+  m_EditorClassIdentifier: 
+  metadata:
+    guid: 188f4860396a4940a35f7549ed3077ac
+    name: ExpandNullforge
+    displayName: 
+    skipSafetyChecks: 0
+    disableScripts: 0
+    accessesExtraAssemblies: 1
+    disableHarmonyPatching: 0
+    requiredOn: 0
+    files:
+    - path: Scripts/Scripts/UI/DimensionCoordinatePresentation.cs
+      guid: 29729c25a8650ee4ba270e85bc6ad15d
+    - path: Scripts/Scripts/Portals/DimensionReturnPortalSpawnSystem.cs
+      guid: fdaffac3ce881c34d9edcf424172ded2
+    - path: Scripts/Scripts/Portals/DimensionReturnPortalSpawnRegistry.cs
+      guid: 48302a022bd60864a9bdd8948a9e9b71
+    - path: Scripts/Scripts/Portals/DimensionPortalRuntime.cs
+      guid: 30f9b818f9cf4784791c340e42f605b7
+    - path: Scripts/Scripts/Portals/DimensionPortalRecipeInjector.cs
+      guid: 444293e0af41cc4489cb69b25e672177
+    - path: Scripts/Scripts/Portals/DimensionPortalObjectIdCache.cs
+      guid: 3b009fb189a7ef4418882b0ccb4f3ef2
+    - path: Scripts/Scripts/Portals/DimensionPortalItemPresentationRegistry.cs
+      guid: 14f09bc88cab64240bc88bc8f7e19a0f
+    - path: Scripts/Scripts/Portals/DimensionPortalHydrationSystem.cs
+      guid: ff3a6c8f8398be44d966bc60e1e0cf86
+    - path: Scripts/Scripts/Portals/DimensionPortalCraftingRegistry.cs
+      guid: 04826b1177f11764bbe90e34c222e063
+    - path: Scripts/Scripts/Portals/DimensionPortalComponents.cs
+      guid: 60ea17f02bace0044b61608701981d94
+    - path: Scripts/Scripts/Portals/DimensionPortalAuthoringConverter.cs
+      guid: 14db11617b7197344b330e76ee019344
+    - path: Scripts/Scripts/Portals/DimensionPortalAuthoring.cs
+      guid: d3c97afbeb7183e42815a207616f74cd
+    - path: Scripts/Scripts/Portals/DimensionPortalActivationSystem.cs
+      guid: 6617cfd31962bde408f241a234af423c
+    - path: Scripts/Scripts/Portals/DimensionPortal.cs
+      guid: 0d18f68e6070f5044a43b4c999ded73e
+    - path: Scripts/Scripts/Persistence/DimensionWorldRegistry.cs
+      guid: 9fbabbc6d09a8eb4f9ae8422413be246
+    - path: Scripts/Scripts/Networking/DimensionTravelRpcSystems.cs
+      guid: fe3f80758571c844da7bf0a615d67956
+    - path: Scripts/Scripts/Networking/DimensionTravelRpc.cs
+      guid: dd10772ba28f09240a57704ed8fcdd82
+    - path: Scripts/Scripts/Networking/DimensionTravelResultRelay.cs
+      guid: 0cc883b0404a5504eab51a518a759689
+    - path: Scripts/Scripts/Networking/DimensionTravelNetworkState.cs
+      guid: b3d33d51316b5a949886ee435830646b
+    - path: Scripts/Scripts/Networking/DimensionTravelFeedbackState.cs
+      guid: 991a42f404c04514e9de961f8e8d39a0
+    - path: Scripts/Scripts/Networking/DimensionPortalTravelActions.cs
+      guid: 403b42f29bfb59e41944cb60c37581c7
+    - path: Scripts/Scripts/Networking/DimensionPlayerContextRpcSystems.cs
+      guid: 6b28fe02587431e46a1c5103bac3f474
+    - path: Scripts/Scripts/Networking/DimensionPlayerContextRpc.cs
+      guid: 72b5e5afd33e47742b7f7eb6f90f93ef
+    - path: Scripts/Scripts/Networking/DimensionPlayerContextNetworkState.cs
+      guid: 610f50b82cf9a7c44864a513e1ce45b8
+    - path: Scripts/Scripts/Loading/DimensionLoadComponents.cs
+      guid: ca4276602aa359740acbee9703960d38
+    - path: Scripts/Scripts/Generation/DimensionSafePlatformGenerationProvider.cs
+      guid: 2a920c56559a51d4ea2074b6229d87da
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Zones.cs
+      guid: 55a77ebabce7d7f469fa849d620f8422
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ZoneEnvironmentInternals.cs
+      guid: bad389abe6e031440901681cb169d413
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.WorldRuntime.cs
+      guid: f98b00bc0b7488549ad8381ba62a49fa
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.WorldEvents.cs
+      guid: 9f24cc33b518b294c9da30634bf595b7
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.WorldEventInternals.cs
+      guid: 14c427ee0bf0c944dab548f46f925066
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.TravelRuntime.cs
+      guid: a29226cab27c1834091f78ab97c7b65b
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.TravelRequirements.cs
+      guid: 1f1377e732c91fa44b2aeac48ecc87db
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.TravelRequirementInternals.cs
+      guid: fc79e67433d71c5499f34a8eed487564
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.TravelApi.cs
+      guid: da83cf709290da14d90f76d0936f0cca
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Starters.cs
+      guid: bf36b587c2d43fd4c8b570210822a188
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.SpawnRules.cs
+      guid: 3d33eaca526cdda46bcf6ab5a63d9dbf
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.SpawnRuleInternals.cs
+      guid: 0a4f977383770b3428cc29e9c41d9c46
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Scenes.cs
+      guid: ad1bc2e8d5a323341a1bfc2e4b8d5cac
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.SceneInternals.cs
+      guid: fe3c208104d1e3e449c3f2855f9fe39a
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimeSnapshots.cs
+      guid: 73aae489aaa97bb4bb2341a63b90841d
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimeRecords.cs
+      guid: 56992fd1b25b5674ba8d52eebc941b77
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimePosition.cs
+      guid: 234f5a8730f83e6428583c9fe3727bff
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimeLoadingInternals.cs
+      guid: c696ae739d9e00b4391bb086019fe15d
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimeLoading.cs
+      guid: 6078195edd19b404c854915479844850
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimeGeneration.cs
+      guid: d34ad4dbd3c5ee54da7ea8e44955f061
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RuntimeGates.cs
+      guid: 2c22adf625611d5438297f82b9dc95d3
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ResourceNodes.cs
+      guid: 834bfc5074431f04689cbf40f9498142
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ResourceNodeInternals.cs
+      guid: e43dfb42f34b6994880427bfa263a220
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.RelationshipCleanup.cs
+      guid: 9781bb236ab96fa49a83a1ba9b9d2315
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Providers.cs
+      guid: 56eaf788b47901745b4834d48c4d823f
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ProviderInternals.cs
+      guid: ff5ba140ba6033c4291060cc208706fe
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ProgressFlags.cs
+      guid: b2656667b2c762243806b9160fd3a116
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ProgressFlagInternals.cs
+      guid: e7ebcc2245f67cb4c8f3e4b727296702
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Portals.cs
+      guid: dff041ccee932394e87e1c622edba565
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PortalPresentations.cs
+      guid: 3cf3e41bfa63cdf418fef590db6225c0
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PortalPresentationInternals.cs
+      guid: 6617b25eda7df6e4ab3886eb12a881c3
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PortalItemPresentations.cs
+      guid: 2c16b0019cdd33c46829ceb8023d65e9
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PortalInternals.cs
+      guid: adfb709eb39738942b64f4e7db338bf0
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PlayerVisits.cs
+      guid: 584accd9c4584b5488bc98ff0f6d8e73
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PlayerContextTracking.cs
+      guid: 08d435fb7cb755d4bac76cca549d7609
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.PersistenceRuntime.cs
+      guid: 052d85f1718ad9c4abb61236fc7b4fe9
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.MapPresentation.cs
+      guid: 01f60dd4d2007e841a0120520537503c
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.MapMarkersAnchors.cs
+      guid: 53907959a91b7e24d82eacbb1a76cfec
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.MapAnchorInternals.cs
+      guid: 35da2980bac7e5d4a9ac46bb192d9daf
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.GenerationTables.cs
+      guid: f348b2c4a18e4ba48a07b94446c19a52
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.GenerationTableInternals.cs
+      guid: 3ad20d7b91f603d4893fc959523fa75c
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.GenerationInternals.cs
+      guid: 9d55820e2fa4d5548a012ef72f3e7bf2
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.GenerationApi.cs
+      guid: 9368985e3c42e6d4b84930868531dfcc
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Events.cs
+      guid: 77af99e017f50c7469c2c0c7979e362d
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.EnvironmentProfiles.cs
+      guid: a02b222355616c04f92fa6ccf6cfa73c
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Encounters.cs
+      guid: 8a3f4712e386cca49bd750f7d03f8d23
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.EncounterInternals.cs
+      guid: 4a0a6c6530e09c242a3f0bb857598866
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Dimensions.cs
+      guid: bd7764cb8e8e2bc488722e55ad163372
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.DimensionInternals.cs
+      guid: 70c6d684e36716d4b8bd0126c017f633
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Diagnostics.cs
+      guid: 097e0d82ec707654bb21ae8a606d93ed
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.cs
+      guid: 8f88c5ebf34f0534ba644207fd1c27ef
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.CoordinateDomains.cs
+      guid: d18aababc52ebbb4fa70165a2810df58
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ContentValidationInternals.cs
+      guid: 531c6f91daaee144397079d5372bb30d
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ContentValidation.cs
+      guid: ac0351c825ea4f24db0563aadaac7a16
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ContentPacks.cs
+      guid: 2c9cae8bc57f816419eb94f6fde91e09
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ContentPackInternals.cs
+      guid: c8cb4b022cacfce43b697d23f97edaad
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ContentManifests.cs
+      guid: e4985f57c16f66648a06d24352b2610f
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.BuiltIns.cs
+      guid: 38fefeb6319c21847af8a4940b2c3878
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.BuiltInBootstrap.cs
+      guid: 75474a50934ecd94c88d69139326e2ab
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Biomes.cs
+      guid: 4661a13b032690e4da98ef9b3d2223fd
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.BiomeInternals.cs
+      guid: afbd39c18b926a3478f2940dd6a31d3a
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Authoring.cs
+      guid: 8dc9bb7457906c34087ce67e05a7ef67
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.AssetReferences.cs
+      guid: 0537f8d46ac1b0249a6e410582b19d66
+    - path: Scripts/Scripts/Foundation/NullforgeDimensionService.AssetReferenceInternals.cs
+      guid: 308dfba80c7621b40b8619917a08ca7f
+    - path: Scripts/Scripts/Foundation/DimensionSlotAllocator.cs
+      guid: c6d4da95821366649a5920ed6e7ef3cc
+    - path: Scripts/Scripts/Foundation/DimensionRegistryConstants.cs
+      guid: c377037635c5a324a81a9bd90e5a9ae3
+    - path: Scripts/Scripts/Foundation/DimensionFrameworkLog.cs
+      guid: 8b49f50384f49aa47876e83767eed12c
+    - path: Scripts/Scripts/Bootstrap/ExpandNullforgeModEntry.cs
+      guid: 0d7dd44c39c493c4da8bc861776a13b3
+    - path: Scripts/Scripts/Authoring/SpawnRuleTemplateAsset.cs
+      guid: 3a31ad59b074c484b93f7f2b2d2eda66
+    - path: Scripts/Scripts/Authoring/SceneTemplateAsset.cs
+      guid: e8e042e86005b8548ab32e64860e4ece
+    - path: Scripts/Scripts/Authoring/ResourceNodeTemplateAsset.cs
+      guid: 2c4953389c3b7e14785d6632ff8093d6
+    - path: Scripts/Scripts/Authoring/GenerationTableTemplatePreviewUtility.cs
+      guid: 4c72f14ef5554d42a04a7456bdba2f9b
+    - path: Scripts/Scripts/Authoring/GenerationTableTemplateAsset.cs
+      guid: 4a78cb2b4644b3144873f4a9f640fd76
+    - path: Scripts/Scripts/Authoring/GenerationPassTemplateAsset.cs
+      guid: b068f4958233314468f2ee3e031f2582
+    - path: Scripts/Scripts/Authoring/EnvironmentProfileTemplateAsset.cs
+      guid: 5d4b5b502d204d54f801f20764e1bcb2
+    - path: Scripts/Scripts/Authoring/DimensionVisualAssetValidation.cs
+      guid: 5396f1ee54794f3c9c0d3d6345b0f5ea
+    - path: Scripts/Scripts/Authoring/DimensionTemplateStarterFactory.cs
+      guid: e3ea1ee0982e83f43923db62739f5167
+    - path: Scripts/Scripts/Authoring/DimensionTemplateStarterAssessment.cs
+      guid: 47679e39d42045b496ca9d44e5933424
+    - path: Scripts/Scripts/Authoring/DimensionTemplateManifestExportPreviewBuilder.cs
+      guid: d13c490d32644000a6f2db592b34377d
+    - path: Scripts/Scripts/Authoring/DimensionTemplateManifestBuilder.cs
+      guid: c2916fc33c8945940b84292eaabe5f4f
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerViewModel.cs
+      guid: 0c91969cb9c04d8eac16e46b14c7052a
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerSessionReport.cs
+      guid: 6d27f35db1a34bb7aa8d8e02302a6b57
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerSessionController.cs
+      guid: b8d9e06f4a2b42f2bdf7e95585b378d1
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerSectionDetail.cs
+      guid: 34d2b3ca65c24a0d8e0c86e91c60d94f
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerSearchIndex.cs
+      guid: d12b5029d29e469ba0b74d3267eeb6b8
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerNavigation.cs
+      guid: f6a7b6e5eec047a0840d57cae8da94c8
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerIssueResolution.cs
+      guid: d6e822759da443ccbb8c5e7cbfe1d8ae
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerIssueRepairPlan.cs
+      guid: 4a2e9ddf1fd340c6a7c88915a68c10df
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerInteractionState.cs
+      guid: 4f968eab86b44c0eaf4b964d39ef8be7
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFocus.cs
+      guid: 4ab321fb02c648d98167524de29f52f2
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldOptionCatalog.cs
+      guid: 9c8b6f1c4a8f40aebc18fb80a8b8b6d4
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldModel.cs
+      guid: c5668469d16e46c79c3932a4ff0d90c8
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldEditRollback.cs
+      guid: 5bd6c83f96544c88a303af93e61f8dfb
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldEditPreview.cs
+      guid: 6891d8bb30e4406db7a9ddfd9ae95f0d
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldEditExecutor.cs
+      guid: 7dd7118c92fc04a45b993497b273405e
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldEditChangeSet.cs
+      guid: 4e0a2fd740d9456682ec07a418768957
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerFieldEditBatch.cs
+      guid: 9a6a1a0db07d4d87ac343287d574f12f
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerExecutionPlan.cs
+      guid: c183f51775e34dc58ba871df2cc0912f
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerDashboard.cs
+      guid: db7366e82a374915b3feb3a4ac7137db
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerCommandRequest.cs
+      guid: 2fe8dcf4d3d7432ea6d9e7592b6284f0
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerCommandPlan.cs
+      guid: e8c7206dbe4f4e4984f1fa739c0340f1
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerCommandPipeline.cs
+      guid: 7a7f067929d7465b99e6ca4e792e72c7
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerActionPreview.cs
+      guid: d832e5fbe5d14b62b6e96ae9e08d3a35
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCustomizerActionCatalog.cs
+      guid: d0a7fcfbf8c749c8a681c6892e5634f3
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCreationWizardSessionController.cs
+      guid: 53efa5ffae3841d38808881ceda2396c
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCreationWizardActionPlan.cs
+      guid: e1a87c86303d4aa4b2f710ffab2b63cd
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCreationWizard.cs
+      guid: 0ff7e07a720544c48b405bd82ff3116d
+    - path: Scripts/Scripts/Authoring/DimensionTemplateCompiler.cs
+      guid: fdbce73670e4852449a3179f1dcb541d
+    - path: Scripts/Scripts/Authoring/DimensionTemplateAuthoringWorkspace.cs
+      guid: 658b261bb0f54be99f9a0c827263de96
+    - path: Scripts/Scripts/Authoring/DimensionTemplateAuthoringExampleCatalog.cs
+      guid: 70aa8b9a66a0439293b16ac29e912e71
+    - path: Scripts/Scripts/Authoring/DimensionTemplateAssetSavePlan.cs
+      guid: 2f2c592f8af94cb6b18356470b46ea6c
+    - path: Scripts/Scripts/Authoring/DimensionTemplateAsset.cs
+      guid: 804cf53dc823b8448aebf8ba05135bb8
+    - path: Scripts/Scripts/Authoring/DimensionSpawnableAuthoringAssets.cs
+      guid: d79d85d0b7d04dcd9602061f5f2e3ce0
+    - path: Scripts/Scripts/Authoring/DimensionSemanticObjectTableBuilder.cs
+      guid: f0b8f4008c71d234db6e0b97ecfd3eed
+    - path: Scripts/Scripts/Authoring/DimensionScenePlacementMode.cs
+      guid: c9133f2f30505a04e9a9fb093f1cbc16
+    - path: Scripts/Scripts/Authoring/DimensionSceneContentAuthoring.cs
+      guid: d645f6ceaaf54e9aaf1d14d9097f63ea
+    - path: Scripts/Scripts/Authoring/DimensionRuntimeManifestAsset.cs
+      guid: 3e3a5a120696bd14cbb8e7e1bb646f87
+    - path: Scripts/Scripts/Authoring/DimensionResourceAuthoringAssets.cs
+      guid: b86d37a795bf4a4aa58c9e18042e6b4d
+    - path: Scripts/Scripts/Authoring/DimensionPortalAccessRuleAsset.cs
+      guid: 2588085199a843cb8d6646af1ef61191
+    - path: Scripts/Scripts/Authoring/DimensionLayoutTemplatePresetCatalog.cs
+      guid: 8d86f642583c4d1fbc9f6d5b0ac28165
+    - path: Scripts/Scripts/Authoring/DimensionLayoutTemplateAsset.cs
+      guid: 229de5eec03caf14887f828ebef52735
+    - path: Scripts/Scripts/Authoring/DimensionLayoutRegionDefinition.cs
+      guid: 3f31b31e65716344693732773e287501
+    - path: Scripts/Scripts/Authoring/DimensionLayoutRadialRingDefinition.cs
+      guid: 1f70b5e8f3664134fb861ba13db84dfe
+    - path: Scripts/Scripts/Authoring/DimensionLayoutMaskBiomeDefinition.cs
+      guid: 49c14cba3ab47814ca9dad7741cf87fe
+    - path: Scripts/Scripts/Authoring/DimensionLayoutKind.cs
+      guid: e660bc9fba4fab84c974bf82ee7bea9d
+    - path: Scripts/Scripts/Authoring/DimensionLayoutGridCellDefinition.cs
+      guid: cf691a4f63f31c24ca5c2be40b9a5400
+    - path: Scripts/Scripts/Authoring/DimensionFrameworkToolGuide.cs
+      guid: 3efddf90ffbe4bb4ca155db7c1296004
+    - path: Scripts/Scripts/Authoring/DimensionFrameworkSetupGuide.cs
+      guid: 6cc455b1a82e4f6e9a3d82e75d58b25c
+    - path: Scripts/Scripts/Authoring/DimensionFrameworkExtractionReadiness.cs
+      guid: 0c45804ae2bd5e140aa3f92247611113
+    - path: Scripts/Scripts/Authoring/DimensionAuthoringPreviewBuilder.cs
+      guid: 62910f31f4b5d4b40bb3daf92688eafd
+    - path: Scripts/Scripts/Authoring/BiomeTemplateAsset.cs
+      guid: c6bde605d10993f4aad1118f008582e8
+    - path: Scripts/Scripts/Authoring/BiomePaletteTemplateAsset.cs
+      guid: b082dc2c07b638349a312b41f107bd35
+    - path: Scripts/Scripts/Authoring/BiomeGenerationProfileAsset.cs
+      guid: 8f928a919750eee42b4932a333020b78
+    - path: Scripts/Scripts/Authoring/BiomeContentPresetAsset.cs
+      guid: 800d69c3cd46d6b4cb2b33b006533c99
+    - path: Scripts/API/Scripts/IDimensionZoneProvider.cs
+      guid: dba7bf50258fb1348aca65d4d864d0fc
+    - path: Scripts/API/Scripts/IDimensionZoneCatalogService.cs
+      guid: e079822dbbbf058408f10b33dcf23602
+    - path: Scripts/API/Scripts/IDimensionWorldEventService.cs
+      guid: ac93f1647ad76294aba4c185311c6b13
+    - path: Scripts/API/Scripts/IDimensionTravelService.cs
+      guid: 16eb88d4d18a6f444a661b8089448922
+    - path: Scripts/API/Scripts/IDimensionTravelRequirementService.cs
+      guid: dde584a2c4041cc498f70fb72b0ce26d
+    - path: Scripts/API/Scripts/IDimensionTravelRequirementEvaluator.cs
+      guid: 9553abfc57805f047a5c22b20392ac00
+    - path: Scripts/API/Scripts/IDimensionTravelPreviewService.cs
+      guid: a7acc9cfc15b646488753fc2f70ec6c4
+    - path: Scripts/API/Scripts/IDimensionTravelPolicyService.cs
+      guid: 3d1dfd7a5612bff4184ec56d35864693
+    - path: Scripts/API/Scripts/IDimensionTravelLoopPreflightService.cs
+      guid: 4337c365979cbf04ea19eae4cd1786a2
+    - path: Scripts/API/Scripts/IDimensionStarterService.cs
+      guid: dd16e3e3a16ab9c45b83b9f9152286ab
+    - path: Scripts/API/Scripts/IDimensionStarterReadinessService.cs
+      guid: 96c7fcc34776e03468fbde3a66c28b00
+    - path: Scripts/API/Scripts/IDimensionSpawnRuleService.cs
+      guid: bf332bcb0b1b6f243b35105e547c30f2
+    - path: Scripts/API/Scripts/IDimensionSlotAllocationService.cs
+      guid: 3f3599595562d0b4488c0e58dc31eff2
+    - path: Scripts/API/Scripts/IDimensionService.cs
+      guid: 0f85192805942ea4ba154340911f3bb2
+    - path: Scripts/API/Scripts/IDimensionSceneTemplateService.cs
+      guid: 881f33aaed08fec4b9ef30b6c6538c00
+    - path: Scripts/API/Scripts/IDimensionSceneService.cs
+      guid: 2c2b61fdbb73b99429850ce92a72aae3
+    - path: Scripts/API/Scripts/IDimensionRuntimeStateService.cs
+      guid: 03c748fcb2b94da4abb02b701455f00b
+    - path: Scripts/API/Scripts/IDimensionReturnTargetService.cs
+      guid: 2639de8520ae2604f83370071afcb41c
+    - path: Scripts/API/Scripts/IDimensionRespawnService.cs
+      guid: 21dbf781b53df4844a4d4ebd664e8601
+    - path: Scripts/API/Scripts/IDimensionResourceNodeService.cs
+      guid: b6d42730fe36e824ea2420119deab586
+    - path: Scripts/API/Scripts/IDimensionRegistryService.cs
+      guid: 7cc28976d997f63449b567578d5d9109
+    - path: Scripts/API/Scripts/IDimensionProgressService.cs
+      guid: a171c422d274f2f46baeee7a9a8b6554
+    - path: Scripts/API/Scripts/IDimensionPortalPresentationService.cs
+      guid: 7ee7ec1d9fdf3a643bc979ed9a091b62
+    - path: Scripts/API/Scripts/IDimensionPortalItemPresentationService.cs
+      guid: a3ab00bdffa3e9a4da5faba54138fc4f
+    - path: Scripts/API/Scripts/IDimensionPlayerVisitService.cs
+      guid: 72736df6dae3ba644ba528cbc645c566
+    - path: Scripts/API/Scripts/IDimensionPlayerService.cs
+      guid: ba6cd94ca176e0546873f822828a84d2
+    - path: Scripts/API/Scripts/IDimensionPersistenceService.cs
+      guid: d571cc8e50458384f8cd22f31c94761c
+    - path: Scripts/API/Scripts/IDimensionPermissionService.cs
+      guid: f33fd87b0f2b4724f97a69a229c7dfbb
+    - path: Scripts/API/Scripts/IDimensionPermissionProvider.cs
+      guid: bce46a980caf1604e906c7f411649619
+    - path: Scripts/API/Scripts/IDimensionMapService.cs
+      guid: 8a86f959bc768ed448764f2207d42b8c
+    - path: Scripts/API/Scripts/IDimensionMapPresentationService.cs
+      guid: b629d7a72d0b4ff6ad9a9b3185579bc3
+    - path: Scripts/API/Scripts/IDimensionMapLayerService.cs
+      guid: 2824e7ef94fda1442a18cfb3df6f2793
+    - path: Scripts/API/Scripts/IDimensionLoadingService.cs
+      guid: cb248a52b6542a64aaf04102db6dba17
+    - path: Scripts/API/Scripts/IDimensionLandingValidationService.cs
+      guid: 32326e7110e543048bdb075689e55094
+    - path: Scripts/API/Scripts/IDimensionGenerationTableService.cs
+      guid: baf6d608a07e7a54ab3735eca072766f
+    - path: Scripts/API/Scripts/IDimensionGenerationService.cs
+      guid: 2121cc4d8a0ca6347a55732117c0c14b
+    - path: Scripts/API/Scripts/IDimensionGenerationSeedService.cs
+      guid: 3ec0cd49ab484220a53670c0b4870675
+    - path: Scripts/API/Scripts/IDimensionGenerationProvider.cs
+      guid: 068af54f715da424db734868e24748ba
+    - path: Scripts/API/Scripts/IDimensionGenerationPlanningService.cs
+      guid: a91b9692062b2b44d8e51671620d3152
+    - path: Scripts/API/Scripts/IDimensionGenerationPassService.cs
+      guid: a8109bb23fade984ea8f0788ba1cc645
+    - path: Scripts/API/Scripts/IDimensionGenerationPassProvider.cs
+      guid: b1e4ed6552c53ce49beff45b2788c45f
+    - path: Scripts/API/Scripts/IDimensionGenerationControlProvider.cs
+      guid: c7a75af7a5279a7478fc3e9b1ae8e603
+    - path: Scripts/API/Scripts/IDimensionEnvironmentProfileService.cs
+      guid: 279f5cb8af4af894a8079f3736013f5f
+    - path: Scripts/API/Scripts/IDimensionEntityService.cs
+      guid: 52c9be547de53d34688a554fc3f72ac8
+    - path: Scripts/API/Scripts/IDimensionEncounterService.cs
+      guid: 221e3048cd0f3b5419901c648ecd3ff5
+    - path: Scripts/API/Scripts/IDimensionDiagnosticsService.cs
+      guid: 0951b11a0e7ccb0428e8da10281c7049
+    - path: Scripts/API/Scripts/IDimensionCoordinateService.cs
+      guid: 40bd5c5583b7c1249a648306697b4f3c
+    - path: Scripts/API/Scripts/IDimensionContentReadinessService.cs
+      guid: e81e85e24ebdd1e4da1f70e9d547307e
+    - path: Scripts/API/Scripts/IDimensionContentPackService.cs
+      guid: c197d510e1968774abe5b824fcfc5815
+    - path: Scripts/API/Scripts/IDimensionContentOwnershipService.cs
+      guid: dfdbacb410ae95e41a408e1251910521
+    - path: Scripts/API/Scripts/IDimensionContentManifestService.cs
+      guid: b83cfc51d65ea4c429dfe74a15ada515
+    - path: Scripts/API/Scripts/IDimensionCompatibilityService.cs
+      guid: 870b57a4e5a86a1429f87fca97e3a4e9
+    - path: Scripts/API/Scripts/IDimensionBiomeCatalogService.cs
+      guid: 77d103bb08f9d08448310e5b19b9bada
+    - path: Scripts/API/Scripts/IDimensionAssetReferenceService.cs
+      guid: 3aa63f56e07f5f143afeff4424dcd681
+    - path: Scripts/API/Scripts/IDimensionAnchorService.cs
+      guid: f8ea7ce07cdc54847b2870e7ba076ac2
+    - path: Scripts/API/Scripts/IDimensionAccessService.cs
+      guid: 1e2c54510413b5d438e0ffb3f32e0b30
+    - path: Scripts/API/Scripts/IDimensionAccessProvider.cs
+      guid: 4f4e8ed948d1fd244b5b06c37162da9c
+    - path: Scripts/API/Scripts/DimensionZoneInfo.cs
+      guid: c77d505b4bd9cdb469361d53f7a26015
+    - path: Scripts/API/Scripts/DimensionZoneDefinition.cs
+      guid: 24b2308bc17ab53479d2fd828d994094
+    - path: Scripts/API/Scripts/DimensionZoneChangeKind.cs
+      guid: 2f35cdeaff0080648882adda90e8d7de
+    - path: Scripts/API/Scripts/DimensionZoneChangedEvent.cs
+      guid: 9e7d2fe911831a34485561687f00236d
+    - path: Scripts/API/Scripts/DimensionWorldEventQuery.cs
+      guid: 486be20f42bf9d943b12795d85625913
+    - path: Scripts/API/Scripts/DimensionWorldEventKind.cs
+      guid: a5e9aaf2287c25a4aa86daf91ed80e2a
+    - path: Scripts/API/Scripts/DimensionWorldEventDefinition.cs
+      guid: 54c0b72f6fa89ee46b922665ae3117ec
+    - path: Scripts/API/Scripts/DimensionWorldEventChangeKind.cs
+      guid: f7b3dfd33ca457e44b1f716bd27449ae
+    - path: Scripts/API/Scripts/DimensionWorldEventChangedEvent.cs
+      guid: acd105fe4a6081b4c9a7d4529123d2b2
+    - path: Scripts/API/Scripts/DimensionTravelState.cs
+      guid: 141fca38dfc2bea4280d0a080ae3195a
+    - path: Scripts/API/Scripts/DimensionTravelSnapshotQuery.cs
+      guid: 1fb5c1ba783f11449bfaee04245afc81
+    - path: Scripts/API/Scripts/DimensionTravelSnapshot.cs
+      guid: 59ae85e66de04144ea428202870a936b
+    - path: Scripts/API/Scripts/DimensionTravelResult.cs
+      guid: b37d3645825970147b6e74063d6257ec
+    - path: Scripts/API/Scripts/DimensionTravelRequirementQuery.cs
+      guid: cfa3af9a5da399045b470e1e1e6d2fd7
+    - path: Scripts/API/Scripts/DimensionTravelRequirementKind.cs
+      guid: 1cb134c1cf6d57245b63de42731646d6
+    - path: Scripts/API/Scripts/DimensionTravelRequirementEvaluationResult.cs
+      guid: d94a3c8f03c75ac4f953111d397092aa
+    - path: Scripts/API/Scripts/DimensionTravelRequirementEvaluationContext.cs
+      guid: a0c3133061fcf1e41902b708f091c672
+    - path: Scripts/API/Scripts/DimensionTravelRequirementDefinition.cs
+      guid: 112c54c3bd78c3348a80ff0afe480b8f
+    - path: Scripts/API/Scripts/DimensionTravelRequirementChangeKind.cs
+      guid: 9fb58fe39e62a0a46a798b92c7a7692f
+    - path: Scripts/API/Scripts/DimensionTravelRequirementChangedEvent.cs
+      guid: 97fba86669229ec4493578cf938bd272
+    - path: Scripts/API/Scripts/DimensionTravelRequest.cs
+      guid: 165c745faa62f2c4a8e5fbd2f8b73503
+    - path: Scripts/API/Scripts/DimensionTravelPreviewResult.cs
+      guid: 876667bfa8ec387439c042efa205ebf7
+    - path: Scripts/API/Scripts/DimensionTravelPolicySnapshot.cs
+      guid: d005bf2ba3ee05344bb5fb5d766d2b15
+    - path: Scripts/API/Scripts/DimensionTravelLoopPreflightResult.cs
+      guid: ad1ac826d8dc0794e93ec9dd0dd8dbc0
+    - path: Scripts/API/Scripts/DimensionTravelLoopPreflightRequest.cs
+      guid: 2a7ee8568a70a4a4b91b0da18bf2dda2
+    - path: Scripts/API/Scripts/DimensionTravelLoopCheckKind.cs
+      guid: 1ac281e848cb8fe4faa83afe4ec54392
+    - path: Scripts/API/Scripts/DimensionTravelLoopCheck.cs
+      guid: 680c9c085d430c44b8694ef0afc1e38a
+    - path: Scripts/API/Scripts/DimensionTravelFeedbackSnapshot.cs
+      guid: 4d3158185e317054aa7f22c7b66fee56
+    - path: Scripts/API/Scripts/DimensionTravelFeedbackSeverity.cs
+      guid: 161a0f7b4c6c0f4469438b57164e53a3
+    - path: Scripts/API/Scripts/DimensionTravelFeedbackRetentionPolicy.cs
+      guid: b4e07a3d57c47c443ae1a7d787e759aa
+    - path: Scripts/API/Scripts/DimensionTravelFeedbackPhase.cs
+      guid: 01ef2799547e5614c9fd0502ae74092f
+    - path: Scripts/API/Scripts/DimensionTravelFeedbackDisplay.cs
+      guid: 3ef8fa2dcf146e743bbbffb2ac8a416c
+    - path: Scripts/API/Scripts/DimensionTravelFeedbackChangedEvent.cs
+      guid: 5c44be2b509f3c74dbd516678f8aa01d
+    - path: Scripts/API/Scripts/DimensionTravelCancelRequest.cs
+      guid: 746ee27f3a4d6684f876a00a92e6be83
+    - path: Scripts/API/Scripts/DimensionTemplateManifestExportPreview.cs
+      guid: 3c3aa39e9184482498da46cba1fbdcf9
+    - path: Scripts/API/Scripts/DimensionStarterReadinessSnapshot.cs
+      guid: 4d08ef1bc0c043d44aaacaa4fbc11429
+    - path: Scripts/API/Scripts/DimensionStarterReadinessRequest.cs
+      guid: d8732fb21c1260044a8cac6dd9f59e87
+    - path: Scripts/API/Scripts/DimensionStarterGenerationRequest.cs
+      guid: bff101a793ebc5f4aa12b6bba4ad2e0b
+    - path: Scripts/API/Scripts/DimensionStarterDefinition.cs
+      guid: c2ceb416623c4094e80400d08328cd82
+    - path: Scripts/API/Scripts/DimensionSpawnSubjectKind.cs
+      guid: 163e887d8155f8e4cabdc64f21965437
+    - path: Scripts/API/Scripts/DimensionSpawnRuleQuery.cs
+      guid: c4401dfc886996147a5b182a5fc78e30
+    - path: Scripts/API/Scripts/DimensionSpawnRuleChangeKind.cs
+      guid: 688abfc6408aacd4c993946393cd9000
+    - path: Scripts/API/Scripts/DimensionSpawnRuleChangedEvent.cs
+      guid: c9e666700c789894596ef9ed72720f08
+    - path: Scripts/API/Scripts/DimensionSpawnRule.cs
+      guid: 67146c089106cb54eb076faaab1b1094
+    - path: Scripts/API/Scripts/DimensionSpaceKind.cs
+      guid: 92a4890192bc4bc4bad2f545bb542bfa
+    - path: Scripts/API/Scripts/DimensionSlotRecord.cs
+      guid: 8a9d64c399184264b9ff21c3644bbc83
+    - path: Scripts/API/Scripts/DimensionSlotAllocationResult.cs
+      guid: fb540ac65c9426d4c8aeab71d727cfcc
+    - path: Scripts/API/Scripts/DimensionSlotAllocationRequest.cs
+      guid: a2dc8f1df587e5549981e886f89b766e
+    - path: Scripts/API/Scripts/DimensionSceneTemplateDefinition.cs
+      guid: 9d52983ab129d7f48bcc009aa9eacd96
+    - path: Scripts/API/Scripts/DimensionSceneTemplateChangeKind.cs
+      guid: 05509d4ae956119438f42d29d8a28053
+    - path: Scripts/API/Scripts/DimensionSceneTemplateChangedEvent.cs
+      guid: 5ba57e8574a98784c9c0124ade907411
+    - path: Scripts/API/Scripts/DimensionSceneState.cs
+      guid: 89297f0a183105f4882cef6c4a422ca1
+    - path: Scripts/API/Scripts/DimensionSceneDefinition.cs
+      guid: 00109ca499f04b040bfc2e4f188da3f0
+    - path: Scripts/API/Scripts/DimensionSceneChangeKind.cs
+      guid: c4ab7971626ec5740815137c9f212b81
+    - path: Scripts/API/Scripts/DimensionSceneChangedEvent.cs
+      guid: 34b1de6f2cad0b444b6258e6ac0f81d4
+    - path: Scripts/API/Scripts/DimensionRuntimeSnapshot.cs
+      guid: e873dfe20167d5443a65689e2a11650c
+    - path: Scripts/API/Scripts/DimensionReturnTargetResult.cs
+      guid: db82f042d528b6544bc232f7a1777e9e
+    - path: Scripts/API/Scripts/DimensionReturnTargetRequest.cs
+      guid: 2bba6e4483f960c40b5c97395ff02746
+    - path: Scripts/API/Scripts/DimensionRespawnTarget.cs
+      guid: 2df61bc231e98de42b165cd886b5986e
+    - path: Scripts/API/Scripts/DimensionRespawnRequest.cs
+      guid: e4fba669f865ccb44bc9110b7b72a826
+    - path: Scripts/API/Scripts/DimensionResourceNodeQuery.cs
+      guid: dd27c4283e9131f4d9e6c14716681244
+    - path: Scripts/API/Scripts/DimensionResourceNodeKind.cs
+      guid: e35253489ab9a2c4791ac5140ddf9149
+    - path: Scripts/API/Scripts/DimensionResourceNodeDefinition.cs
+      guid: 285b557154be3424cbdec3b4c9018928
+    - path: Scripts/API/Scripts/DimensionResourceNodeChangeKind.cs
+      guid: a405d25f0e9a3094d95b2faf85664d1f
+    - path: Scripts/API/Scripts/DimensionResourceNodeChangedEvent.cs
+      guid: df9d3a9ec8e89ea4580573a32c77dfdf
+    - path: Scripts/API/Scripts/DimensionResolveResult.cs
+      guid: 895c796f3c25e374fbd5d83c1840c56e
+    - path: Scripts/API/Scripts/DimensionResolvedGenerationTable.cs
+      guid: aa5e3c7b4d72b1245b64f22944d99908
+    - path: Scripts/API/Scripts/DimensionRegistrySnapshot.cs
+      guid: 16d016265fd458d44950a06a619468a9
+    - path: Scripts/API/Scripts/DimensionProgressFlagChangeKind.cs
+      guid: 8a0d31657e29f054185e45a040ed48c9
+    - path: Scripts/API/Scripts/DimensionProgressFlagChangedEvent.cs
+      guid: d7c6f6100c4a1134bb20031d540669da
+    - path: Scripts/API/Scripts/DimensionProgressFlag.cs
+      guid: bd03ca429d68b7e45b6ce40bccb65ac8
+    - path: Scripts/API/Scripts/DimensionPortalTravelRequest.cs
+      guid: 9d76f08b97ca75941a44f111c77be944
+    - path: Scripts/API/Scripts/DimensionPortalState.cs
+      guid: 1ce0b3f5ad9d1424697c145e82252f3d
+    - path: Scripts/API/Scripts/DimensionPortalPresentationDefinition.cs
+      guid: 642106996fa626f4facc19d7ff7bf817
+    - path: Scripts/API/Scripts/DimensionPortalPresentationChangeKind.cs
+      guid: c298142d5e221d245af4c9f214a0dac4
+    - path: Scripts/API/Scripts/DimensionPortalPresentationChangedEvent.cs
+      guid: 88af55f9a49c4874693a695615088f27
+    - path: Scripts/API/Scripts/DimensionPortalItemPresentationDefinition.cs
+      guid: 938f51ee9c80542428b416c436685431
+    - path: Scripts/API/Scripts/DimensionPortalIds.cs
+      guid: 686b3a779c0df1542a32c60a99e2706a
+    - path: Scripts/API/Scripts/DimensionPortalDefinition.cs
+      guid: 725fa43a9c4db9845bfef502372fe3d8
+    - path: Scripts/API/Scripts/DimensionPortalChangeKind.cs
+      guid: 1801154ab077f1c47a1d9b64f5c0e6e1
+    - path: Scripts/API/Scripts/DimensionPortalChangedEvent.cs
+      guid: e87f8bff50f6c5e498e82b5a39e370c8
+    - path: Scripts/API/Scripts/DimensionPlayerVisitRecord.cs
+      guid: 7929dcf3a26a74242841a155dc487b81
+    - path: Scripts/API/Scripts/DimensionPlayerVisitChangeKind.cs
+      guid: 6ea0d5aec3dde4e429322e64e8e57819
+    - path: Scripts/API/Scripts/DimensionPlayerVisitChangedEvent.cs
+      guid: d3a1bbea83c6ba146903bd39378b844e
+    - path: Scripts/API/Scripts/DimensionPersistenceHealthSnapshot.cs
+      guid: b25e6180967cda84788bd84ab68d80c6
+    - path: Scripts/API/Scripts/DimensionPermissionResult.cs
+      guid: b0bdb05ffc06da14da8071e62e162649
+    - path: Scripts/API/Scripts/DimensionPermissionKind.cs
+      guid: 7440419c6cea10b428e9f37b513054eb
+    - path: Scripts/API/Scripts/DimensionPermissionContext.cs
+      guid: 9a87b0e67f512e44eadb8599e89a54e6
+    - path: Scripts/API/Scripts/DimensionOperationResult.cs
+      guid: 59e86eed727ca9e40aefc68fdd64a5e0
+    - path: Scripts/API/Scripts/DimensionMultiplayerSnapshot.cs
+      guid: 7248d89c3d3e983489190533c82fc3e1
+    - path: Scripts/API/Scripts/DimensionMarkerQuery.cs
+      guid: 9b4bcb3e893600a4b8b40118ddc07680
+    - path: Scripts/API/Scripts/DimensionMarkerChangeKind.cs
+      guid: 5476797d1d93b674786920be1304c246
+    - path: Scripts/API/Scripts/DimensionMarkerChangedEvent.cs
+      guid: ec714e72a2e737f45af06d64eec5c34f
+    - path: Scripts/API/Scripts/DimensionMapPresentationSnapshot.cs
+      guid: 4a62838fc1cd42f498a72ecae7d2051e
+    - path: Scripts/API/Scripts/DimensionMapPresentationRequest.cs
+      guid: 9802a1ab611943b8bc84bb05be36f177
+    - path: Scripts/API/Scripts/DimensionMapPresentationKind.cs
+      guid: d67ea168b0d142e1ae7454457905f8db
+    - path: Scripts/API/Scripts/DimensionMapMarker.cs
+      guid: 3a89cbd899007274f8f060227267312a
+    - path: Scripts/API/Scripts/DimensionMapLayerDefinition.cs
+      guid: b5846d805af0f6c49ad5ab4801fa4d6f
+    - path: Scripts/API/Scripts/DimensionMapLayerChangeKind.cs
+      guid: ce6aa6fc9bd8111469a39c79437e1cce
+    - path: Scripts/API/Scripts/DimensionMapLayerChangedEvent.cs
+      guid: 2dbe9a2585ce0254b9ea18485c11fabd
+    - path: Scripts/API/Scripts/DimensionLoadTicketSnapshotQuery.cs
+      guid: 3cd34ad1feac9bb4aa8e9c4681bf5267
+    - path: Scripts/API/Scripts/DimensionLoadTicketSnapshot.cs
+      guid: 86561d1cb5850c441905efdd428ace70
+    - path: Scripts/API/Scripts/DimensionLoadTicket.cs
+      guid: 2ad54a4b41487914187b153eee13a115
+    - path: Scripts/API/Scripts/DimensionLoadState.cs
+      guid: cf070e56e2e43f54fbf268ca3856243f
+    - path: Scripts/API/Scripts/DimensionLoadRequest.cs
+      guid: feb23d337179a3246aa2ab8535321a09
+    - path: Scripts/API/Scripts/DimensionLifecycleState.cs
+      guid: 8de8d758321078746ad709c5f19b8c30
+    - path: Scripts/API/Scripts/DimensionLifecycleEvent.cs
+      guid: f6f65a6ea86e17a46bdd0d7451e6f44c
+    - path: Scripts/API/Scripts/DimensionLandingValidationResult.cs
+      guid: c4ef7f0d2acbf684f960cc4b553decb1
+    - path: Scripts/API/Scripts/DimensionLandingValidationRequest.cs
+      guid: 8c03987bff0f79f4987c62d9b8a7e0ec
+    - path: Scripts/API/Scripts/DimensionIds.cs
+      guid: de72f1ccbed33864694104c13f512b7b
+    - path: Scripts/API/Scripts/DimensionGenerationTableSelectionResult.cs
+      guid: 20427f830d640784aa2a712a67261ce4
+    - path: Scripts/API/Scripts/DimensionGenerationTableSelectionRequest.cs
+      guid: 96c850376e28eef41aa7b40bc5e53068
+    - path: Scripts/API/Scripts/DimensionGenerationTableSelection.cs
+      guid: af3c0cb1c69cbf549aeeaf3f99781bab
+    - path: Scripts/API/Scripts/DimensionGenerationTableResolutionResult.cs
+      guid: 331d2bcb10ce7554ab4d5bf7b3af5e59
+    - path: Scripts/API/Scripts/DimensionGenerationTableResolutionRequest.cs
+      guid: 419f9f75825f07a4f8a2d08326b8fdf0
+    - path: Scripts/API/Scripts/DimensionGenerationTableQuery.cs
+      guid: d8df7030d86cbb3449f0a4ffe2adbf8b
+    - path: Scripts/API/Scripts/DimensionGenerationTablePreview.cs
+      guid: 79c456fe4e404abb843decc17cbf226b
+    - path: Scripts/API/Scripts/DimensionGenerationTableKind.cs
+      guid: adb9641716c63d449be2ccf253cd4ce1
+    - path: Scripts/API/Scripts/DimensionGenerationTableEntryDefinition.cs
+      guid: 8c5f0db49b403854f90c88cc59622880
+    - path: Scripts/API/Scripts/DimensionGenerationTableEntryChangedEvent.cs
+      guid: 43df61f9e2c5688489b2b1ec2c8a086b
+    - path: Scripts/API/Scripts/DimensionGenerationTableDefinition.cs
+      guid: 40a5b54a8723d56499900b4004eb2211
+    - path: Scripts/API/Scripts/DimensionGenerationTableChangeKind.cs
+      guid: 83ffb27dcde36194b8852a087fd92ed3
+    - path: Scripts/API/Scripts/DimensionGenerationTableChangedEvent.cs
+      guid: 14b901b5de96cb64194c9a5dd1f1f681
+    - path: Scripts/API/Scripts/DimensionGenerationSubjectKind.cs
+      guid: e74c3b0910bb7b94aacfd2e095158722
+    - path: Scripts/API/Scripts/DimensionGenerationStatus.cs
+      guid: eac4fb0fb040295408d742569b3ca2ad
+    - path: Scripts/API/Scripts/DimensionGenerationState.cs
+      guid: 3ba41b4189f5ccd46b988b02900b730b
+    - path: Scripts/API/Scripts/DimensionGenerationSeedRequest.cs
+      guid: c23ac6891d8e43d3b7b74e78a4eb864c
+    - path: Scripts/API/Scripts/DimensionGenerationReservationRequest.cs
+      guid: 4e0745ed62c57134cb9c7163375ecaa1
+    - path: Scripts/API/Scripts/DimensionGenerationReservationQuery.cs
+      guid: 7ae9106b2e0ce3e4884cbca26a1fcf77
+    - path: Scripts/API/Scripts/DimensionGenerationReservationChangeKind.cs
+      guid: 3ebe0362b9ba92145a8f464b33dccdde
+    - path: Scripts/API/Scripts/DimensionGenerationReservationChangedEvent.cs
+      guid: d7a4f6a2f3316f84380581ba0dc826f0
+    - path: Scripts/API/Scripts/DimensionGenerationReservation.cs
+      guid: 46ad010ad1e7f474ba2fabb3ef50d487
+    - path: Scripts/API/Scripts/DimensionGenerationRequest.cs
+      guid: d243664a3a4883a4db7682ad54813fd0
+    - path: Scripts/API/Scripts/DimensionGenerationProviderResult.cs
+      guid: 196d7c6528564e24fa6adbc5f78635f2
+    - path: Scripts/API/Scripts/DimensionGenerationProviderIds.cs
+      guid: 12e985aca7bea854695d832f171cb0bb
+    - path: Scripts/API/Scripts/DimensionGenerationPreviewResult.cs
+      guid: 683ecf68e3bacec4d83fdc2a359162eb
+    - path: Scripts/API/Scripts/DimensionGenerationPreviewRequest.cs
+      guid: 70ffd5689f8db314787e707f017a7bd5
+    - path: Scripts/API/Scripts/DimensionGenerationPreflightResult.cs
+      guid: c8fca1822c98ab44181be91f0de2fad8
+    - path: Scripts/API/Scripts/DimensionGenerationPreflightRequest.cs
+      guid: f3999e0b3d762e44fa8265a00451e08c
+    - path: Scripts/API/Scripts/DimensionGenerationPlanRequest.cs
+      guid: 9b12a5ac806ebea429c41854cec5aefc
+    - path: Scripts/API/Scripts/DimensionGenerationPlanPreflightResult.cs
+      guid: a9ff548610a02e2488d3c044d93e7679
+    - path: Scripts/API/Scripts/DimensionGenerationPlanPreflightRequest.cs
+      guid: 1897799b7978fd84990ebcdf9a455353
+    - path: Scripts/API/Scripts/DimensionGenerationPlan.cs
+      guid: e1194b854b4a0a8488320316a856513f
+    - path: Scripts/API/Scripts/DimensionGenerationPassWorkPlanUtility.cs
+      guid: 6a92cb6253109e2499c9254e24b6ded4
+    - path: Scripts/API/Scripts/DimensionGenerationPassWorkPlan.cs
+      guid: 59f3a8fb14847d14d8231b255fc6517a
+    - path: Scripts/API/Scripts/DimensionGenerationPassPhase.cs
+      guid: 2b22dec995b0089489c3f7948c67b441
+    - path: Scripts/API/Scripts/DimensionGenerationPassDefinition.cs
+      guid: 71126d44fef7fd04ebcd67c76e237926
+    - path: Scripts/API/Scripts/DimensionGenerationPassContext.cs
+      guid: 2f7ee3e1389011041a9bcf3fc249a228
+    - path: Scripts/API/Scripts/DimensionGenerationPassChangeKind.cs
+      guid: 5cad79d7f54b6ee458dee13e03288eb6
+    - path: Scripts/API/Scripts/DimensionGenerationPassChangedEvent.cs
+      guid: e6038c63fd0d58b44870f5f899ec4fe7
+    - path: Scripts/API/Scripts/DimensionGenerationContext.cs
+      guid: b78684dfaae627547a68aaafabb2125a
+    - path: Scripts/API/Scripts/DimensionGenerationBudgetGuidance.cs
+      guid: 6fd7fbc9d72e41d2a3e5316dfde602a1
+    - path: Scripts/API/Scripts/DimensionEnvironmentProfileResolutionSource.cs
+      guid: 166c557ac9611c4488a07f5a7e92083c
+    - path: Scripts/API/Scripts/DimensionEnvironmentProfileResolutionResult.cs
+      guid: e2b2d10502f1d2e4888b361f1f72a7a0
+    - path: Scripts/API/Scripts/DimensionEnvironmentProfileChangeKind.cs
+      guid: c03762e50666ab7419502e1063624e55
+    - path: Scripts/API/Scripts/DimensionEnvironmentProfileChangedEvent.cs
+      guid: c75c57748ea65b64ca52c11712c81229
+    - path: Scripts/API/Scripts/DimensionEnvironmentProfile.cs
+      guid: 1c7433afe6301e549926722b33e3d648
+    - path: Scripts/API/Scripts/DimensionEntityWorldScope.cs
+      guid: e8e50f418decafb41a10d263ae10fdbf
+    - path: Scripts/API/Scripts/DimensionEntityContextCostSnapshot.cs
+      guid: 9fbc7ccf41e344c1a934e5485a343d92
+    - path: Scripts/API/Scripts/DimensionEncounterKind.cs
+      guid: 4e36711d0a7fcc8408be24f99de18296
+    - path: Scripts/API/Scripts/DimensionEncounterDefinition.cs
+      guid: 5ac17987edbc25545916c3c924e4ef78
+    - path: Scripts/API/Scripts/DimensionEncounterChangeKind.cs
+      guid: 250001d9b08e0bb449a612f7f97e5096
+    - path: Scripts/API/Scripts/DimensionEncounterChangedEvent.cs
+      guid: cedf06c253d081c4cba4067e37d42068
+    - path: Scripts/API/Scripts/DimensionDiagnosticSeverity.cs
+      guid: 02d8345a62d66a542ad38100e55f3286
+    - path: Scripts/API/Scripts/DimensionDiagnosticEntry.cs
+      guid: 4741d4a1ca7d7b14d80f8102276e25cb
+    - path: Scripts/API/Scripts/DimensionDefinition.cs
+      guid: d304d52bd3e895841a54db6d2c20a290
+    - path: Scripts/API/Scripts/DimensionDebugSnapshot.cs
+      guid: 21dcaae49d83e8041bf059616bc1edbf
+    - path: Scripts/API/Scripts/DimensionCoordinateDomain.cs
+      guid: f6a625aba985aa0419d7af0c0cb0ec16
+    - path: Scripts/API/Scripts/DimensionCoordinateCompatibilityResult.cs
+      guid: 6d86171005207f44a98058521b01e1ca
+    - path: Scripts/API/Scripts/DimensionCoordinateCompatibilityRequest.cs
+      guid: e2a4d93b2d1c94d4abfaf57d0160c38a
+    - path: Scripts/API/Scripts/DimensionContext.cs
+      guid: 4ffd57a5b3d293b45ab32c6cf5b96d2f
+    - path: Scripts/API/Scripts/DimensionContentValidationRequest.cs
+      guid: cb1de226fda7ef646870c2f8987f1a34
+    - path: Scripts/API/Scripts/DimensionContentValidationReport.cs
+      guid: d193d1f5e7de9a845be7aa90bb3eb916
+    - path: Scripts/API/Scripts/DimensionContentValidationIssue.cs
+      guid: f8b977a2222f58a43896a80f404c27ad
+    - path: Scripts/API/Scripts/DimensionContentRecordKind.cs
+      guid: 9cfff8dca0d4cde4d97c916fd9522e4a
+    - path: Scripts/API/Scripts/DimensionContentReadinessResult.cs
+      guid: 9d668d05470a4ad40bce332d7f73fdf8
+    - path: Scripts/API/Scripts/DimensionContentReadinessRequirement.cs
+      guid: 069cfbfd7034e6e478c655bb8088119e
+    - path: Scripts/API/Scripts/DimensionContentReadinessRequest.cs
+      guid: eaefe0969a3cb3c4a9d4758f4cceb4eb
+    - path: Scripts/API/Scripts/DimensionContentReadinessIssue.cs
+      guid: 6250c3c4307b83a4bb20f4d3eee82cd7
+    - path: Scripts/API/Scripts/DimensionContentPackSummaryRequest.cs
+      guid: 2543fdad96074014182378c79620a528
+    - path: Scripts/API/Scripts/DimensionContentPackSummary.cs
+      guid: 315a157567c7a684b89737932389b929
+    - path: Scripts/API/Scripts/DimensionContentPackRecordCount.cs
+      guid: 5c756bcac6c619f4b97be34186a0e753
+    - path: Scripts/API/Scripts/DimensionContentPackReadinessResult.cs
+      guid: fc62c2187cf6d3448ae4705a601a7f18
+    - path: Scripts/API/Scripts/DimensionContentPackDefinition.cs
+      guid: 77f340edb5642a945b9e2f04356e923d
+    - path: Scripts/API/Scripts/DimensionContentPackChangeKind.cs
+      guid: e30bf0b6bef18da4e8a6bad42da46b68
+    - path: Scripts/API/Scripts/DimensionContentPackChangedEvent.cs
+      guid: 948f54866699af243b73ae902be33677
+    - path: Scripts/API/Scripts/DimensionContentOwnershipQuery.cs
+      guid: 50c1bcda052b65448beea6c979aafc4a
+    - path: Scripts/API/Scripts/DimensionContentOwnershipChangeKind.cs
+      guid: 8df3c3b000706da44b48adcc0283c0e8
+    - path: Scripts/API/Scripts/DimensionContentOwnershipChangedEvent.cs
+      guid: 3ba06b3a3c701b14da049f33a63f1339
+    - path: Scripts/API/Scripts/DimensionContentOwnershipBinding.cs
+      guid: e3e8ce3cea6a5ac4bb65db118041b00e
+    - path: Scripts/API/Scripts/DimensionContentManifestResult.cs
+      guid: 744af423560ee86469cbe995ccac31fe
+    - path: Scripts/API/Scripts/DimensionContentManifestRequest.cs
+      guid: 3671ee01d278d494ea843b89906d039b
+    - path: Scripts/API/Scripts/DimensionContentManifestOperationKind.cs
+      guid: e84c5c66e9dcc844d842901304d733fb
+    - path: Scripts/API/Scripts/DimensionContentManifestOperation.cs
+      guid: 30444c68508cec549abbf1e395d418d1
+    - path: Scripts/API/Scripts/DimensionContentManifest.cs
+      guid: bb0ec2e866f41564a8d4e1c0b508339a
+    - path: Scripts/API/Scripts/DimensionCompiledScenePlacement.cs
+      guid: 28deca240719475479e23d15956f1fa0
+    - path: Scripts/API/Scripts/DimensionCompiledGenerationPlan.cs
+      guid: 771ffa463adb4b441bb384151a47c2d9
+    - path: Scripts/API/Scripts/DimensionCompiledBiomeRegion.cs
+      guid: b1d388dd97bc06445a021c226d11e364
+    - path: Scripts/API/Scripts/DimensionChangedEvent.cs
+      guid: 05f3893dcf8c9384eaff8abf9328a57c
+    - path: Scripts/API/Scripts/DimensionCapabilityFlags.cs
+      guid: 4d1cba74967485f43af2828684efead8
+    - path: Scripts/API/Scripts/DimensionBounds.cs
+      guid: 4cd6ca2260d2c1243949790427cf9148
+    - path: Scripts/API/Scripts/DimensionBiomeResolutionResult.cs
+      guid: d7346c4d8cc68444383f38ceebb033e7
+    - path: Scripts/API/Scripts/DimensionBiomeQuery.cs
+      guid: 43b6a9d4e5107464cba97f0981e7f5f4
+    - path: Scripts/API/Scripts/DimensionBiomeGenerationBudget.cs
+      guid: 8b8bc037cf5c4c03aa41db9a5e35de9d
+    - path: Scripts/API/Scripts/DimensionBiomeGenerationBlueprintUtility.cs
+      guid: 2a434787f3467684db9126748f8cfcda
+    - path: Scripts/API/Scripts/DimensionBiomeGenerationBlueprint.cs
+      guid: 1097f08bac062eb4787cac67bd975a1d
+    - path: Scripts/API/Scripts/DimensionBiomeDefinition.cs
+      guid: d467a1e008a317c4a9e979ef6a8c5aa3
+    - path: Scripts/API/Scripts/DimensionBiomeCustomizerGuidance.cs
+      guid: 7e90e655f84d436eaabff8506fdaa60b
+    - path: Scripts/API/Scripts/DimensionBiomeCustomizerCapabilityStatus.cs
+      guid: 6ce4b1868f404d2c856a88f86a6d03ab
+    - path: Scripts/API/Scripts/DimensionBiomeCustomizerCapability.cs
+      guid: 750f3933d7f94c12af3f2dfac4b56472
+    - path: Scripts/API/Scripts/DimensionBiomeChangeKind.cs
+      guid: 5aeb816abf60b8c40a57fab53d3e0896
+    - path: Scripts/API/Scripts/DimensionBiomeChangedEvent.cs
+      guid: 0659ba0608752fb47b7a9b39855d1d2c
+    - path: Scripts/API/Scripts/DimensionBiomeAuthoringRecipe.cs
+      guid: 1b4b4678f66d4e70961eb5b44822f4f0
+    - path: Scripts/API/Scripts/DimensionBiomeAuthoringOverviewUtility.cs
+      guid: 43bde52bb5737e34dbbb8c49da4f41da
+    - path: Scripts/API/Scripts/DimensionBiomeAuthoringOverview.cs
+      guid: 3a0423fb6e75d0246b4d0d695835c55c
+    - path: Scripts/API/Scripts/DimensionAuthoringSpatialConflict.cs
+      guid: 993532b30d0d4ba3a935d12b0e8a2b88
+    - path: Scripts/API/Scripts/DimensionAuthoringSeverity.cs
+      guid: 0b7ca7d6431d91b48b541a723f9124ae
+    - path: Scripts/API/Scripts/DimensionAuthoringReadinessUtility.cs
+      guid: 6b2c665a0b549ce44a689686adcad87e
+    - path: Scripts/API/Scripts/DimensionAuthoringReadinessState.cs
+      guid: 65d2097028daac9448efc7167aae2efe
+    - path: Scripts/API/Scripts/DimensionAuthoringReadinessReport.cs
+      guid: 96e9a4c9657809d4b8df27094e318338
+    - path: Scripts/API/Scripts/DimensionAuthoringReadinessEntry.cs
+      guid: 892eee8df5cd8fe4fa87c672b7cc59ce
+    - path: Scripts/API/Scripts/DimensionAuthoringReadinessCategory.cs
+      guid: c4ab94cff698e754b8b74189ac6f9d45
+    - path: Scripts/API/Scripts/DimensionAuthoringPreviewSummary.cs
+      guid: dc1680384b426c744b1f697a4feda402
+    - path: Scripts/API/Scripts/DimensionAuthoringPreviewQueryUtility.cs
+      guid: 0bcdc39a6775338479ff8c0ace6865b5
+    - path: Scripts/API/Scripts/DimensionAuthoringPreviewQuery.cs
+      guid: 1970c005f1a26f040932265808b62851
+    - path: Scripts/API/Scripts/DimensionAuthoringPreviewLayerKind.cs
+      guid: a891ae15df392a84e9b308b813452327
+    - path: Scripts/API/Scripts/DimensionAuthoringPreviewEntry.cs
+      guid: d336f1e32654d2e4eb884ee1a0bb1322
+    - path: Scripts/API/Scripts/DimensionAuthoringOperationPlan.cs
+      guid: f6ab3d73d7a2445f8fb4c7660c8c2d38
+    - path: Scripts/API/Scripts/DimensionAuthoringIssue.cs
+      guid: 53fa13ac6d3360b4fbfd9910a091e3e7
+    - path: Scripts/API/Scripts/DimensionAuthoringContentSummaryKind.cs
+      guid: 60a6fbbf5fea32448a243b7d68f8891d
+    - path: Scripts/API/Scripts/DimensionAuthoringContentSummaryEntry.cs
+      guid: 94894eb4d30757345b037be2b43db8a0
+    - path: Scripts/API/Scripts/DimensionAuthoringCanvasModel.cs
+      guid: 2a3c9c3e34cb44b6bd31894381169166
+    - path: Scripts/API/Scripts/DimensionAssetReferenceResolutionResult.cs
+      guid: 3a657ad30de16114a89656ef9fb22b40
+    - path: Scripts/API/Scripts/DimensionAssetReferenceResolutionRequest.cs
+      guid: 5156560c9970a3645bc3e04232082236
+    - path: Scripts/API/Scripts/DimensionAssetReferenceQuery.cs
+      guid: 9165772fb806ef84fa3121dcd9c60722
+    - path: Scripts/API/Scripts/DimensionAssetReferenceKind.cs
+      guid: 4fdaf422912f1be4cbfaca54ea4d92be
+    - path: Scripts/API/Scripts/DimensionAssetReferenceDefinition.cs
+      guid: 1ab57dbdc4a79b34bb46a54406e501ea
+    - path: Scripts/API/Scripts/DimensionAssetReferenceChangeKind.cs
+      guid: c3cce088360ecc243a538fc46a835840
+    - path: Scripts/API/Scripts/DimensionAssetReferenceChangedEvent.cs
+      guid: fdfeb180d6a98254a84d0d355c8f953b
+    - path: Scripts/API/Scripts/DimensionArea.cs
+      guid: d74b0d7319e56654d8b0c7e73c11e7ff
+    - path: Scripts/API/Scripts/DimensionApiCoordinates.cs
+      guid: 7fbeacceb3a77ca45a340ffa2502d09d
+    - path: Scripts/API/Scripts/DimensionApiCompatibility.cs
+      guid: 6182fc42347bbd6458af793108e7ec57
+    - path: Scripts/API/Scripts/DimensionApi.cs
+      guid: 1cd8c5b6e1030b546ba47f63c96f1c9b
+    - path: Scripts/API/Scripts/DimensionAnchorKind.cs
+      guid: dcdddfcf2c79add47ae8d5c026ae8a08
+    - path: Scripts/API/Scripts/DimensionAnchorDefinition.cs
+      guid: e5316357137ea8e48869fa684038403f
+    - path: Scripts/API/Scripts/DimensionAnchorChangeKind.cs
+      guid: d7183a7b086e8644092241bace887acf
+    - path: Scripts/API/Scripts/DimensionAnchorChangedEvent.cs
+      guid: 9a76b6ad2b1dbb3499fe2902054133fd
+    - path: Scripts/API/Scripts/DimensionAccessResult.cs
+      guid: fa67f10a4c53aa7478b40a16f07b66f0
+    - path: Scripts/API/Scripts/DimensionAccessContext.cs
+      guid: 4cec4131d068e0449a26e5840f1d61e0
+    - path: Scripts/Generated/DimensionPlayerContextRpcSystems__System_12733873760.g.cs
+      guid: 
+    - path: Scripts/Generated/DimensionPortalActivationSystem__System_19624080370.g.cs
+      guid: 
+    - path: Scripts/Generated/DimensionPortalHydrationSystem__System_7276304150.g.cs
+      guid: 
+    - path: Scripts/Generated/DimensionReturnPortalSpawnSystem__System_8503337940.g.cs
+      guid: 
+    - path: Scripts/Generated/DimensionTravelRpcSystems__System_807351100.g.cs
+      guid: 
+    - path: Scripts/Generated/NullforgeReturnPortalSpawnSystem__System_21168114660.g.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionPlayerContextRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionPlayerContextSnapshotRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionPortalTravelRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionTravelCancelRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionTravelCancelResultRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionTravelRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Networking_DimensionTravelResultRpcCommandSerializer.cs
+      guid: 
+    - path: Bundles/ExpandNullforge_Windows.assetbundle
+      guid: 
+    - path: Bundles/ExpandNullforge_Windows.assetbundle.manifest
+      guid: 
+    - path: Bundles/ExpandNullforge_Linux.assetbundle
+      guid: 
+    - path: Bundles/ExpandNullforge_Linux.assetbundle.manifest
+      guid: 
+    dependencies: []
+  modPath: Assets\ExpandNullforge
+  forceReimport: 1
+  buildBundles: 1
+  cacheBundles: 0
+  buildLinux: 1
+  assets:
+  - path: Assets/ExpandNullforge/Data/ExpandNullforge.asset
+    hash: 3F963FA77DBDC466BC7A5536C86655ADE6D0E9E3A32E805F238D7898D49EB84A
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/CoreSpawnLightning.mat
+    hash: B827106A61D71BFCC43C0EED694DF32873EA99EEF09F39E7C94C7CDDDCBE58E6
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/EnergyEmissiveAmplify.mat
+    hash: FA2B8379D8E111BF55F29633AEBE3E5A426149B851714168460CE07241A86546
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/FloorShadowAmplify_Tall.mat
+    hash: D33D8F76619925B030F745D84583BBB2A4B903E6AE323A45EEB28CCA884E4114
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/ParticleAdd.mat
+    hash: 5E515B430CBE04184D8B065832A369071BCA36ECF6A7656928059579DDFB49EA
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/PortalAmplify.mat
+    hash: EF93CD44ABFA13B50E42ACE8133B860F4D375B5D5BEC7BE53A98E1F623DDD87D
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/PortalEmissiveAmplify.mat
+    hash: 7149CB83E3E530ED0DEC5FBC68B98223AEE7B26EE6685EA5160701CAEF118D26
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/ShadowCastingSprite.mat
+    hash: CDBAA35B484B023C4EC6C1C6027872D788B71934CF660EB708D797C20882A531
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Material/SpriteObject (Indirect
+      Light Emitter).mat
+    hash: 5A3CC4138B19C1F14D7E7DD20985051061804B0EAB7DF9C20790E1C937812A6B
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_Emissive.shader
+    hash: 082001123CB1550443AE62E981665C58096775F5C209DB7EABC7E655E59B86C5
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_FloorShadow.shader
+    hash: 0FA56E1BCD724249A71918A14714FE20ACF7A8061EAC1FA7617E20C40CB6EFC6
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_Portal.shader
+    hash: A23DC3619F73A2115FAC323CA34362B036C4C9470F107A1A88067B3C5E726250
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_ShadowCastingSprite.shader
+    hash: 93BF34D8B00D181E90A1DB529D185DD54CF777396675E7FD8F78C6C78C66BEA5
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Radical_alphaBlend_glow.shader
+    hash: 8390BC00A2F740A8924106B53CA0F28FF12FDD67BA38EB0A5769B6246DC7CDFE
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/SpriteObject_StandardCK.shader
+    hash: 2DCD2235E68D93BCE3682343B967E1A9EF975F11C193553D1EC08C171BD58E4C
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_0.asset
+    hash: FD9C0C64B0A909A08E6E0054A02EC52177580F235FFB839E9824935A7564B743
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_1.asset
+    hash: FBE97A08F42AEB4AF8279617B329A742EC86670F40B608E7B9AC8D69E1648462
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_2.asset
+    hash: 7D560C3FACBEEB174A5F72074264848A4EC75616F455C2D269D74B59A76AD603
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_3.asset
+    hash: 1C33BD5467FBEE37BE53EFB1DC74A093C4CF5D4892489624D08A779A399E4326
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_4.asset
+    hash: 694CC46C1F41DBAC391716E02851E6B7BCC362C89B4245DE84F381DD941A3A50
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_5.asset
+    hash: 528FD5E95279D6C2CEBF7AA794F86D1C1F1E7813CE518A209481C795C577D6FB
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_6.asset
+    hash: D5A5DEB57B71F4DEB3D23A0C3FFF53C45EB4242962225AAAD964D9C74438485C
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/lootsprites_667.asset
+    hash: A341EF8B7286D87558C96DBE2A903B3ABA1BCD4533F0262DC9723DC82F3FC95E
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/lootsprites_668.asset
+    hash: D427394CF9C9749AA53AFDCA9C8088847B4C264EA53C931DF6B8CC390643FAFB
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal.asset
+    hash: 27A164D9486F5CD40B94527F5BA37C073212AD14A9E13FFB3035D259B2077FFF
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_0.asset
+    hash: 5E33F02C5C7FB30F3EBC6BB8578EF04DEFEFC6966559495E84A5F9D794970A5A
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_1.asset
+    hash: B3037D99AC1BDD1D8DF21D481FF757FFA20CFEE0D27034D00BFFF87BE352B8E9
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_2.asset
+    hash: B4DC6A825E7E5B6C7D6E2BF464B90EA0B96B055E39F67EE29BE7BC2B20E62949
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_3.asset
+    hash: 6A26FD1CDE2749C856299AFF7E74952327AA64D7DD2C5EC62013FB1B8BAFD0B2
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_4.asset
+    hash: FE84C21DAA59179A56AF3B3E34ED6FE4B724CC1315F8455C2BCD94A539C87878
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_5.asset
+    hash: 9F3F42393C4772D888A0F8BB1D90BC488F1CE467791D92178A3E70282A62F75D
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_6.asset
+    hash: 80F07C3E07613E8F4F3502A772AD999A09E907A33230E9EC50BBE302D4FA13EC
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_7.asset
+    hash: 226EF2ED3112AC7CBB4D7B164EA2C8525A50E33F08F364022A9DC0B888F64F4F
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_effect_8.asset
+    hash: F2FEF4982AA81694DAD9C194D01D04AFADF14D372CB45FBEDEF27AC3D78339A4
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_emissive_0.asset
+    hash: A059B47B1CE35B3D46CA200646B934CD541BA3AB30DFE1B2366288D45BD9F4CF
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_shadow.asset
+    hash: B90A4F0302FF5B76EAE0B2378AE667286E458873513BDBACDDE7E20E14E5B27A
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/portal_shadowcaster.asset
+    hash: 6FD29C2627AF2C08FA305763C9BA0E64E656ACA2AFD0C41546F7F4159AC76A47
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/wall_loot_2.asset
+    hash: A725DFE6FEF4F4062CF38970C867E857D581AF729DBF69BE896F53EC2B69B48C
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/wcircle.asset
+    hash: E3E5FF863CC731E46F88AF8629337C1D1C91B6818CE1E0EA46221ABF1923F2E7
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/black_gradient_no_clamp.png
+    hash: 4ABC7156DBC4C6C91994ADEC2702607D4378F37EFE47DCDEFE2DD89A61503E96
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/flash.png
+    hash: 3A209AB9BF0D4D6F94D0E759693E75C2EEE54BA83A87025E174F8C479C7096CB
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/lootsprites.png
+    hash: F7EF76D951B4DB7A4D92B9EA237A107C126CA94085BFA454A0053DBE2B6D9BCF
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/particles.png
+    hash: 4B1E23B9AF4B27DD2BA4A19DBA28C3C325EEA10B75765EB0F91DFD68388CADD2
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/portal.png
+    hash: 6550C3FE9FC06609886099F6B4EB28377245DE2ECE23ECF5A76CAD6B829761AB
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/portal_effect.png
+    hash: E109EBEFA563897BAB6D41A3BE2548C8384A4BD543EED0C3AE89D18549A7D5CB
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/portal_emissive.png
+    hash: 6B59D0A154766F4F487ACEB516EBA4A7E69D7B7189E6C9110A2CB03B2911EB8D
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/sactx-0-512x512-Uncompressed-environment-654b3db7.png
+    hash: AE42B58A98F63D533C596BBBACE764F509B74F818A1C1B9A45A9009BF37EA07F
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/shadows_2.png
+    hash: 3C21C75E4C9569A8302F4E3A2CEC33C8D5059FC0F81941715AD28A263C4A1213
+  - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/wall_loot.png
+    hash: A41DAD58350F059DF07ABD97490974439E69E072A3DA74366C36ED47F419D92E
+  lastBuildLinux: 1

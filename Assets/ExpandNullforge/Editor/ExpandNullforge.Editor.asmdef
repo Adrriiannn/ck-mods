@@ -1,0 +1,32 @@
+{
+    "name": "ExpandNullforge.Editor",
+    "references": [
+        "ExpandNullforge",
+        "ExpandNullforge.API",
+        "ModSDK.Editor",
+        "PugMod.SDK",
+        "Unity.NetCode",
+        "Unity.NetCode.Authoring.Hybrid",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Pug.Base.dll",
+        "Pug.ECS.Authoring.dll",
+        "Pug.Other.dll",
+        "PugSprite.dll",
+        "Pug.UnityExtensions.dll",
+        "PugMod.SDK.Runtime.dll",
+        "ScriptableData.dll",
+        "ScriptableData.Editor.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

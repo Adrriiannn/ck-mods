@@ -1,0 +1,72 @@
+using System;
+using System.Collections.Generic;
+using PugMod;
+
+namespace ExpandNullforge.Portals
+{
+  public static class DimensionPortalObjectIdCache
+  {
+    private static readonly Dictionary<string, ObjectID> ObjectIds =
+        new Dictionary<string, ObjectID>(StringComparer.Ordinal);
+
+    private static readonly HashSet<string> LoggedWaiting =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    public static void Clear()
+    {
+      ObjectIds.Clear();
+      LoggedWaiting.Clear();
+    }
+
+    public static bool TryResolve(string objectName, out ObjectID objectID)
+    {
+      objectID = ObjectID.None;
+      if (string.IsNullOrEmpty(objectName))
+      {
+        return false;
+      }
+
+      if (ObjectIds.TryGetValue(objectName, out objectID) &&
+          objectID != ObjectID.None)
+      {
+        return true;
+      }
+
+      if (API.Authoring == null)
+      {
+        return false;
+      }
+
+      objectID = API.Authoring.GetObjectID(objectName);
+      if (objectID == ObjectID.None)
+      {
+        LogWaitingOnce(objectName);
+        return false;
+      }
+
+      ObjectIds[objectName] = objectID;
+      LoggedWaiting.Remove(objectName);
+      return true;
+    }
+
+    public static bool Refresh(string objectName)
+    {
+      ObjectID objectID;
+      return TryResolve(objectName, out objectID);
+    }
+
+    private static void LogWaitingOnce(string objectName)
+    {
+      if (LoggedWaiting.Contains(objectName))
+      {
+        return;
+      }
+
+      LoggedWaiting.Add(objectName);
+      Foundation.DimensionFrameworkLog.Verbose(
+          "[ExpandNullforge] Waiting for custom portal object '" +
+          objectName +
+          "' to be registered.");
+    }
+  }
+}

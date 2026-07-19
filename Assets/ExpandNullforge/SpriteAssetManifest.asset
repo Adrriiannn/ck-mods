@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 1876717734, guid: 292700ef68995bdb2163e35989fc7eb0, type: 3}
+  m_Name: SpriteAssetManifest
+  m_EditorClassIdentifier: 
+  spriteAssets:
+  - {fileID: 11400000, guid: 2d0507379ac332ca122a4a903b75b71f, type: 2}
+  - {fileID: 11400000, guid: 76ce812d60a387ba5872a65c865b964c, type: 2}
+  - {fileID: 11400000, guid: 401f37ea56c15d074ff105de64250607, type: 2}
+  - {fileID: 11400000, guid: 3eb82ccfd72f4cea956bdf52272b713e, type: 2}
+  - {fileID: 11400000, guid: b1e7a96b191ff398392a2001f25c4d75, type: 2}
+  - {fileID: 11400000, guid: 954d7edf3e1e036d9002ea65ba9c7809, type: 2}
+  - {fileID: 11400000, guid: c0b2c7f4fb1346769fa90928af049e3a, type: 2}
+  - {fileID: 11400000, guid: bd5aa5c1d1d34c65a3b2d22b0f5c9214, type: 2}
+  - {fileID: 11400000, guid: af0f7b1fb72e3b14aa1967aab47f065d, type: 2}
+  gradientMaps: []
+  transformAnimations: []

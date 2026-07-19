@@ -1,0 +1,101 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -217761678, guid: 292700ef68995bdb2163e35989fc7eb0, type: 3}
+  m_Name: PortalCenterEffect
+  m_EditorClassIdentifier: 
+  m_overload:
+    m_address:
+      m_low: 0
+      m_high: 0
+  m_address:
+    m_low: 5570163353262010590
+    m_high: -2439472303744231237
+  m_dynamicCollections:
+    m_list: []
+  m_defaultPrimaryGradientMap: {fileID: 0}
+  m_defaultSecondaryGradientMap: {fileID: 0}
+  m_defaultTertiaryGradientMap: {fileID: 0}
+  m_defaultPrimaryGradientMapRef:
+    m_address:
+      m_low: 0
+      m_high: 0
+  m_defaultSecondaryGradientMapRef:
+    m_address:
+      m_low: 0
+      m_high: 0
+  m_defaultTertiaryGradientMapRef:
+    m_address:
+      m_low: 0
+      m_high: 0
+  m_editorHideEmissive: 0
+  m_staticSpriteData:
+    texture: {fileID: 0}
+    emissiveTexture: {fileID: 0}
+    normalTexture: {fileID: 0}
+    pivot: {x: 0.5, y: 0.5}
+    positionalData: []
+    inheritPivot: 1
+  m_staticVariants: []
+  m_animations:
+  - m_guid: 96a98d79-35b2-581f-ad8f-de9b2596ccc1
+    m_spriteData:
+      texture: {fileID: 2800000, guid: 5a075ff236fa841e2094ae0d591ee301, type: 3}
+      emissiveTexture: {fileID: 2800000, guid: 5a075ff236fa841e2094ae0d591ee301, type: 3}
+      normalTexture: {fileID: 0}
+      pivot: {x: 0.5, y: 0.5}
+      positionalData: []
+      inheritPivot: 1
+    srcFrameCount: 5
+    fps: 10
+    loop: 1
+    m_exitAnimationGuid: 
+    m_variants: []
+    m_transitions: []
+    frameData:
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+  - m_guid: b277438a-1365-57f7-a607-4112b27da339
+    m_spriteData:
+      texture: {fileID: 2800000, guid: 3ca8d40bf8356257793399914242e71a, type: 3}
+      emissiveTexture: {fileID: 2800000, guid: 3ca8d40bf8356257793399914242e71a, type: 3}
+      normalTexture: {fileID: 0}
+      pivot: {x: 0.5, y: 0.5}
+      positionalData: []
+      inheritPivot: 1
+    srcFrameCount: 4
+    fps: 10
+    loop: 0
+    m_exitAnimationGuid: 96a98d79-35b2-581f-ad8f-de9b2596ccc1
+    m_variants: []
+    m_transitions: []
+    frameData:
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+    - holdFrames: 0
+      eventMask: 0
+  m_events: []
+  m_positionalData: []
+  references:
+    version: 2
+    RefIds: []
