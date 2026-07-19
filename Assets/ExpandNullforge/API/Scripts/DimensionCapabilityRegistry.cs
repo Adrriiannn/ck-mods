@@ -159,7 +159,7 @@ namespace ExpandNullforge.Api
                 "custom-items",
                 "Custom items",
                 DimensionCapabilityMaturity.AuthoringModelOnly,
-                "IDs, metadata, and asset references only; no full prefab/ObjectAuthoring/SpriteAsset/localization/recipe generation."),
+                "Archetypes declare the required components and the validator blocks incomplete items, but no prefab/ObjectAuthoring/SpriteAsset/localization/recipe generation runs yet."),
             new DimensionCapability(
                 "recipes-workbenches-loot",
                 "Recipes, workbenches, and loot",
@@ -168,8 +168,8 @@ namespace ExpandNullforge.Api
             new DimensionCapability(
                 "custom-tilesets",
                 "Custom tilesets",
-                DimensionCapabilityMaturity.NotImplemented,
-                "Only the safe-platform tileset constant is used; no authoring, import, registration, or generation path exists."),
+                DimensionCapabilityMaturity.ContractExtensionSeam,
+                "Tile roles and a priority-arbitrated provider registry exist so a third-party tileset mod can coexist, but no provider ships yet: authoring, import, and generation are still missing."),
             new DimensionCapability(
                 "map-presentation",
                 "Map and coordinate presentation",
