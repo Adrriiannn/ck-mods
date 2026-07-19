@@ -96,6 +96,8 @@ namespace ExpandNullforge.Authoring
         [Tooltip("Decides which Core Keeper authoring components the generated object needs. Anything you do not customize stays vanilla.")]
         [SerializeField] private DimensionItemArchetype archetype = DimensionItemArchetype.Material;
         [SerializeField] private DimensionItemKind kind = DimensionItemKind.BaseItem;
+        [Tooltip("Drag the item's sprite here. This is the reliable way to give an item art; the icon id below is only used as a fallback lookup.")]
+        [SerializeField] private Sprite iconSprite;
         [SerializeField] private string iconId = string.Empty;
         [SerializeField] private string objectId = string.Empty;
         [SerializeField] private int maxStack = 999;
@@ -118,6 +120,26 @@ namespace ExpandNullforge.Authoring
         public string ItemId
         {
             get { return itemId ?? string.Empty; }
+        }
+
+        /// <summary>
+        /// Directly assigned sprite. Preferred over <c>IconId</c>, which has to be looked up by
+        /// name and can silently fail to resolve.
+        /// </summary>
+        public Sprite IconSprite
+        {
+            get { return iconSprite; }
+        }
+
+        /// <summary>True when the item has art the generator can actually use.</summary>
+        public bool HasVisual
+        {
+            get
+            {
+                return iconSprite != null ||
+                       !string.IsNullOrEmpty(iconId) ||
+                       !string.IsNullOrEmpty(objectId);
+            }
         }
 
         /// <summary>Loot table id awarded on destruction (loot-bearing archetypes).</summary>

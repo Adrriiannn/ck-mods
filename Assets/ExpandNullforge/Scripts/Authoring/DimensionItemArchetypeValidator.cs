@@ -65,13 +65,11 @@ namespace ExpandNullforge.Authoring
                     "A display name is required for the generated localization entry."));
             }
 
-            if (Requires(required, DimensionItemAuthoringComponents.Visual) &&
-                string.IsNullOrEmpty(item.IconId) &&
-                string.IsNullOrEmpty(item.ObjectId))
+            if (Requires(required, DimensionItemAuthoringComponents.Visual) && !item.HasVisual)
             {
-                findings.Add(new Finding(Severity.Error, "iconId",
+                findings.Add(new Finding(Severity.Error, "iconSprite",
                     "A " + DimensionItemArchetypeRules.Describe(archetype) +
-                    " needs an icon or object sprite reference to be visible."));
+                    " needs a sprite to be visible. Drag one into Icon sprite."));
             }
 
             if (Requires(required, DimensionItemAuthoringComponents.InventoryItem) &&

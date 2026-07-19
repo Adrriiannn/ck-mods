@@ -2603,7 +2603,8 @@ namespace ExpandNullforge.EditorTools
                 Field("itemId", "Item ID"),
                 Field("archetype", "Archetype"),
                 Field("kind", "Kind"),
-                Field("iconId", "Icon ID"),
+                Field("iconSprite", "Icon sprite"),
+                Field("iconId", "Icon ID (fallback)"),
                 Field("objectId", "Object ID")
             };
 

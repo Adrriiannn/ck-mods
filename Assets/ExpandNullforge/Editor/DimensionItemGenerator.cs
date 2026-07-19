@@ -276,12 +276,11 @@ namespace ExpandNullforge.EditorTools
                     report);
             }
 
-            Sprite icon = ResolveSprite(item.IconId);
-            if (icon == null && !string.IsNullOrEmpty(item.IconId))
+            if (ResolveSprite(item) == null && !string.IsNullOrEmpty(item.IconId))
             {
                 report.Warnings.Add(
                     Describe(item) + ": no sprite found for icon id '" + item.IconId +
-                    "'. Assign it on the generated prefab.");
+                    "'. Drag the sprite into the item's Icon sprite field instead.");
             }
         }
 
@@ -303,7 +302,7 @@ namespace ExpandNullforge.EditorTools
             inventory.isStackable = item.MaxStack > 1;
             inventory.requiredObjectsToCraft = new List<InventoryItemAuthoring.CraftingObject>();
 
-            Sprite icon = ResolveSprite(item.IconId);
+            Sprite icon = ResolveSprite(item);
             if (icon != null)
             {
                 inventory.icon = icon;
@@ -445,12 +444,23 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>
-        /// Resolves an icon id to a sprite. A project path is used directly; otherwise the id is
-        /// treated as an asset name. Returns null rather than substituting a placeholder, so a
-        /// missing icon is reported instead of shipping the wrong art.
+        /// Resolves the item's art. A directly assigned sprite always wins; otherwise the icon id
+        /// is treated as a project path or an asset name. Returns null rather than substituting a
+        /// placeholder, so a missing icon is reported instead of shipping the wrong art.
         /// </summary>
-        private static Sprite ResolveSprite(string iconId)
+        private static Sprite ResolveSprite(DimensionItemAsset item)
         {
+            if (item == null)
+            {
+                return null;
+            }
+
+            if (item.IconSprite != null)
+            {
+                return item.IconSprite;
+            }
+
+            string iconId = item.IconId;
             if (string.IsNullOrEmpty(iconId))
             {
                 return null;
