@@ -67,6 +67,20 @@ namespace ExpandNullforge.EditorTools
             IEnumerable<DimensionItemAsset> items,
             string outputFolder)
         {
+            return Generate(items, outputFolder, null);
+        }
+
+        /// <summary>
+        /// Generates items and, where a recipe produces one of them, writes that recipe's
+        /// ingredients and craft time onto the item. Core Keeper keeps a recipe's ingredient list
+        /// on the produced item rather than on the crafting station, so this is where a recipe
+        /// becomes real.
+        /// </summary>
+        public static DimensionItemGenerationReport Generate(
+            IEnumerable<DimensionItemAsset> items,
+            string outputFolder,
+            IEnumerable<DimensionRecipeAsset> recipes)
+        {
             DimensionItemGenerationReport report = new DimensionItemGenerationReport();
             if (items == null)
             {
@@ -88,6 +102,7 @@ namespace ExpandNullforge.EditorTools
                 return report;
             }
 
+            Dictionary<string, DimensionRecipeAsset> recipesByOutput = IndexRecipes(recipes, report);
             List<string> generatedIds = new List<string>();
             List<DimensionLocalizationCsv.Row> localizationRows =
                 new List<DimensionLocalizationCsv.Row>();
@@ -96,7 +111,7 @@ namespace ExpandNullforge.EditorTools
                 AssetDatabase.StartAssetEditing();
                 foreach (DimensionItemAsset item in items)
                 {
-                    if (GenerateOne(item, outputFolder, report) && item != null)
+                    if (GenerateOne(item, outputFolder, recipesByOutput, report) && item != null)
                     {
                         generatedIds.Add(item.ItemId);
                         DimensionLocalizationCsv.AddItemRows(
@@ -222,10 +237,50 @@ namespace ExpandNullforge.EditorTools
             AssetDatabase.SaveAssets();
         }
 
+        /// <summary>
+        /// Indexes recipes by the item they produce. Two enabled recipes producing the same item
+        /// would each want to own that item's ingredient list, so the clash is reported rather
+        /// than resolved by whichever happened to come last.
+        /// </summary>
+        private static Dictionary<string, DimensionRecipeAsset> IndexRecipes(
+            IEnumerable<DimensionRecipeAsset> recipes,
+            DimensionItemGenerationReport report)
+        {
+            Dictionary<string, DimensionRecipeAsset> byOutput =
+                new Dictionary<string, DimensionRecipeAsset>(StringComparer.Ordinal);
+            if (recipes == null)
+            {
+                return byOutput;
+            }
+
+            foreach (DimensionRecipeAsset recipe in recipes)
+            {
+                if (recipe == null || !recipe.Enabled || string.IsNullOrEmpty(recipe.OutputItemId))
+                {
+                    continue;
+                }
+
+                if (byOutput.TryGetValue(recipe.OutputItemId, out DimensionRecipeAsset existing))
+                {
+                    report.Warnings.Add(
+                        "Recipes '" + existing.RecipeId + "' and '" + recipe.RecipeId +
+                        "' both produce '" + recipe.OutputItemId +
+                        "'. Core Keeper stores ingredients on the produced item, so only '" +
+                        existing.RecipeId + "' was applied. Disable one of them.");
+                    continue;
+                }
+
+                byOutput.Add(recipe.OutputItemId, recipe);
+            }
+
+            return byOutput;
+        }
+
         /// <returns>True when a prefab was written for this item.</returns>
         private static bool GenerateOne(
             DimensionItemAsset item,
             string outputFolder,
+            Dictionary<string, DimensionRecipeAsset> recipesByOutput,
             DimensionItemGenerationReport report)
         {
             if (item == null)
@@ -269,7 +324,7 @@ namespace ExpandNullforge.EditorTools
             bool written = false;
             try
             {
-                Configure(root, item, report);
+                Configure(root, item, recipesByOutput, report);
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 written = true;
                 if (updating)
@@ -304,6 +359,7 @@ namespace ExpandNullforge.EditorTools
         private static void Configure(
             GameObject root,
             DimensionItemAsset item,
+            Dictionary<string, DimensionRecipeAsset> recipesByOutput,
             DimensionItemGenerationReport report)
         {
             DimensionItemArchetype archetype = item.Archetype;
@@ -315,9 +371,19 @@ namespace ExpandNullforge.EditorTools
             ConfigureObject(root, item, report);
             ConfigureLocalization(root, item, report);
 
+            recipesByOutput.TryGetValue(item.ItemId, out DimensionRecipeAsset recipe);
             ApplyComponent<InventoryItemAuthoring>(
                 root, required, DimensionItemAuthoringComponents.InventoryItem,
-                component => ConfigureInventory(component, item, report));
+                component => ConfigureInventory(component, item, recipe, report));
+
+            if (recipe != null &&
+                !Requires(required, DimensionItemAuthoringComponents.InventoryItem))
+            {
+                report.Warnings.Add(
+                    Describe(item) + ": recipe '" + recipe.RecipeId +
+                    "' produces it, but a " + DimensionItemArchetypeRules.Describe(item.Archetype) +
+                    " has no inventory representation, so the ingredients cannot be attached.");
+            }
 
             ApplyComponent<PlaceableObjectAuthoring>(
                 root, required, DimensionItemAuthoringComponents.Placement,
@@ -418,10 +484,15 @@ namespace ExpandNullforge.EditorTools
         private static void ConfigureInventory(
             InventoryItemAuthoring inventory,
             DimensionItemAsset item,
+            DimensionRecipeAsset recipe,
             DimensionItemGenerationReport report)
         {
             inventory.isStackable = item.MaxStack > 1;
-            inventory.requiredObjectsToCraft = new List<InventoryItemAuthoring.CraftingObject>();
+            inventory.requiredObjectsToCraft = BuildIngredients(item, recipe, report);
+            if (recipe != null && recipe.CraftTimeSeconds > 0f)
+            {
+                inventory.craftingTime = recipe.CraftTimeSeconds;
+            }
 
             Sprite icon = ResolveSprite(item);
             if (icon != null)
@@ -432,6 +503,62 @@ namespace ExpandNullforge.EditorTools
                     inventory.smallIcon = icon;
                 }
             }
+        }
+
+        /// <summary>
+        /// Turns a recipe's ingredient list into the crafting requirements on the produced item.
+        /// An ingredient with no id or a non-positive amount is dropped and reported, because a
+        /// blank entry silently makes the item craftable from nothing.
+        /// </summary>
+        private static List<InventoryItemAuthoring.CraftingObject> BuildIngredients(
+            DimensionItemAsset item,
+            DimensionRecipeAsset recipe,
+            DimensionItemGenerationReport report)
+        {
+            List<InventoryItemAuthoring.CraftingObject> ingredients =
+                new List<InventoryItemAuthoring.CraftingObject>();
+            if (recipe == null)
+            {
+                return ingredients;
+            }
+
+            DimensionRecipeIngredientTemplate[] templates = recipe.Ingredients;
+            if (templates == null)
+            {
+                return ingredients;
+            }
+
+            for (int i = 0; i < templates.Length; i++)
+            {
+                DimensionRecipeIngredientTemplate template = templates[i];
+                if (template == null)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(template.ItemId) || template.Amount <= 0)
+                {
+                    report.Warnings.Add(
+                        Describe(item) + ": recipe '" + recipe.RecipeId +
+                        "' has an ingredient with no item id or a zero amount; it was skipped.");
+                    continue;
+                }
+
+                ingredients.Add(new InventoryItemAuthoring.CraftingObject
+                {
+                    objectName = template.ItemId,
+                    amount = template.Amount
+                });
+            }
+
+            if (ingredients.Count == 0)
+            {
+                report.Warnings.Add(
+                    Describe(item) + ": recipe '" + recipe.RecipeId +
+                    "' has no usable ingredients, so it can be crafted from nothing.");
+            }
+
+            return ingredients;
         }
 
         private static void ConfigurePlaceable(

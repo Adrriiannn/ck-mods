@@ -22,6 +22,9 @@ namespace ExpandNullforge.EditorTools
 
         private readonly List<DimensionItemAsset> created = new List<DimensionItemAsset>();
 
+        private readonly List<DimensionRecipeAsset> createdRecipes =
+            new List<DimensionRecipeAsset>();
+
         [SetUp]
         public void SetUp()
         {
@@ -40,6 +43,16 @@ namespace ExpandNullforge.EditorTools
             }
 
             created.Clear();
+
+            for (int i = 0; i < createdRecipes.Count; i++)
+            {
+                if (createdRecipes[i] != null)
+                {
+                    Object.DestroyImmediate(createdRecipes[i]);
+                }
+            }
+
+            createdRecipes.Clear();
             DeleteTestFolder();
         }
 
@@ -229,6 +242,80 @@ namespace ExpandNullforge.EditorTools
         }
 
         [Test]
+        public void ARecipesIngredients_LandOnTheItemItProduces()
+        {
+            // Core Keeper stores a recipe's ingredients on the produced item, not on the station.
+            DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_alloy");
+            DimensionRecipeAsset recipe = MakeRecipe(
+                "mod:alloy_recipe", "mod_alloy", 4.5f,
+                new[] { ("mod_copper", 3), ("mod_tin", 1) });
+
+            DimensionItemGenerationReport report =
+                DimensionItemGenerator.Generate(new[] { item }, TestFolder, new[] { recipe });
+            Assert.That(report.Errors, Is.Empty, string.Join("; ", report.Errors));
+
+            InventoryItemAuthoring inventory =
+                LoadPrefab("mod_alloy").GetComponent<InventoryItemAuthoring>();
+            Assert.That(inventory.requiredObjectsToCraft.Count, Is.EqualTo(2));
+            Assert.That(inventory.requiredObjectsToCraft[0].objectName, Is.EqualTo("mod_copper"));
+            Assert.That(inventory.requiredObjectsToCraft[0].amount, Is.EqualTo(3));
+            Assert.That(inventory.craftingTime, Is.EqualTo(4.5f));
+        }
+
+        [Test]
+        public void AnItemWithNoRecipe_HasNoCraftingRequirements()
+        {
+            DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_plain");
+
+            DimensionItemGenerator.Generate(new[] { item }, TestFolder);
+
+            InventoryItemAuthoring inventory =
+                LoadPrefab("mod_plain").GetComponent<InventoryItemAuthoring>();
+            Assert.That(inventory.requiredObjectsToCraft, Is.Empty);
+        }
+
+        [Test]
+        public void TwoRecipesProducingTheSameItem_AreReportedRatherThanRacing()
+        {
+            DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_alloy");
+            DimensionRecipeAsset first = MakeRecipe(
+                "mod:first", "mod_alloy", 1f, new[] { ("mod_copper", 1) });
+            DimensionRecipeAsset second = MakeRecipe(
+                "mod:second", "mod_alloy", 1f, new[] { ("mod_tin", 9) });
+
+            DimensionItemGenerationReport report = DimensionItemGenerator.Generate(
+                new[] { item }, TestFolder, new[] { first, second });
+
+            Assert.That(report.Warnings, Is.Not.Empty);
+            InventoryItemAuthoring inventory =
+                LoadPrefab("mod_alloy").GetComponent<InventoryItemAuthoring>();
+            Assert.That(
+                inventory.requiredObjectsToCraft[0].objectName,
+                Is.EqualTo("mod_copper"),
+                "The first recipe should win deterministically, not the last one seen.");
+        }
+
+        [Test]
+        public void ABlankIngredient_IsDroppedAndReported()
+        {
+            DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_alloy");
+            DimensionRecipeAsset recipe = MakeRecipe(
+                "mod:alloy_recipe", "mod_alloy", 1f,
+                new[] { ("mod_copper", 2), (string.Empty, 5), ("mod_tin", 0) });
+
+            DimensionItemGenerationReport report =
+                DimensionItemGenerator.Generate(new[] { item }, TestFolder, new[] { recipe });
+
+            Assert.That(report.Warnings, Is.Not.Empty);
+            InventoryItemAuthoring inventory =
+                LoadPrefab("mod_alloy").GetComponent<InventoryItemAuthoring>();
+            Assert.That(
+                inventory.requiredObjectsToCraft.Count,
+                Is.EqualTo(1),
+                "A blank or zero-amount ingredient must not become a free craft.");
+        }
+
+        [Test]
         public void AnInvalidOutputFolder_IsRefused()
         {
             DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_thing");
@@ -238,6 +325,37 @@ namespace ExpandNullforge.EditorTools
 
             Assert.That(report.Errors, Is.Not.Empty);
             Assert.That(report.Created, Is.Empty);
+        }
+
+        private DimensionRecipeAsset MakeRecipe(
+            string recipeId,
+            string outputItemId,
+            float craftTimeSeconds,
+            (string itemId, int amount)[] ingredients)
+        {
+            DimensionRecipeAsset recipe = ScriptableObject.CreateInstance<DimensionRecipeAsset>();
+            createdRecipes.Add(recipe);
+
+            SerializedObject serialized = new SerializedObject(recipe);
+            serialized.Update();
+            serialized.FindProperty("recipeId").stringValue = recipeId;
+            serialized.FindProperty("outputItemId").stringValue = outputItemId;
+            serialized.FindProperty("craftTimeSeconds").floatValue = craftTimeSeconds;
+            serialized.FindProperty("enabled").boolValue = true;
+
+            // DimensionRecipeIngredientTemplate is a plain [Serializable] class, so resizing the
+            // array creates the elements; their fields are then set through the relative paths.
+            SerializedProperty list = serialized.FindProperty("ingredients");
+            list.arraySize = ingredients.Length;
+            for (int i = 0; i < ingredients.Length; i++)
+            {
+                SerializedProperty entry = list.GetArrayElementAtIndex(i);
+                entry.FindPropertyRelative("itemId").stringValue = ingredients[i].itemId;
+                entry.FindPropertyRelative("amount").intValue = ingredients[i].amount;
+            }
+
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            return recipe;
         }
 
         private static GameObject LoadPrefab(string fileName)

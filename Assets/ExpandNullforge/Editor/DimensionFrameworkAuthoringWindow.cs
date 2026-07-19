@@ -2565,8 +2565,8 @@ namespace ExpandNullforge.EditorTools
             }
 
             string outputFolder = modRoot + "/Items";
-            DimensionItemGenerationReport report =
-                DimensionItemGenerator.Generate(items, outputFolder);
+            DimensionItemGenerationReport report = DimensionItemGenerator.Generate(
+                items, outputFolder, selectedTemplate.GlobalRecipes);
 
             for (int i = 0; i < report.Errors.Count; i++)
             {
