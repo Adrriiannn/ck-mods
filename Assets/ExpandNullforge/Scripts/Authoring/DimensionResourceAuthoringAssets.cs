@@ -103,9 +103,51 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private bool enabled = true;
         [SerializeField] private string notes = string.Empty;
 
+        [Header("Archetype data (only the fields your archetype needs are used)")]
+        [Tooltip("Loot table awarded when this object is destroyed. Required by ore, breakable, mob and boss archetypes.")]
+        [SerializeField] private string lootTableId = string.Empty;
+        [Tooltip("Health before the object breaks or dies. Required by breakable and creature archetypes.")]
+        [SerializeField] private int healthPoints = 0;
+        [Tooltip("Durability before the equipment wears out. Required by tool, weapon and armor archetypes.")]
+        [SerializeField] private int durabilityPoints = 0;
+        [Tooltip("Damage dealt per hit. Required by the weapon archetype.")]
+        [SerializeField] private int damageAmount = 0;
+        [Tooltip("Handheld cooldown in seconds. Required by consumable, tool and weapon archetypes.")]
+        [SerializeField] private float cooldownSeconds = 0f;
+
         public string ItemId
         {
             get { return itemId ?? string.Empty; }
+        }
+
+        /// <summary>Loot table id awarded on destruction (loot-bearing archetypes).</summary>
+        public string LootTableId
+        {
+            get { return lootTableId ?? string.Empty; }
+        }
+
+        /// <summary>Health before breaking/dying (breakable and creature archetypes).</summary>
+        public int HealthPoints
+        {
+            get { return Mathf.Max(0, healthPoints); }
+        }
+
+        /// <summary>Equipment durability (tool, weapon, armor archetypes).</summary>
+        public int DurabilityPoints
+        {
+            get { return Mathf.Max(0, durabilityPoints); }
+        }
+
+        /// <summary>Damage per hit (weapon archetype).</summary>
+        public int DamageAmount
+        {
+            get { return Mathf.Max(0, damageAmount); }
+        }
+
+        /// <summary>Handheld cooldown in seconds (consumable, tool, weapon archetypes).</summary>
+        public float CooldownSeconds
+        {
+            get { return Mathf.Max(0f, cooldownSeconds); }
         }
 
         public string DisplayName
