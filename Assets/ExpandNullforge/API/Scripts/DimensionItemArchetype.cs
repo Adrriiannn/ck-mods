@@ -243,5 +243,51 @@ namespace ExpandNullforge.Api
                 default: return archetype.ToString();
             }
         }
+
+        /// <summary>
+        /// Human-readable list of the Core Keeper authoring components this archetype will emit,
+        /// so a creator can see what their choice actually builds before generating anything.
+        /// </summary>
+        public static string DescribeComponents(DimensionItemArchetype archetype)
+        {
+            DimensionItemAuthoringComponents required = GetRequiredComponents(archetype);
+            System.Text.StringBuilder builder = new System.Text.StringBuilder();
+
+            Append(builder, required, DimensionItemAuthoringComponents.Object, "ObjectAuthoring");
+            Append(builder, required, DimensionItemAuthoringComponents.Localization, "Localization");
+            Append(builder, required, DimensionItemAuthoringComponents.Visual, "Sprite");
+            Append(builder, required, DimensionItemAuthoringComponents.InventoryItem, "InventoryItem");
+            Append(builder, required, DimensionItemAuthoringComponents.Placement, "Placement");
+            Append(builder, required, DimensionItemAuthoringComponents.Durability, "Durability");
+            Append(builder, required, DimensionItemAuthoringComponents.Cooldown, "Cooldown");
+            Append(builder, required, DimensionItemAuthoringComponents.WeaponDamage, "WeaponDamage");
+            Append(builder, required, DimensionItemAuthoringComponents.EquipmentConditions, "EquipConditions");
+            Append(builder, required, DimensionItemAuthoringComponents.SecondaryUse, "SecondaryUse");
+            Append(builder, required, DimensionItemAuthoringComponents.Breakable, "Breakable");
+            Append(builder, required, DimensionItemAuthoringComponents.Loot, "Loot");
+            Append(builder, required, DimensionItemAuthoringComponents.Creature, "Creature");
+            Append(builder, required, DimensionItemAuthoringComponents.BossEncounter, "BossEncounter");
+
+            return builder.Length == 0 ? "no components" : builder.ToString();
+        }
+
+        private static void Append(
+            System.Text.StringBuilder builder,
+            DimensionItemAuthoringComponents required,
+            DimensionItemAuthoringComponents component,
+            string label)
+        {
+            if ((required & component) != component)
+            {
+                return;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.Append(", ");
+            }
+
+            builder.Append(label);
+        }
     }
 }

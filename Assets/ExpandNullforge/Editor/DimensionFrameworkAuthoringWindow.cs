@@ -2476,16 +2476,111 @@ namespace ExpandNullforge.EditorTools
                 DrawSerializedAsset(
                     item,
                     BuildAssetEditorTitle("Item", item.DisplayName, item.ItemId, i),
-                    Field("displayName", "Display name"),
-                    Field("itemId", "Item ID"),
-                    Field("kind", "Kind"),
-                    Field("iconId", "Icon ID"),
-                    Field("objectId", "Object ID"),
-                    Field("maxStack", "Max stack"),
-                    Field("rarityId", "Rarity ID"),
-                    Field("enabled", "Enabled"),
-                    Field("notes", "Notes"));
+                    BuildItemFields(item));
+
+                DrawItemArchetypeSummary(item);
             }
+        }
+
+        /// <summary>
+        /// Builds the field list for an item from its archetype, so a creator only sees the values
+        /// their chosen kind actually uses — a material does not ask for weapon damage, and a
+        /// weapon does not hide it.
+        /// </summary>
+        private static SerializedFieldSpec[] BuildItemFields(DimensionItemAsset item)
+        {
+            DimensionItemAuthoringComponents required =
+                DimensionItemArchetypeRules.GetRequiredComponents(item.Archetype);
+
+            List<SerializedFieldSpec> fields = new List<SerializedFieldSpec>
+            {
+                Field("displayName", "Display name"),
+                Field("itemId", "Item ID"),
+                Field("archetype", "Archetype"),
+                Field("kind", "Kind"),
+                Field("iconId", "Icon ID"),
+                Field("objectId", "Object ID")
+            };
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.InventoryItem))
+            {
+                fields.Add(Field("maxStack", "Max stack"));
+            }
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.Loot))
+            {
+                fields.Add(Field("lootTableId", "Loot table ID"));
+            }
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.Breakable) ||
+                RequiresComponent(required, DimensionItemAuthoringComponents.Creature))
+            {
+                fields.Add(Field("healthPoints", "Health"));
+            }
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.Durability))
+            {
+                fields.Add(Field("durabilityPoints", "Durability"));
+            }
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.WeaponDamage))
+            {
+                fields.Add(Field("damageAmount", "Damage"));
+            }
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.Cooldown))
+            {
+                fields.Add(Field("cooldownSeconds", "Cooldown seconds"));
+            }
+
+            fields.Add(Field("rarityId", "Rarity ID"));
+            fields.Add(Field("enabled", "Enabled"));
+            fields.Add(Field("notes", "Notes"));
+            return fields.ToArray();
+        }
+
+        /// <summary>
+        /// Shows what the archetype will generate and anything still missing, so an incomplete
+        /// item is caught here rather than discovered in-game.
+        /// </summary>
+        private void DrawItemArchetypeSummary(DimensionItemAsset item)
+        {
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField(
+                "Generates: " + DimensionItemArchetypeRules.Describe(item.Archetype) + " — " +
+                DimensionItemArchetypeRules.DescribeComponents(item.Archetype),
+                EditorStyles.wordWrappedMiniLabel);
+
+            List<DimensionItemArchetypeValidator.Finding> findings =
+                DimensionItemArchetypeValidator.Validate(item);
+            for (int i = 0; i < findings.Count; i++)
+            {
+                DimensionItemArchetypeValidator.Finding finding = findings[i];
+                if (finding.Severity == DimensionItemArchetypeValidator.Severity.Ok)
+                {
+                    continue;
+                }
+
+                bool error = finding.Severity == DimensionItemArchetypeValidator.Severity.Error;
+                Color previousColor = GUI.color;
+                GUI.color = error
+                    ? new Color(1f, 0.55f, 0.5f)
+                    : new Color(1f, 0.85f, 0.45f);
+                EditorGUILayout.LabelField(
+                    (error ? "● " : "▲ ") + finding.Message,
+                    EditorStyles.wordWrappedMiniLabel);
+                GUI.color = previousColor;
+            }
+
+            EditorGUI.indentLevel--;
+            GUILayout.Space(4f);
+        }
+
+        private static bool RequiresComponent(
+            DimensionItemAuthoringComponents required,
+            DimensionItemAuthoringComponents component)
+        {
+            return (required & component) == component;
         }
 
         private void DrawRecipeAssetEditors(DimensionRecipeAsset[] recipes)

@@ -127,6 +127,25 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
+        [Test]
+        public void DescribeComponentsNamesWhatTheArchetypeWillEmit()
+        {
+            // Every archetype emits at least the always-on trio, so the summary is never blank.
+            foreach (DimensionItemArchetype archetype in AllArchetypes())
+            {
+                string description = DimensionItemArchetypeRules.DescribeComponents(archetype);
+                Assert.That(description, Is.Not.Null.And.Not.Empty, archetype.ToString());
+                Assert.That(description, Does.Contain("ObjectAuthoring"), archetype.ToString());
+            }
+
+            Assert.That(
+                DimensionItemArchetypeRules.DescribeComponents(DimensionItemArchetype.Weapon),
+                Does.Contain("WeaponDamage"));
+            Assert.That(
+                DimensionItemArchetypeRules.DescribeComponents(DimensionItemArchetype.Material),
+                Does.Not.Contain("WeaponDamage"));
+        }
+
         private static DimensionItemArchetype[] AllArchetypes()
         {
             return (DimensionItemArchetype[])Enum.GetValues(typeof(DimensionItemArchetype));
