@@ -93,6 +93,8 @@ namespace ExpandNullforge.Authoring
     {
         [SerializeField] private string itemId = "mod:item";
         [SerializeField] private string displayName = "Item";
+        [Tooltip("Decides which Core Keeper authoring components the generated object needs. Anything you do not customize stays vanilla.")]
+        [SerializeField] private DimensionItemArchetype archetype = DimensionItemArchetype.Material;
         [SerializeField] private DimensionItemKind kind = DimensionItemKind.BaseItem;
         [SerializeField] private string iconId = string.Empty;
         [SerializeField] private string objectId = string.Empty;
@@ -114,6 +116,21 @@ namespace ExpandNullforge.Authoring
         public DimensionItemKind Kind
         {
             get { return kind; }
+        }
+
+        /// <summary>Archetype that decides the generated object's authoring components.</summary>
+        public DimensionItemArchetype Archetype
+        {
+            get { return archetype; }
+        }
+
+        /// <summary>
+        /// The exact Core Keeper authoring components this item's generated object requires.
+        /// The generator emits only these, and the dashboard shows only the matching fields.
+        /// </summary>
+        public DimensionItemAuthoringComponents RequiredComponents
+        {
+            get { return DimensionItemArchetypeRules.GetRequiredComponents(archetype); }
         }
 
         public string IconId
