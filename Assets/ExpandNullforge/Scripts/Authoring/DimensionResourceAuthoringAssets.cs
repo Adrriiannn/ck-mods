@@ -96,6 +96,8 @@ namespace ExpandNullforge.Authoring
         [Tooltip("Decides which Core Keeper authoring components the generated object needs. Anything you do not customize stays vanilla.")]
         [SerializeField] private DimensionItemArchetype archetype = DimensionItemArchetype.Material;
         [SerializeField] private DimensionItemKind kind = DimensionItemKind.BaseItem;
+        [Tooltip("Tooltip text shown in-game. Leave blank for no description.")]
+        [SerializeField] private string description = string.Empty;
         [Tooltip("Drag the item's sprite here. This is the reliable way to give an item art; the icon id below is only used as a fallback lookup.")]
         [SerializeField] private Sprite iconSprite;
         [SerializeField] private string iconId = string.Empty;
@@ -120,6 +122,12 @@ namespace ExpandNullforge.Authoring
         public string ItemId
         {
             get { return itemId ?? string.Empty; }
+        }
+
+        /// <summary>In-game tooltip text, written to the mod's localization table.</summary>
+        public string Description
+        {
+            get { return description ?? string.Empty; }
         }
 
         /// <summary>

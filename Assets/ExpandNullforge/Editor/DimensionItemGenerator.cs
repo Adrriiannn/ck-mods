@@ -89,6 +89,8 @@ namespace ExpandNullforge.EditorTools
             }
 
             List<string> generatedIds = new List<string>();
+            List<DimensionLocalizationCsv.Row> localizationRows =
+                new List<DimensionLocalizationCsv.Row>();
             try
             {
                 AssetDatabase.StartAssetEditing();
@@ -97,6 +99,11 @@ namespace ExpandNullforge.EditorTools
                     if (GenerateOne(item, outputFolder, report) && item != null)
                     {
                         generatedIds.Add(item.ItemId);
+                        DimensionLocalizationCsv.AddItemRows(
+                            localizationRows,
+                            item.ItemId,
+                            item.DisplayName,
+                            item.Description);
                     }
                 }
             }
@@ -107,8 +114,69 @@ namespace ExpandNullforge.EditorTools
                 AssetDatabase.Refresh();
             }
 
-            RecordGeneratedItemIds(outputFolder, generatedIds, report);
+            string modRoot = ResolveModRoot(outputFolder);
+            RecordGeneratedItemIds(modRoot, generatedIds, report);
+            WriteLocalization(modRoot, localizationRows, report);
             return report;
+        }
+
+        /// <summary>
+        /// Writes the item names and tooltips into the mod's localization table. Without this an
+        /// item shows its raw id in-game, so generation is not complete until it runs.
+        /// </summary>
+        private static void WriteLocalization(
+            string modRoot,
+            List<DimensionLocalizationCsv.Row> rows,
+            DimensionItemGenerationReport report)
+        {
+            if (rows.Count == 0)
+            {
+                return;
+            }
+
+            string folder = modRoot + "/Localization";
+            if (!EnsureAssetFolder(folder))
+            {
+                report.Warnings.Add(
+                    "Could not create '" + folder +
+                    "', so item names were not added to the localization table. Items will " +
+                    "show their raw ids in-game.");
+                return;
+            }
+
+            string path = folder + "/Localization.csv";
+            string absolutePath = ToAbsolutePath(path);
+            try
+            {
+                string existing = System.IO.File.Exists(absolutePath)
+                    ? System.IO.File.ReadAllText(absolutePath)
+                    : null;
+                string merged = DimensionLocalizationCsv.Merge(existing, rows);
+                if (!string.Equals(existing, merged, StringComparison.Ordinal))
+                {
+                    System.IO.File.WriteAllText(absolutePath, merged);
+                    AssetDatabase.ImportAsset(path);
+                }
+            }
+            catch (Exception exception)
+            {
+                report.Warnings.Add(
+                    "Could not update '" + path + "': " + exception.Message);
+            }
+        }
+
+        private static string ResolveModRoot(string outputFolder)
+        {
+            return outputFolder.EndsWith("/Items", StringComparison.Ordinal)
+                ? outputFolder.Substring(0, outputFolder.Length - "/Items".Length)
+                : outputFolder;
+        }
+
+        private static string ToAbsolutePath(string assetPath)
+        {
+            string projectRoot = System.IO.Path.GetDirectoryName(Application.dataPath);
+            return System.IO.Path.Combine(projectRoot ?? string.Empty, assetPath)
+                .Replace('\\', '/');
         }
 
         /// <summary>
@@ -117,14 +185,10 @@ namespace ExpandNullforge.EditorTools
         /// the generated prefabs would drift apart silently.
         /// </summary>
         private static void RecordGeneratedItemIds(
-            string outputFolder,
+            string modRoot,
             List<string> generatedIds,
             DimensionItemGenerationReport report)
         {
-            string modRoot = outputFolder.EndsWith("/Items", StringComparison.Ordinal)
-                ? outputFolder.Substring(0, outputFolder.Length - "/Items".Length)
-                : outputFolder;
-
             string[] guids = AssetDatabase.IsValidFolder(modRoot)
                 ? AssetDatabase.FindAssets("t:DimensionRuntimeManifestAsset", new[] { modRoot })
                 : null;
