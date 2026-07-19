@@ -15,17 +15,18 @@ namespace ExpandNullforge.Foundation
 
     // Deterministic 8-direction order around global (0,0): N, NE, E, SE, S, SW, W, NW. Each
     // unit direction is scaled by the current ring radius to produce the candidate origin, so
-    // the first ever slot is (5000, 0) (north) and collisions fall through to the next slot.
+    // the first ever slot is (0, 5000) (due north) and collisions fall through to the next.
+    // Core Keeper world axes: +X = east, +Y = north (origin at the lower-left corner).
     private static readonly int2[] RingDirections =
     {
-        new int2(1, 0),
-        new int2(1, 1),
-        new int2(0, 1),
-        new int2(-1, 1),
-        new int2(-1, 0),
-        new int2(-1, -1),
-        new int2(0, -1),
-        new int2(1, -1),
+        new int2(0, 1),   // north
+        new int2(1, 1),   // north-east
+        new int2(1, 0),   // east
+        new int2(1, -1),  // south-east
+        new int2(0, -1),  // south
+        new int2(-1, -1), // south-west
+        new int2(-1, 0),  // west
+        new int2(-1, 1),  // north-west
     };
 
     private static readonly DimensionBounds ProtectedOverworldCoordinateBounds =

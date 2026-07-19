@@ -81,8 +81,8 @@ namespace ExpandNullforge.Authoring
         public string BiomeId = string.Empty;
         public string BiomeDisplayName = string.Empty;
         public string ZoneId = string.Empty;
-        public int AbsoluteOriginX = 10000;
-        public int AbsoluteOriginY = 10000;
+        public int AbsoluteOriginX = 5000;
+        public int AbsoluteOriginY = 5000;
         public int HalfSizeTiles = 0;
         public int ReservedShellPaddingTiles = -1;
         public string FloorResourceKey = string.Empty;
@@ -571,14 +571,14 @@ namespace ExpandNullforge.Authoring
                 AbsoluteOriginXFieldId,
                 "Absolute Origin X",
                 request.AbsoluteOriginX.ToString(),
-                "10000",
+                "5000",
                 string.Empty,
                 true));
             fields.Add(CreateTextField(
                 AbsoluteOriginYFieldId,
                 "Absolute Origin Y",
                 request.AbsoluteOriginY.ToString(),
-                "10000",
+                "5000",
                 string.Empty,
                 true));
             fields.Add(CreateTextField(
