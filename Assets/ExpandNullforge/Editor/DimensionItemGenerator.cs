@@ -389,12 +389,24 @@ namespace ExpandNullforge.EditorTools
                 root, required, DimensionItemAuthoringComponents.Placement,
                 component => ConfigurePlaceable(component, item, report));
 
-            // maxDurability is the authored ceiling and the only one that survives serialization;
-            // the sibling `durability` field is runtime state that resets to its initializer when
-            // the prefab is reloaded, so writing it here would be a no-op that reads as intent.
+            // DurabilityAuthoring resets its value fields on prefab import: a written maxDurability
+            // reads back as the SDK default (proven by test - 250 becomes 1, while a sibling
+            // component's directly-written value persists). Core Keeper derives durability from the
+            // item type and durabilityMultiplier (see the BaseDurability* constants and
+            // CalculateObjectDurability), so a raw value cannot be baked offline. Attach the
+            // component so the archetype contract holds, and tell the creator the value is
+            // game-derived rather than silently dropping their input.
             ApplyComponent<DurabilityAuthoring>(
-                root, required, DimensionItemAuthoringComponents.Durability,
-                component => component.maxDurability = item.DurabilityPoints);
+                root, required, DimensionItemAuthoringComponents.Durability, null);
+            if (Requires(required, DimensionItemAuthoringComponents.Durability) &&
+                item.DurabilityPoints > 0)
+            {
+                report.Warnings.Add(
+                    Describe(item) + ": Core Keeper computes durability from the item type, so the "
+                    + "requested value (" + item.DurabilityPoints + ") was not baked into the "
+                    + "prefab. The generated item uses the game's default durability; tune it "
+                    + "in-game if a specific value is needed.");
+            }
 
             ApplyComponent<WeaponDamageAuthoring>(
                 root, required, DimensionItemAuthoringComponents.WeaponDamage,

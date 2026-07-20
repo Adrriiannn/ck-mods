@@ -159,7 +159,7 @@ namespace ExpandNullforge.Api
                 "custom-items",
                 "Custom items",
                 DimensionCapabilityMaturity.PartialVerticalSlice,
-                "Archetypes drive prefab generation (ObjectAuthoring, inventory, placement, durability, damage, cooldown, health, loot), names and tooltips are merged into the mod's localization table, and the runtime declares generated ids so unregistered items can be named. The validator blocks incomplete items. Not yet executed in Unity or verified in-game; SpriteAsset generation, recipes, and ScriptableData registration are still missing."),
+                "Archetypes drive prefab generation (ObjectAuthoring, inventory, placement, damage, cooldown, health, loot, recipe ingredients), names and tooltips are merged into the mod's localization table, and the runtime declares generated ids so unregistered items can be named. The validator blocks incomplete items and the generator suite runs green in Unity. Known SDK constraint: DurabilityAuthoring derives its value in-game, so an authored durability value is not baked (the creator is warned). SpriteAsset generation, crafting-station injection, and ScriptableData registration are still missing, and no item has yet been confirmed in a running game."),
             new DimensionCapability(
                 "recipes-workbenches-loot",
                 "Recipes, workbenches, and loot",
