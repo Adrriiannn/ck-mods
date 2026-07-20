@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using ExpandNullforge.Authoring;
 using Pug.Sprite;
@@ -78,6 +79,149 @@ namespace ExpandNullforge.EditorTools
             return string.IsNullOrEmpty(path)
                 ? fallbackName
                 : Path.GetFileNameWithoutExtension(path);
+        }
+
+        /// <summary>
+        /// Finds the SpriteAsset that carries a Scriptable Data address.
+        ///
+        /// The address is the reference's identity, but Scriptable Data can only resolve assets
+        /// its registry knows about. Artwork that lives outside the portal package — a creator's
+        /// own folder, or an asset authored during this session — resolves to nothing, and the
+        /// layer then reads as unresolved even though the asset is sitting in the project. This
+        /// searches by address so a reference stays meaningful wherever its artwork lives.
+        ///
+        /// Only reached when the registry lookup already failed, and callers cache their result,
+        /// so the project-wide scan stays off the common path.
+        /// </summary>
+        internal static SpriteAsset FindSpriteAssetByAddress(
+            long addressLow,
+            long addressHigh,
+            string packageArtworkFolder)
+        {
+            if (addressLow == 0L && addressHigh == 0L)
+            {
+                return null;
+            }
+
+            if (addressLow == FrameworkSwirlAddressLow &&
+                addressHigh == FrameworkSwirlAddressHigh)
+            {
+                SpriteAsset framework =
+                    AssetDatabase.LoadAssetAtPath<SpriteAsset>(FrameworkSwirlAssetPath);
+                if (framework != null)
+                {
+                    return framework;
+                }
+            }
+
+            // The owning package is the likeliest home and the cheapest place to look.
+            SpriteAsset local = ScanFolderForSpriteAssetAddress(
+                packageArtworkFolder, addressLow, addressHigh);
+            return local != null
+                ? local
+                : ScanFolderForSpriteAssetAddress(string.Empty, addressLow, addressHigh);
+        }
+
+        private static SpriteAsset ScanFolderForSpriteAssetAddress(
+            string folder,
+            long addressLow,
+            long addressHigh)
+        {
+            if (string.IsNullOrEmpty(folder))
+            {
+                return LookUpProjectAddress(addressLow, addressHigh);
+            }
+
+            if (!AssetDatabase.IsValidFolder(folder))
+            {
+                return null;
+            }
+
+            string[] guids = AssetDatabase.FindAssets("t:SpriteAsset", new[] { folder });
+            for (int i = 0; i < guids.Length; i++)
+            {
+                SpriteAsset candidate = AssetDatabase.LoadAssetAtPath<SpriteAsset>(
+                    AssetDatabase.GUIDToAssetPath(guids[i]));
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                ReadSpriteAssetAddress(candidate, out long low, out long high);
+                if (low == addressLow && high == addressHigh)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Address to asset for the whole project, built once and reused.
+        ///
+        /// <see cref="ClassifyReference"/> runs from editor GUI code, so scanning and loading
+        /// every SpriteAsset on each unresolved layer would stall the window. The index is
+        /// rebuilt when the number of SpriteAssets changes, and explicitly whenever an address is
+        /// rewritten (see <see cref="InvalidateSpriteAssetAddressIndex"/>).
+        /// </summary>
+        private static Dictionary<string, SpriteAsset> spriteAssetAddressIndex;
+
+        private static int spriteAssetAddressIndexAssetCount = -1;
+
+        internal static void InvalidateSpriteAssetAddressIndex()
+        {
+            spriteAssetAddressIndex = null;
+            spriteAssetAddressIndexAssetCount = -1;
+        }
+
+        private static SpriteAsset LookUpProjectAddress(long addressLow, long addressHigh)
+        {
+            string[] guids = AssetDatabase.FindAssets("t:SpriteAsset");
+            if (spriteAssetAddressIndex == null ||
+                spriteAssetAddressIndexAssetCount != guids.Length)
+            {
+                Dictionary<string, SpriteAsset> index =
+                    new Dictionary<string, SpriteAsset>(StringComparer.Ordinal);
+                for (int i = 0; i < guids.Length; i++)
+                {
+                    SpriteAsset candidate = AssetDatabase.LoadAssetAtPath<SpriteAsset>(
+                        AssetDatabase.GUIDToAssetPath(guids[i]));
+                    if (candidate == null)
+                    {
+                        continue;
+                    }
+
+                    ReadSpriteAssetAddress(candidate, out long low, out long high);
+                    if (low == 0L && high == 0L)
+                    {
+                        continue;
+                    }
+
+                    // First writer wins: a duplicated address is a separate problem, and
+                    // silently preferring the last one scanned would make it non-deterministic.
+                    string key = BuildAddressKey(low, high);
+                    if (!index.ContainsKey(key))
+                    {
+                        index.Add(key, candidate);
+                    }
+                }
+
+                spriteAssetAddressIndex = index;
+                spriteAssetAddressIndexAssetCount = guids.Length;
+            }
+
+            return spriteAssetAddressIndex.TryGetValue(
+                       BuildAddressKey(addressLow, addressHigh),
+                       out SpriteAsset resolved) && resolved != null
+                ? resolved
+                : null;
+        }
+
+        private static string BuildAddressKey(long addressLow, long addressHigh)
+        {
+            return addressLow.ToString(CultureInfo.InvariantCulture) + ":" +
+                   addressHigh.ToString(CultureInfo.InvariantCulture);
         }
 
         private sealed class LayerDescriptor
@@ -821,6 +965,13 @@ namespace ExpandNullforge.EditorTools
             }
 
             ScriptableDataEditorUtility.GetDataBlock(reference, out asset);
+            if (asset == null)
+            {
+                // Registry miss: the artwork may still exist outside anything Scriptable Data
+                // indexes, so look it up by address before declaring the layer unresolved.
+                asset = FindSpriteAssetByAddress(addressLow, addressHigh, string.Empty);
+            }
+
             DimensionPortalArtworkReferenceKind kind;
             if (asset != null)
             {
@@ -3807,6 +3958,10 @@ namespace ExpandNullforge.EditorTools
             low.longValue = lowValue;
             high.longValue = highValue;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            // The address is the index's key, so re-addressing an asset invalidates it without
+            // changing how many SpriteAssets exist.
+            InvalidateSpriteAssetAddressIndex();
         }
 
         private static int FindClosestPaletteIndex(Color32 color, Color32[] palette)
@@ -4767,11 +4922,23 @@ namespace ExpandNullforge.EditorTools
             string pristinePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(pristine));
             string pristineAbsolute =
                 DimensionPortalArtworkEditorUtility.AssetPathToAbsolutePath(pristinePath);
+
+            // The active sheet sitting at the output path is only dangerous to capture once a
+            // bake has produced it. Before the first bake there is no sidecar at all and the
+            // sheet is still the untinted copy the package was created with — refusing it there
+            // would make the very first recolor of a freshly saved package impossible. A sidecar
+            // that exists but does not match the sheet size is a genuine mismatch and still
+            // refuses, because that sheet may already carry a tint from an earlier bake.
+            bool sidecarExists = existing != null ||
+                File.Exists(
+                    DimensionPortalArtworkEditorUtility.AssetPathToAbsolutePath(normalizedSource));
+            bool pristineIsBakeOutput = string.Equals(
+                pristinePath,
+                NormalizeAssetPath(outputPath),
+                StringComparison.OrdinalIgnoreCase);
+
             if (pristine == null ||
-                string.Equals(
-                    pristinePath,
-                    NormalizeAssetPath(outputPath),
-                    StringComparison.OrdinalIgnoreCase) ||
+                (pristineIsBakeOutput && sidecarExists) ||
                 string.IsNullOrEmpty(pristineAbsolute) ||
                 !pristinePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
                 !File.Exists(pristineAbsolute))
@@ -5470,37 +5637,14 @@ namespace ExpandNullforge.EditorTools
                 return true;
             }
 
-            if (low == DimensionPortalArtworkEditorUtility.FrameworkSwirlAddressLow &&
-                high == DimensionPortalArtworkEditorUtility.FrameworkSwirlAddressHigh)
-            {
-                asset = AssetDatabase.LoadAssetAtPath<SpriteAsset>(
-                    DimensionPortalArtworkEditorUtility.FrameworkSwirlAssetPath);
-                if (asset != null)
-                {
-                    return true;
-                }
-            }
-
+            // Shared with ClassifyReference so a layer is never called unresolved in one place
+            // and resolved in another: framework asset, then the owning package, then the project.
             string folder = string.IsNullOrEmpty(packageFolder)
                 ? string.Empty
                 : NormalizeAssetPath(packageFolder + "/" + PackageRelativeFolder);
-            if (!string.IsNullOrEmpty(folder) && AssetDatabase.IsValidFolder(folder))
-            {
-                string[] guids = AssetDatabase.FindAssets("t:SpriteAsset", new[] { folder });
-                for (int i = 0; i < guids.Length; i++)
-                {
-                    string path = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guids[i]));
-                    SpriteAsset candidate = AssetDatabase.LoadAssetAtPath<SpriteAsset>(path);
-                    ReadSpriteAssetAddress(candidate, out long candidateLow, out long candidateHigh);
-                    if (candidate != null && candidateLow == low && candidateHigh == high)
-                    {
-                        asset = candidate;
-                        return true;
-                    }
-                }
-            }
-
-            return false;
+            asset = DimensionPortalArtworkEditorUtility.FindSpriteAssetByAddress(
+                low, high, folder);
+            return asset != null;
         }
 
         public static bool TryValidateAnimationContract(
@@ -6037,6 +6181,9 @@ namespace ExpandNullforge.EditorTools
                 assetPath,
                 0x706F7274616C7377UL);
             serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            // The address is the lookup index's key, so re-addressing invalidates it.
+            DimensionPortalArtworkEditorUtility.InvalidateSpriteAssetAddressIndex();
         }
 
         private static void EnsureManifestContains(string modRoot, string spriteAssetPath)

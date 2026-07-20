@@ -389,17 +389,12 @@ namespace ExpandNullforge.EditorTools
                 root, required, DimensionItemAuthoringComponents.Placement,
                 component => ConfigurePlaceable(component, item, report));
 
-            // maxDurability is the ceiling the current durability is held to, so it has to be
-            // raised first — setting durability alone leaves it clamped to the component's
-            // default maximum and the authored value is silently lost. A generated item starts
-            // at full durability.
+            // maxDurability is the authored ceiling and the only one that survives serialization;
+            // the sibling `durability` field is runtime state that resets to its initializer when
+            // the prefab is reloaded, so writing it here would be a no-op that reads as intent.
             ApplyComponent<DurabilityAuthoring>(
                 root, required, DimensionItemAuthoringComponents.Durability,
-                component =>
-                {
-                    component.maxDurability = item.DurabilityPoints;
-                    component.durability = item.DurabilityPoints;
-                });
+                component => component.maxDurability = item.DurabilityPoints);
 
             ApplyComponent<WeaponDamageAuthoring>(
                 root, required, DimensionItemAuthoringComponents.WeaponDamage,
