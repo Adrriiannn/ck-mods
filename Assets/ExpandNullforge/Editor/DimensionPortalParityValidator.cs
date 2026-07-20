@@ -263,7 +263,10 @@ namespace ExpandNullforge.EditorTools
 
         private static Texture2D ResolveAnimationZeroColor(SpriteAsset asset)
         {
-            if (asset == null)
+            // A SpriteAsset with no animations is a legitimate authored state (a static-only
+            // layer), and GetAnimationAt throws rather than returning null for it. The validator
+            // must report such a layer, not crash the whole report.
+            if (asset == null || asset.animationCount <= 0)
             {
                 return null;
             }

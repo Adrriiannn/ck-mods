@@ -313,7 +313,7 @@ namespace ExpandNullforge.EditorTools
                 AssetDatabase.LoadAssetAtPath<SpriteAssetManifest>(manifestPath);
             SpriteAssetManifest manifestSnapshot = manifest == null
                 ? null
-                : UnityEngine.Object.Instantiate(manifest);
+                : DimensionPortalArtworkEditorUtility.InstantiateSnapshot(manifest);
             DimensionPortalVisualProfileAsset duplicate = null;
             DimensionPortalPackageAsset package = null;
             string packageFolder = string.Empty;
@@ -507,7 +507,7 @@ namespace ExpandNullforge.EditorTools
                 AssetDatabase.LoadAssetAtPath<SpriteAssetManifest>(manifestPath);
             SpriteAssetManifest manifestSnapshot = manifest == null
                 ? null
-                : UnityEngine.Object.Instantiate(manifest);
+                : DimensionPortalArtworkEditorUtility.InstantiateSnapshot(manifest);
             DimensionPortalVisualProfileAsset vanilla = null;
             DimensionPortalPackageAsset package = null;
             string packageFolder = string.Empty;
@@ -1532,15 +1532,17 @@ namespace ExpandNullforge.EditorTools
                 else if (currentManifest != null)
                 {
                     EditorUtility.CopySerialized(manifestSnapshot, currentManifest);
-                    currentManifest.name = manifestSnapshot.name;
+                    // The asset's filename is the only name Unity's importer accepts.
+                    currentManifest.name = DimensionPortalArtworkEditorUtility
+                        .ResolveAssetFileName(currentManifest, manifestSnapshot.name);
                     EditorUtility.SetDirty(currentManifest);
                     AssetDatabase.SaveAssetIfDirty(currentManifest);
                 }
                 else
                 {
                     SpriteAssetManifest restored =
-                        UnityEngine.Object.Instantiate(manifestSnapshot);
-                    restored.name = manifestSnapshot.name;
+                        DimensionPortalArtworkEditorUtility.InstantiateSnapshot(manifestSnapshot);
+                    restored.name = Path.GetFileNameWithoutExtension(manifestPath);
                     AssetDatabase.CreateAsset(restored, manifestPath);
                 }
             }

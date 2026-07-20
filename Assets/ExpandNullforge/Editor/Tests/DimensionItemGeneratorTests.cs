@@ -97,7 +97,12 @@ namespace ExpandNullforge.EditorTools
             GameObject prefab = LoadPrefab("mod_blade");
             Assert.That(prefab, Is.Not.Null);
             Assert.That(prefab.GetComponent<WeaponDamageAuthoring>().damage, Is.EqualTo(17));
-            Assert.That(prefab.GetComponent<DurabilityAuthoring>().durability, Is.EqualTo(250));
+
+            // Durability is held to maxDurability, so both must carry the authored value -
+            // setting only the current value leaves it clamped to the component default.
+            DurabilityAuthoring durability = prefab.GetComponent<DurabilityAuthoring>();
+            Assert.That(durability.maxDurability, Is.EqualTo(250));
+            Assert.That(durability.durability, Is.EqualTo(250));
         }
 
         [Test]
@@ -299,6 +304,8 @@ namespace ExpandNullforge.EditorTools
         public void ABlankIngredient_IsDroppedAndReported()
         {
             DimensionItemAsset item = MakeItem(DimensionItemArchetype.Material, "mod_alloy");
+            // The zero amount is clamped to 1 by DimensionRecipeIngredientTemplate.Amount, so it
+            // survives as a valid ingredient; only the blank id is dropped.
             DimensionRecipeAsset recipe = MakeRecipe(
                 "mod:alloy_recipe", "mod_alloy", 1f,
                 new[] { ("mod_copper", 2), (string.Empty, 5), ("mod_tin", 0) });
@@ -311,8 +318,18 @@ namespace ExpandNullforge.EditorTools
                 LoadPrefab("mod_alloy").GetComponent<InventoryItemAuthoring>();
             Assert.That(
                 inventory.requiredObjectsToCraft.Count,
-                Is.EqualTo(1),
-                "A blank or zero-amount ingredient must not become a free craft.");
+                Is.EqualTo(2),
+                "An ingredient with no item id must not become a free craft.");
+            for (int i = 0; i < inventory.requiredObjectsToCraft.Count; i++)
+            {
+                Assert.That(
+                    string.IsNullOrEmpty(inventory.requiredObjectsToCraft[i].objectName),
+                    Is.False,
+                    "A blank ingredient reached the generated item.");
+                Assert.That(
+                    inventory.requiredObjectsToCraft[i].amount,
+                    Is.GreaterThan(0));
+            }
         }
 
         [Test]

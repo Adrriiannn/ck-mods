@@ -42,6 +42,44 @@ namespace ExpandNullforge.EditorTools
         private const string ManagedFolderSegment = "/Data/SpriteAsset/PortalArtwork/";
         private const double PaletteBakeDebounceSeconds = 0.28;
 
+        /// <summary>
+        /// Takes an in-memory copy of an asset for rollback.
+        ///
+        /// <see cref="UnityEngine.Object.Instantiate(UnityEngine.Object)"/> appends "(Clone)" to
+        /// the copy's name, and a snapshot is restored by copying it back over the live asset —
+        /// name included. Left alone, that suffix lands on the real asset file and Unity's
+        /// importer rejects it ("Main Object Name 'X(Clone)' does not match filename 'X'"),
+        /// after which the asset can no longer be resolved in Scriptable Data. Keeping the
+        /// original name here fixes every restore path at once.
+        /// </summary>
+        internal static T InstantiateSnapshot<T>(T source)
+            where T : UnityEngine.Object
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            T snapshot = UnityEngine.Object.Instantiate(source);
+            snapshot.name = source.name;
+            return snapshot;
+        }
+
+        /// <summary>
+        /// The name Unity's importer requires for an on-disk asset: its own filename. Used when
+        /// restoring a snapshot, so a stale or suffixed in-memory name can never be written to
+        /// the real asset. Falls back to the supplied name for objects with no asset path.
+        /// </summary>
+        internal static string ResolveAssetFileName(
+            UnityEngine.Object asset,
+            string fallbackName)
+        {
+            string path = asset == null ? string.Empty : AssetDatabase.GetAssetPath(asset);
+            return string.IsNullOrEmpty(path)
+                ? fallbackName
+                : Path.GetFileNameWithoutExtension(path);
+        }
+
         private sealed class LayerDescriptor
         {
             public DimensionPortalArtworkLayer Layer;
@@ -291,7 +329,8 @@ namespace ExpandNullforge.EditorTools
                         managedSnapshot != null)
                     {
                         EditorUtility.CopySerialized(managedSnapshot, managedAsset);
-                        managedAsset.name = managedSnapshot.name;
+                        managedAsset.name =
+                            ResolveAssetFileName(managedAsset, managedSnapshot.name);
                     }
                 }
                 catch (Exception exception)
@@ -1828,13 +1867,13 @@ namespace ExpandNullforge.EditorTools
             SpriteAsset managedSnapshot = null;
             SpriteAsset stagedManaged = null;
             DimensionPortalVisualProfileAsset profileSnapshot =
-                UnityEngine.Object.Instantiate(profile);
+                DimensionPortalArtworkEditorUtility.InstantiateSnapshot(profile);
             string manifestPath = modRoot + "/SpriteAssetManifest.asset";
             SpriteAssetManifest manifestBefore =
                 AssetDatabase.LoadAssetAtPath<SpriteAssetManifest>(manifestPath);
             SpriteAssetManifest manifestSnapshot = manifestBefore == null
                 ? null
-                : UnityEngine.Object.Instantiate(manifestBefore);
+                : DimensionPortalArtworkEditorUtility.InstantiateSnapshot(manifestBefore);
             ArtworkFileTransaction transaction = null;
             try
             {
@@ -1860,7 +1899,7 @@ namespace ExpandNullforge.EditorTools
                 }
                 else
                 {
-                    managedSnapshot = UnityEngine.Object.Instantiate(managed);
+                    managedSnapshot = DimensionPortalArtworkEditorUtility.InstantiateSnapshot(managed);
                 }
 
                 transaction = new ArtworkFileTransaction(managedPath, managedWasCreated);
@@ -1905,7 +1944,7 @@ namespace ExpandNullforge.EditorTools
                     stagingSource = selectedAsset;
                 }
 
-                stagedManaged = UnityEngine.Object.Instantiate(stagingSource);
+                stagedManaged = DimensionPortalArtworkEditorUtility.InstantiateSnapshot(stagingSource);
                 stagedManaged.name = Path.GetFileNameWithoutExtension(managedPath);
                 SetSpriteAssetAddress(stagedManaged, addressLow, addressHigh);
                 Color[] palette = ReadPalette(serializedProfile, descriptor);
@@ -2086,7 +2125,7 @@ namespace ExpandNullforge.EditorTools
                 if (profileMayNeedRestore && profileSnapshot != null && profile != null)
                 {
                     EditorUtility.CopySerialized(profileSnapshot, profile);
-                    profile.name = profileSnapshot.name;
+                    profile.name = ResolveAssetFileName(profile, profileSnapshot.name);
                     EditorUtility.SetDirty(profile);
                     AssetDatabase.SaveAssetIfDirty(profile);
                 }
@@ -2105,7 +2144,8 @@ namespace ExpandNullforge.EditorTools
                     else if (currentManifest != null)
                     {
                         EditorUtility.CopySerialized(manifestSnapshot, currentManifest);
-                        currentManifest.name = manifestSnapshot.name;
+                        currentManifest.name =
+                            ResolveAssetFileName(currentManifest, manifestSnapshot.name);
                         EditorUtility.SetDirty(currentManifest);
                         AssetDatabase.SaveAssetIfDirty(currentManifest);
                     }
@@ -4280,7 +4320,7 @@ namespace ExpandNullforge.EditorTools
             Texture2D colorSource = colorTexture;
             Texture2D emissiveSource = emissiveTexture;
 
-            SpriteAsset snapshot = UnityEngine.Object.Instantiate(managed);
+            SpriteAsset snapshot = DimensionPortalArtworkEditorUtility.InstantiateSnapshot(managed);
             DimensionPortalArtworkEditorUtility.ArtworkFileTransaction transaction =
                 new DimensionPortalArtworkEditorUtility.ArtworkFileTransaction(
                     managedPath,
@@ -4636,7 +4676,7 @@ namespace ExpandNullforge.EditorTools
             string sourcePath = expectedFolder + "/" + stem + SwirlSourceSuffix;
             string outputPath = expectedFolder + "/" + stem + SwirlOutputSuffix;
 
-            SpriteAsset snapshot = UnityEngine.Object.Instantiate(managed);
+            SpriteAsset snapshot = DimensionPortalArtworkEditorUtility.InstantiateSnapshot(managed);
             DimensionPortalArtworkEditorUtility.ArtworkFileTransaction transaction =
                 new DimensionPortalArtworkEditorUtility.ArtworkFileTransaction(
                     managedPath,
@@ -5642,13 +5682,13 @@ namespace ExpandNullforge.EditorTools
             message = string.Empty;
             List<string> createdPaths = new List<string>();
             DimensionPortalVisualProfileAsset targetSnapshot =
-                UnityEngine.Object.Instantiate(target);
+                DimensionPortalArtworkEditorUtility.InstantiateSnapshot(target);
             string manifestPath = NormalizeAssetPath(modRoot) + "/SpriteAssetManifest.asset";
             SpriteAssetManifest manifest =
                 AssetDatabase.LoadAssetAtPath<SpriteAssetManifest>(manifestPath);
             SpriteAssetManifest manifestSnapshot = manifest == null
                 ? null
-                : UnityEngine.Object.Instantiate(manifest);
+                : DimensionPortalArtworkEditorUtility.InstantiateSnapshot(manifest);
             try
             {
                 string assetStem = SanitizeFileName(target.name) + "_Swirls";
@@ -6057,16 +6097,21 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
+            // The asset's own filename is the only name Unity's importer will accept, so it wins
+            // over whatever name the in-memory snapshot happens to carry.
+            string manifestName = Path.GetFileNameWithoutExtension(manifestPath);
+
             if (current == null)
             {
-                SpriteAssetManifest restored = UnityEngine.Object.Instantiate(snapshot);
-                restored.name = snapshot.name;
+                SpriteAssetManifest restored =
+                    DimensionPortalArtworkEditorUtility.InstantiateSnapshot(snapshot);
+                restored.name = manifestName;
                 AssetDatabase.CreateAsset(restored, manifestPath);
                 return;
             }
 
             EditorUtility.CopySerialized(snapshot, current);
-            current.name = snapshot.name;
+            current.name = manifestName;
             EditorUtility.SetDirty(current);
             AssetDatabase.SaveAssetIfDirty(current);
         }

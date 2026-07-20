@@ -389,9 +389,17 @@ namespace ExpandNullforge.EditorTools
                 root, required, DimensionItemAuthoringComponents.Placement,
                 component => ConfigurePlaceable(component, item, report));
 
+            // maxDurability is the ceiling the current durability is held to, so it has to be
+            // raised first — setting durability alone leaves it clamped to the component's
+            // default maximum and the authored value is silently lost. A generated item starts
+            // at full durability.
             ApplyComponent<DurabilityAuthoring>(
                 root, required, DimensionItemAuthoringComponents.Durability,
-                component => component.durability = item.DurabilityPoints);
+                component =>
+                {
+                    component.maxDurability = item.DurabilityPoints;
+                    component.durability = item.DurabilityPoints;
+                });
 
             ApplyComponent<WeaponDamageAuthoring>(
                 root, required, DimensionItemAuthoringComponents.WeaponDamage,
@@ -507,8 +515,12 @@ namespace ExpandNullforge.EditorTools
 
         /// <summary>
         /// Turns a recipe's ingredient list into the crafting requirements on the produced item.
-        /// An ingredient with no id or a non-positive amount is dropped and reported, because a
-        /// blank entry silently makes the item craftable from nothing.
+        /// An ingredient with no item id is dropped and reported, because a blank entry would
+        /// silently make the item craftable from nothing.
+        ///
+        /// Amounts are not checked here: <c>DimensionRecipeIngredientTemplate.Amount</c> clamps to
+        /// at least one, so a zero cannot reach this point and a guard against it would be dead
+        /// code that reads as protection it does not provide.
         /// </summary>
         private static List<InventoryItemAuthoring.CraftingObject> BuildIngredients(
             DimensionItemAsset item,
@@ -536,11 +548,11 @@ namespace ExpandNullforge.EditorTools
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(template.ItemId) || template.Amount <= 0)
+                if (string.IsNullOrEmpty(template.ItemId))
                 {
                     report.Warnings.Add(
                         Describe(item) + ": recipe '" + recipe.RecipeId +
-                        "' has an ingredient with no item id or a zero amount; it was skipped.");
+                        "' has an ingredient with no item id; it was skipped.");
                     continue;
                 }
 
