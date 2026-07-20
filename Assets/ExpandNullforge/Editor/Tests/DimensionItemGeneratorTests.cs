@@ -98,11 +98,21 @@ namespace ExpandNullforge.EditorTools
             Assert.That(prefab, Is.Not.Null);
             Assert.That(prefab.GetComponent<WeaponDamageAuthoring>().damage, Is.EqualTo(17));
 
-            // maxDurability is the authored ceiling and the value that persists. The sibling
-            // `durability` field is runtime state that resets to its initializer on reload, so
-            // asserting on it here would be testing the SDK's defaults rather than our output.
+            // The archetype contract is ours and must hold: a weapon carries durability at all.
             DurabilityAuthoring durability = prefab.GetComponent<DurabilityAuthoring>();
-            Assert.That(durability.maxDurability, Is.EqualTo(250));
+            Assert.That(durability, Is.Not.Null);
+
+            // The durability *value* is the SDK's model, not ours. maxDurability is a real int
+            // field, yet an authored value does not survive a prefab reload - the game appears to
+            // derive durability from the item type and durabilityMultiplier (see the
+            // BaseDurability* constants and CalculateObjectDurability). Until that model is
+            // confirmed, this asserts the authored value reached the component and dumps the
+            // component's real serialized state on failure, rather than encoding a guess.
+            Assert.That(
+                durability.maxDurability,
+                Is.EqualTo(250),
+                "Durability did not survive generation. Actual serialized state:"
+                + DescribeSerialized(durability));
         }
 
         [Test]
@@ -373,6 +383,60 @@ namespace ExpandNullforge.EditorTools
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
             return recipe;
+        }
+
+        /// <summary>
+        /// Lists a component's serialized fields and their values. Used in failure messages so a
+        /// mismatch reports what the SDK actually stores instead of leaving us to infer it.
+        /// </summary>
+        private static string DescribeSerialized(Object target)
+        {
+            if (target == null)
+            {
+                return " <null>";
+            }
+
+            System.Text.StringBuilder builder = new System.Text.StringBuilder();
+            SerializedObject serialized = new SerializedObject(target);
+            SerializedProperty property = serialized.GetIterator();
+            bool enterChildren = true;
+            while (property.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                builder.Append("\n  ").Append(property.propertyPath)
+                    .Append(" (").Append(property.propertyType).Append(") = ")
+                    .Append(DescribeValue(property));
+            }
+
+            return builder.ToString();
+        }
+
+        private static string DescribeValue(SerializedProperty property)
+        {
+            switch (property.propertyType)
+            {
+                case SerializedPropertyType.Integer:
+                    return property.intValue.ToString();
+                case SerializedPropertyType.Float:
+                    return property.floatValue.ToString();
+                case SerializedPropertyType.Boolean:
+                    return property.boolValue.ToString();
+                case SerializedPropertyType.String:
+                    return property.stringValue;
+                case SerializedPropertyType.Enum:
+                    return property.enumValueIndex + " (" +
+                           (property.enumNames != null &&
+                            property.enumValueIndex >= 0 &&
+                            property.enumValueIndex < property.enumNames.Length
+                               ? property.enumNames[property.enumValueIndex]
+                               : "?") + ")";
+                case SerializedPropertyType.ObjectReference:
+                    return property.objectReferenceValue == null
+                        ? "<none>"
+                        : property.objectReferenceValue.name;
+                default:
+                    return "<" + property.propertyType + ">";
+            }
         }
 
         private static GameObject LoadPrefab(string fileName)
