@@ -17,7 +17,9 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private string contentPackAuthor = string.Empty;
         [SerializeField] private int minimumApiVersion = 1;
         [SerializeField] private string[] dependencyContentPackIds = new string[0];
-        [SerializeField] private Vector2Int absoluteOrigin = new Vector2Int(5000, 5000);
+        // Clears the protected ±5000 overworld band by the dimension's half-extent; an origin at
+        // exactly 5000 straddles it and dimension registration is rejected.
+        [SerializeField] private Vector2Int absoluteOrigin = new Vector2Int(0, 7000);
         [SerializeField] private Vector2Int reservedLocalMin = new Vector2Int(-4096, -4096);
         [SerializeField] private Vector2Int reservedLocalMaxExclusive = new Vector2Int(4096, 4096);
         [SerializeField] private int generationVersion = 1;

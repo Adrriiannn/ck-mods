@@ -24,7 +24,10 @@ namespace ExpandNullforge.Authoring
         public string TerrainTableId = string.Empty;
         public string TerrainPassId = string.Empty;
         public string TerrainGenerationProviderId = string.Empty;
-        public Vector2Int AbsoluteOrigin = new Vector2Int(5000, 5000);
+        // Must clear the protected ±5000 overworld band by the dimension's half-extent; an origin
+        // exactly at 5000 makes the playable bounds straddle it and registration fails. See
+        // DimensionTemplateCreationWizard.AbsoluteOriginX/Y.
+        public Vector2Int AbsoluteOrigin = new Vector2Int(0, 7000);
         public int GenerationVersion = 1;
         public int HalfSizeTiles = 64;
         public int ReservedShellPaddingTiles = 256;

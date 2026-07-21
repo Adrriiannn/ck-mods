@@ -81,8 +81,12 @@ namespace ExpandNullforge.Authoring
         public string BiomeId = string.Empty;
         public string BiomeDisplayName = string.Empty;
         public string ZoneId = string.Empty;
-        public int AbsoluteOriginX = 5000;
-        public int AbsoluteOriginY = 5000;
+        // A dimension extends from its origin, so the origin must sit PAST the protected ±5000
+        // overworld band by the dimension's half-extent — an origin exactly at 5000 makes the
+        // playable bounds straddle the band and registration is rejected. 7000 clears it with
+        // room for reasonably large dimensions; north-aligned (+Y) matches the slot allocator.
+        public int AbsoluteOriginX = 0;
+        public int AbsoluteOriginY = 7000;
         public int HalfSizeTiles = 0;
         public int ReservedShellPaddingTiles = -1;
         public string FloorResourceKey = string.Empty;
