@@ -99,5 +99,23 @@ namespace ExpandNullforge.Api
                 Capabilities,
                 lifecycleState);
         }
+
+        /// <summary>
+        /// Returns a copy placed at a new absolute origin. Because every absolute coordinate is
+        /// derived from <see cref="AbsoluteOrigin"/> at query time, this relocates the whole
+        /// dimension — its area, zones, and travel targets move with it.
+        /// </summary>
+        public DimensionDefinition WithAbsoluteOrigin(int2 absoluteOrigin)
+        {
+            return new DimensionDefinition(
+                Id,
+                DisplayName,
+                absoluteOrigin,
+                LocalBounds,
+                GenerationVersion,
+                SpaceKind,
+                Capabilities,
+                LifecycleState);
+        }
     }
 }

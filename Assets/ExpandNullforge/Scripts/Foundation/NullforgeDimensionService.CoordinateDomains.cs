@@ -11,6 +11,9 @@ namespace ExpandNullforge.Foundation
     private const int MaximumCoordinateDomainPaddingTiles = 5000;
     private const int ProtectedOverworldCoordinateRadiusTiles = 5000;
 
+    /// <summary>Extra tiles a relocated dimension is pushed past the protected band edge.</summary>
+    private const int ProtectedBandClearanceMarginTiles = 256;
+
     private static readonly DimensionBounds ProtectedOverworldCoordinateBounds =
         new DimensionBounds(
             new int2(-ProtectedOverworldCoordinateRadiusTiles, -ProtectedOverworldCoordinateRadiusTiles),

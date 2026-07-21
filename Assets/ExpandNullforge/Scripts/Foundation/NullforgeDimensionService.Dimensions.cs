@@ -116,12 +116,36 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (definition.Id != DimensionIds.Overworld && Overlaps(definition.AbsoluteBounds, ProtectedOverworldCoordinateBounds))
+      // A dimension whose bounds reach into the protected overworld band is RELOCATED north to
+      // clear it, not rejected. An origin authored at exactly the protected radius (a common
+      // default) would otherwise make the dimension untravelable, and — because Unity bundles a
+      // cached copy of the authored origin — hard to fix from the asset. Every absolute
+      // coordinate derives from the registered origin at query time (see TryGetArea), so shifting
+      // the origin moves the whole dimension consistently; this is self-correcting regardless of
+      // what origin was baked.
+      if (definition.Id != DimensionIds.Overworld &&
+          Overlaps(definition.AbsoluteBounds, ProtectedOverworldCoordinateBounds))
       {
-        result = DimensionOperationResult.Failed(
-            "dimension-overworld-coordinate-conflict",
-            "The requested dimension playable bounds overlap the protected vanilla coordinate area.");
-        return false;
+        int clearedOriginY =
+            ProtectedOverworldCoordinateBounds.MaxExclusive.y - definition.LocalBounds.Min.y +
+            ProtectedBandClearanceMarginTiles;
+        DimensionDefinition relocated =
+            definition.WithAbsoluteOrigin(new int2(definition.AbsoluteOrigin.x, clearedOriginY));
+
+        DimensionFrameworkLog.Warning(
+            "[ExpandNullforge] Dimension '" + definition.Id + "' origin (" +
+            definition.AbsoluteOrigin.x + "," + definition.AbsoluteOrigin.y +
+            ") reached the protected overworld band; relocated to (" +
+            relocated.AbsoluteOrigin.x + "," + relocated.AbsoluteOrigin.y + ").");
+        definition = relocated;
+
+        if (Overlaps(definition.AbsoluteBounds, ProtectedOverworldCoordinateBounds))
+        {
+          result = DimensionOperationResult.Failed(
+              "dimension-overworld-coordinate-conflict",
+              "The requested dimension could not be relocated clear of the protected vanilla coordinate area.");
+          return false;
+        }
       }
 
       if (definition.Id != DimensionIds.Overworld && OverlapsExistingNonOverworldDimension(definition))
