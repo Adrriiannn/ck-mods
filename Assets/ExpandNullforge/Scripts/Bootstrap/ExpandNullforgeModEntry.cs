@@ -17,6 +17,8 @@ public sealed class ExpandNullforgeModEntry : IMod
   private static readonly NullforgeDimensionService DimensionService = new NullforgeDimensionService();
   private static readonly DimensionSafePlatformGenerationProvider SafePlatformGenerationProvider =
       new DimensionSafePlatformGenerationProvider();
+  private static readonly DimensionTileMapGenerationProvider TileMapGenerationProvider =
+      new DimensionTileMapGenerationProvider();
 
   private World registeredServerWorld;
   private World registeredClientWorld;
@@ -82,6 +84,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     OnServerWorldDestroyed();
     OnClientWorldDestroyed();
     SafePlatformGenerationProvider.ClearJobs();
+    TileMapGenerationProvider.ClearJobs();
     DimensionApi.UnregisterService(ProviderId);
     DimensionPortalRecipeInjector.Reset();
     DimensionPortalObjectIdCache.Clear();
@@ -166,6 +169,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     world.GetOrCreateSystemManaged<DimensionPortalHydrationSystem>();
     world.GetOrCreateSystemManaged<DimensionPortalChargeSystem>();
     world.GetOrCreateSystemManaged<DimensionPortalActivationSystem>();
+    world.GetOrCreateSystemManaged<DimensionTileMapGenerationSystem>();
     DimensionService.SetServerWorld(world);
     RegisterFrameworkGenerationProviders();
     TryInitializeServerWorldPersistence();
@@ -174,14 +178,19 @@ public sealed class ExpandNullforgeModEntry : IMod
 
   private static void RegisterFrameworkGenerationProviders()
   {
-    DimensionOperationResult result;
-    if (!DimensionService.TryRegisterGenerationProvider(
-        SafePlatformGenerationProvider,
-        out result) &&
+    RegisterGenerationProvider(SafePlatformGenerationProvider, "safe-platform");
+    RegisterGenerationProvider(TileMapGenerationProvider, "tile-map");
+  }
+
+  private static void RegisterGenerationProvider(
+      IDimensionGenerationProvider provider,
+      string label)
+  {
+    if (!DimensionService.TryRegisterGenerationProvider(provider, out DimensionOperationResult result) &&
         !string.Equals(result.Code, "generation-provider-duplicate", System.StringComparison.Ordinal))
     {
       DimensionFrameworkLog.Warning(
-          "[ExpandNullforge] Could not register safe-platform generation provider: " +
+          "[ExpandNullforge] Could not register " + label + " generation provider: " +
           result.Message);
     }
   }

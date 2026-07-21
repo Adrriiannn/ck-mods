@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using ExpandNullforge.Foundation;
 using PugTilemap;
 using Unity.Collections;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 
@@ -21,8 +22,11 @@ namespace ExpandNullforge.Generation
     /// optimization.
     ///
     /// This is an ECS system whose behaviour can only be verified in-game; the API shapes it uses
-    /// are compile-checked against the SDK.
+    /// are compile-checked against the SDK. It runs in <see cref="SimulationSystemGroup"/> — the
+    /// same group Core Keeper's own terrain generator uses — so tile writes land at a valid point
+    /// in the server frame.
     /// </summary>
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
     public sealed partial class DimensionTileMapGenerationSystem : PugSimulationSystemBase
     {
         private const int MaxAttempts = 600;
