@@ -719,6 +719,19 @@ namespace ExpandNullforge.EditorTools
 
         private void RunSaveAssetsAction()
         {
+            RunSaveAssetsAction(0);
+        }
+
+        // The portal visual save resolves the framework's portal SpriteAssets through Scriptable
+        // Data, which imports asynchronously and is often mid-import right after a domain reload
+        // (a recompile). When that happens the save throws with a "reapply after Scriptable Data
+        // finishes importing" hint, leaving the dimension half-created and requiring a second
+        // manual click. Instead, catch that specific timing failure and retry automatically once
+        // the import settles, so a single click always completes.
+        private const int MaxSaveRetryAttempts = 10;
+
+        private void RunSaveAssetsAction(int attempt)
+        {
             DimensionTemplateCreationWizardSessionSnapshot snapshot =
                 controller.GetSnapshot();
             DimensionTemplateAuthoringWorkspace workspace =
@@ -733,8 +746,36 @@ namespace ExpandNullforge.EditorTools
                     : createResult.Workspace;
             }
 
-            DimensionTemplateAssetEditorSaveResult saveResult =
-                DimensionTemplateAssetEditorSaveUtility.SaveWorkspace(workspace);
+            DimensionTemplateAssetEditorSaveResult saveResult;
+            try
+            {
+                saveResult = DimensionTemplateAssetEditorSaveUtility.SaveWorkspace(workspace);
+            }
+            catch (System.InvalidOperationException exception)
+                when (exception.Message.IndexOf(
+                          "Scriptable Data finishes importing",
+                          System.StringComparison.Ordinal) >= 0)
+            {
+                if (attempt < MaxSaveRetryAttempts)
+                {
+                    lastResultMessage =
+                        "Waiting for portal art to finish importing, then finishing automatically… (attempt " +
+                        (attempt + 1) + " of " + MaxSaveRetryAttempts + ")";
+                    lastResultType = MessageType.Info;
+                    AssetDatabase.Refresh();
+                    EditorApplication.delayCall += () => RunSaveAssetsAction(attempt + 1);
+                    Repaint();
+                    return;
+                }
+
+                lastResultMessage =
+                    "Portal art has not finished importing yet. Click Create Dimension Asset again once " +
+                    "Scriptable Data settles.";
+                lastResultType = MessageType.Warning;
+                Repaint();
+                return;
+            }
+
             lastResultMessage = saveResult.Message;
             lastResultType = saveResult.Executed
                 ? MessageType.Info
