@@ -95,6 +95,10 @@ namespace ExpandNullforge.Generation
             "The safe-platform provider cannot generate this dimension area.");
       }
 
+      Foundation.DimensionFrameworkLog.Warning(
+          "[ExpandNullforge][tilemap] SAFE PLATFORM generating '" + context.Dimension.Id +
+          "' (tile map registered=" + Foundation.DimensionTileMapRegistry.Has(context.Dimension.Id) + ").");
+
       string key = CreateKey(
           context.Dimension.Id,
           context.Area.LocalBounds,

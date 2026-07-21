@@ -39,6 +39,9 @@ namespace ExpandNullforge.Foundation
             }
 
             Maps[dimensionId] = map;
+            DimensionFrameworkLog.Warning(
+                "[ExpandNullforge][tilemap] registered map for '" + dimensionId + "' with " +
+                map.PaintedTileCount() + " painted tiles.");
         }
 
         public static bool TryGet(string dimensionId, out DimensionTileMapModel map)

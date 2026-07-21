@@ -79,6 +79,9 @@ namespace ExpandNullforge.Generation
                         "No tiles to generate for this area.");
                 }
 
+                DimensionFrameworkLog.Warning(
+                    "[ExpandNullforge][tilemap] provider generating '" + context.Dimension.Id +
+                    "': " + compiled.WriteCount + " writes, " + compiled.Skipped.Count + " skipped.");
                 system.Submit(key, compiled.Writes);
                 submitted.Add(key);
                 return DimensionGenerationProviderResult.Progress(
