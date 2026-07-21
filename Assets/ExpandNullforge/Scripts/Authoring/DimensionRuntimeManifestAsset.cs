@@ -64,7 +64,16 @@ namespace ExpandNullforge.Authoring
         /// <summary>True when a non-empty painted map is present.</summary>
         public bool HasTileMap
         {
-            get { return tileMap != null && tileMap.PaintedTileCount() > 0; }
+            get
+            {
+                int painted = tileMap == null ? -1 : tileMap.PaintedTileCount();
+                bool has = painted > 0;
+                ExpandNullforge.Foundation.DimensionFrameworkLog.Warning(
+                    "[ExpandNullforge][tilemap] HasTileMap on '" + GeneratedFromDimensionId +
+                    "': tileMap=" + (tileMap == null ? "NULL" : "present") +
+                    ", painted=" + painted + " -> " + has);
+                return has;
+            }
         }
 
         /// <summary>Records the dimension's painted map. Called by the editor authoring flow.</summary>
