@@ -6202,6 +6202,14 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      DimensionItemObjectRegistry.Declare(");
             builder.AppendLine("          manifest.GeneratedFromContentPackId, manifest.GeneratedItemIds);");
             builder.AppendLine();
+            builder.AppendLine("      // Register the dimension's painted tile map so the tile-map");
+            builder.AppendLine("      // generation provider can write it into the world at generation.");
+            builder.AppendLine("      if (manifest.HasTileMap)");
+            builder.AppendLine("      {");
+            builder.AppendLine("        DimensionTileMapRegistry.Register(");
+            builder.AppendLine("            manifest.GeneratedFromDimensionId, manifest.TileMap);");
+            builder.AppendLine("      }");
+            builder.AppendLine();
             builder.AppendLine("      DimensionContentManifestResult applyResult;");
             builder.AppendLine("      DimensionOperationResult buildResult;");
             builder.AppendLine("      if (!manifest.TryApplyTo(");

@@ -32,15 +32,45 @@ namespace ExpandNullforge.Authoring
         [Tooltip("Item ids whose prefabs were generated for this dimension. The runtime declares these so it can report any that never registered with the game.")]
         [SerializeField] private string[] generatedItemIds = new string[0];
 
+        [Tooltip("The dimension's painted tile map. The runtime registers it so the tile-map generation provider can write it into the world.")]
+        [SerializeField] private DimensionTileMapModel tileMap;
+
         public string ManifestId
         {
             get { return manifestId ?? string.Empty; }
+        }
+
+        /// <summary>Dimension this manifest generates.</summary>
+        public string GeneratedFromDimensionId
+        {
+            get { return generatedFromDimensionId ?? string.Empty; }
         }
 
         /// <summary>Content pack that owns this manifest.</summary>
         public string GeneratedFromContentPackId
         {
             get { return generatedFromContentPackId ?? string.Empty; }
+        }
+
+        /// <summary>
+        /// The painted tile map for this dimension, or null if it has none. The runtime registers
+        /// it into <c>DimensionTileMapRegistry</c> so the tile-map provider can generate it.
+        /// </summary>
+        public DimensionTileMapModel TileMap
+        {
+            get { return tileMap; }
+        }
+
+        /// <summary>True when a non-empty painted map is present.</summary>
+        public bool HasTileMap
+        {
+            get { return tileMap != null && tileMap.PaintedTileCount() > 0; }
+        }
+
+        /// <summary>Records the dimension's painted map. Called by the editor authoring flow.</summary>
+        public void SetTileMap(DimensionTileMapModel map)
+        {
+            tileMap = map;
         }
 
         /// <summary>

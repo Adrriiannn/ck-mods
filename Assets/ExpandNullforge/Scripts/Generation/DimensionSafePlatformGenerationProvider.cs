@@ -43,6 +43,14 @@ namespace ExpandNullforge.Generation
         return false;
       }
 
+      // Yield to a painted tile map: a dimension the creator has painted should generate from
+      // that map (the tile-map provider), not the flat safe platform. Order-independent, so it
+      // does not matter which provider the selection loop checks first.
+      if (Foundation.DimensionTileMapRegistry.Has(dimension.Id))
+      {
+        return false;
+      }
+
       int2 size = localBounds.Size;
       return size.x > 0 && size.y > 0;
     }
