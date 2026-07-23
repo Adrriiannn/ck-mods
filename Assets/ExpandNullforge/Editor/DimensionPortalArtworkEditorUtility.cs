@@ -14,7 +14,13 @@ namespace ExpandNullforge.EditorTools
         Frame,
         ChargeSweep,
         Milestones,
-        Center
+        Center,
+
+        // The instant item portal's center: same profile reference property as Center, but a
+        // three-animation framework contract (idle, opening, closing — five frames each). Kept
+        // out of the Descriptors array so profile initialization and legacy palette migration
+        // keep operating on the placed-portal contract only.
+        CenterInstant
     }
 
     internal enum DimensionPortalArtworkReferenceKind
@@ -700,12 +706,39 @@ namespace ExpandNullforge.EditorTools
             }
         };
 
+        // The instant item portal's center descriptor. Deliberately NOT part of Descriptors:
+        // EnsureProfileInitialized and the legacy palette migration iterate that array, and both
+        // must keep treating "centerEffectSpriteAsset" as the placed-portal Center contract.
+        private static readonly LayerDescriptor InstantCenterDescriptor = new LayerDescriptor
+        {
+            Layer = DimensionPortalArtworkLayer.CenterInstant,
+            Key = "centerInstant",
+            DisplayName = "CenterInstant",
+            ReferenceProperty = "centerEffectSpriteAsset",
+            FrameworkAssetPath =
+                DimensionPortalInstantArtworkEditorUtility.InstantCenterAssetPath,
+            FrameworkAddressLow =
+                DimensionPortalInstantArtworkEditorUtility.InstantCenterAddressLow,
+            FrameworkAddressHigh =
+                DimensionPortalInstantArtworkEditorUtility.InstantCenterAddressHigh,
+            SourcePalette = CenterSourcePalette,
+            PaletteProperties = new[]
+            {
+                "centerDarkColor",
+                "centerDeepColor",
+                "centerMidColor",
+                "centerBrightColor",
+                "centerCoreColor",
+                "centerHighlightColor"
+            }
+        };
+
         private static readonly Dictionary<string, PendingBake> PendingBakes =
             new Dictionary<string, PendingBake>(StringComparer.Ordinal);
         private static readonly Dictionary<ReferenceCacheKey, ReferenceCacheEntry> ReferenceCache =
             new Dictionary<ReferenceCacheKey, ReferenceCacheEntry>();
         private static readonly SpriteAsset[] FrameworkAssetCache =
-            new SpriteAsset[4];
+            new SpriteAsset[5];
         private static bool updateHookInstalled;
 
         static DimensionPortalArtworkEditorUtility()
@@ -1152,6 +1185,13 @@ namespace ExpandNullforge.EditorTools
             SpriteAsset cached = FrameworkAssetCache[index];
             if (cached == null)
             {
+                // The instant center asset is built in editor code from the shipped Instant
+                // sheets, so make sure it exists before the first load resolves it.
+                if (layer == DimensionPortalArtworkLayer.CenterInstant)
+                {
+                    DimensionPortalInstantArtworkEditorUtility.EnsureFrameworkCenterAsset(out _);
+                }
+
                 cached = AssetDatabase.LoadAssetAtPath<SpriteAsset>(
                     GetDescriptor(layer).FrameworkAssetPath);
                 FrameworkAssetCache[index] = cached;
@@ -2534,7 +2574,9 @@ namespace ExpandNullforge.EditorTools
                     return false;
                 }
 
-                bool supportsFullCanvas = layer == DimensionPortalArtworkLayer.Center;
+                bool supportsFullCanvas =
+                    layer == DimensionPortalArtworkLayer.Center ||
+                    layer == DimensionPortalArtworkLayer.CenterInstant;
 
                 slots[i] = new TextureSlot
                 {
@@ -2694,9 +2736,18 @@ namespace ExpandNullforge.EditorTools
             DimensionPortalArtworkLayer layer,
             int animationIndex)
         {
+            if (layer == DimensionPortalArtworkLayer.CenterInstant)
+            {
+                return animationIndex == 0
+                    ? "Loop"
+                    : animationIndex == 1
+                        ? "Opening"
+                        : "Closing";
+            }
+
             if (layer == DimensionPortalArtworkLayer.Center)
             {
-                return animationIndex == 0 ? "Mature loop" : "Opening";
+                return animationIndex == 0 ? "Loop" : "Opening";
             }
 
             if (layer == DimensionPortalArtworkLayer.ChargeSweep)
@@ -4154,6 +4205,11 @@ namespace ExpandNullforge.EditorTools
 
         private static LayerDescriptor GetDescriptor(DimensionPortalArtworkLayer layer)
         {
+            if (layer == DimensionPortalArtworkLayer.CenterInstant)
+            {
+                return InstantCenterDescriptor;
+            }
+
             for (int i = 0; i < Descriptors.Length; i++)
             {
                 if (Descriptors[i].Layer == layer)

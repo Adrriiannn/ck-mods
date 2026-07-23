@@ -298,7 +298,7 @@ namespace ExpandNullforge.Authoring
                 DimensionTemplateCustomizerSectionKind.Portals,
                 DimensionAuthoringReadinessState.Ready,
                 "portals",
-                "Portals",
+                "Portal Studio",
                 message,
                 customProfile ? "inspect-portals" : "configure-portals",
                 customProfile ? 1 : 0,

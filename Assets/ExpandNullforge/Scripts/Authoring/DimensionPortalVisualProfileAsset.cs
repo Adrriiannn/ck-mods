@@ -104,16 +104,9 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private float secondMilestone = 0.5f;
         [Range(0.0f, 1.0f)]
         [SerializeField] private float thirdMilestone = 0.75f;
-        [Min(0)]
-        [SerializeField] private int milestoneEmptyFrame;
-        [Min(0)]
-        [SerializeField] private int milestoneFirstFrame = 1;
-        [Min(0)]
-        [SerializeField] private int milestoneSecondFrame = 3;
-        [Min(0)]
-        [SerializeField] private int milestoneThirdFrame = 4;
-        [Min(0)]
-        [SerializeField] private int milestoneReadyFrame = 7;
+        // The milestone stage -> frame mapping was removed: the vanilla sheet order
+        // (empty 0, bottom 1, middle 3, upper 4, ready 7) is fixed in the runtime visual,
+        // and custom sheets follow the same order. Only the thresholds are authorable.
         [SerializeField] private bool milestonesVisible = true;
         [Tooltip("Screen-space position relative to the vanilla milestone artwork, in source pixels.")]
         [SerializeField] private Vector2 milestoneOffsetPixels = Vector2.zero;
@@ -292,11 +285,6 @@ namespace ExpandNullforge.Authoring
         {
             get { return Mathf.Clamp(thirdMilestone, SecondMilestone, 1.0f); }
         }
-        public int MilestoneEmptyFrame { get { return Mathf.Max(0, milestoneEmptyFrame); } }
-        public int MilestoneFirstFrame { get { return Mathf.Max(0, milestoneFirstFrame); } }
-        public int MilestoneSecondFrame { get { return Mathf.Max(0, milestoneSecondFrame); } }
-        public int MilestoneThirdFrame { get { return Mathf.Max(0, milestoneThirdFrame); } }
-        public int MilestoneReadyFrame { get { return Mathf.Max(0, milestoneReadyFrame); } }
         public bool MilestonesVisible { get { return milestonesVisible; } }
         public Vector2 MilestoneOffsetPixels { get { return milestoneOffsetPixels; } }
         public Vector2 MilestoneScale { get { return ClampLayerScale(milestoneScale); } }

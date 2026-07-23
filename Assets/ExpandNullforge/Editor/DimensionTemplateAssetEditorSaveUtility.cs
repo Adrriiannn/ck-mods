@@ -464,6 +464,13 @@ namespace ExpandNullforge.EditorTools
                     }
                 }
 
+                // The instant item portal's profile must never be scavenged as the placed
+                // portal's profile — the two slots are configured independently.
+                if (template.ItemPortalVisualProfile != null)
+                {
+                    candidates.Remove(template.ItemPortalVisualProfile);
+                }
+
                 if (candidates.Count == 1)
                 {
                     profile = candidates[0];
@@ -526,6 +533,113 @@ namespace ExpandNullforge.EditorTools
             {
                 message += " " + initializationMessage;
             }
+            return profile;
+        }
+
+        /// <summary>
+        /// Ensures the template has a dedicated instant item-portal (V2) profile. A freshly
+        /// created profile starts frameless with the three-animation instant center sheets;
+        /// unlike <see cref="EnsureAssigned"/> there is no candidate scavenging — an instant
+        /// profile is only ever the one explicitly bound to the template.
+        /// </summary>
+        public static DimensionPortalVisualProfileAsset EnsureItemAssigned(
+            DimensionTemplateAsset template,
+            bool createIfMissing,
+            bool recordUndo,
+            out bool created,
+            out string message)
+        {
+            created = false;
+            message = string.Empty;
+
+            if (template == null)
+            {
+                message = "No Dimension Asset is selected.";
+                return null;
+            }
+
+            if (template.ItemPortalVisualProfile != null)
+            {
+                DimensionPortalVisualProfileAsset assignedProfile =
+                    template.ItemPortalVisualProfile;
+                DimensionPortalArtworkEditorUtility.EnsureProfileInitialized(
+                    template,
+                    assignedProfile,
+                    out string existingInitializationMessage);
+
+                // Heals profiles whose center still points at the shared framework instant
+                // asset: the package invariant requires a package-owned clone.
+                DimensionPortalInstantArtworkEditorUtility.EnsurePackagedInstantCenter(
+                    template,
+                    assignedProfile,
+                    out string healMessage);
+
+                message = string.IsNullOrEmpty(existingInitializationMessage)
+                    ? "The Dimension Asset already has an instant portal profile."
+                    : existingInitializationMessage;
+                if (!string.IsNullOrEmpty(healMessage))
+                {
+                    message += " " + healMessage;
+                }
+
+                return assignedProfile;
+            }
+
+            if (!createIfMissing)
+            {
+                message = "The Dimension Asset has no instant portal profile.";
+                return null;
+            }
+
+            string templatePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(template));
+            if (!IsAssetFolderPath(GetFolder(templatePath)))
+            {
+                message =
+                    "Save the Dimension Asset inside Assets before assigning its instant portal profile.";
+                return null;
+            }
+
+            if (!DimensionPortalPresetEditorUtility.CreateVanilla(
+                    template,
+                    "Instant Portal",
+                    false,
+                    out DimensionPortalVisualProfileAsset profile,
+                    out string packageMessage))
+            {
+                message = "Could not create the dimension's instant portal package. " +
+                          packageMessage;
+                return null;
+            }
+
+            created = true;
+            if (recordUndo)
+            {
+                Undo.RecordObject(template, "Assign instant portal profile");
+            }
+
+            template.SetItemPortalVisualProfile(profile);
+
+            // Applied after CreateVanilla's EnsureProfileInitialized so the schema migration
+            // cannot turn the frameless layers back on or repoint the center at the
+            // placed-portal contract.
+            string defaultsMessage = string.Empty;
+            DimensionPortalInstantArtworkEditorUtility.ApplyInstantProfileDefaults(
+                template,
+                profile,
+                out defaultsMessage);
+
+            EditorUtility.SetDirty(template);
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+
+            string profilePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(profile));
+            message = "Created and assigned the frameless instant portal profile at " +
+                      profilePath + ".";
+            if (!string.IsNullOrEmpty(defaultsMessage))
+            {
+                message += " " + defaultsMessage;
+            }
+
             return profile;
         }
 

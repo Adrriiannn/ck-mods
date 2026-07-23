@@ -226,7 +226,7 @@ namespace ExpandNullforge.EditorTools
                 DimensionPortalArtworkLayer.Frame,
                 DimensionPortalArtworkLayer.ChargeSweep,
                 DimensionPortalArtworkLayer.Milestones,
-                DimensionPortalArtworkLayer.Center
+                ResolveCenterInventoryLayer(profile, serialized)
             };
             for (int i = 0; i < layers.Length; i++)
             {
@@ -706,6 +706,30 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
+        /// <summary>
+        /// The instant item portal shares the placed portal's center reference property but
+        /// follows the three-animation instant contract. Resolve which contract this profile's
+        /// center reference actually satisfies, so packaged instant profiles inventory their
+        /// center artwork instead of failing the placed-contract ownership check.
+        /// </summary>
+        private static DimensionPortalArtworkLayer ResolveCenterInventoryLayer(
+            DimensionPortalVisualProfileAsset profile,
+            SerializedObject serialized)
+        {
+            SerializedProperty reference = serialized.FindProperty(
+                GetReferencePropertyName(DimensionPortalArtworkLayer.Center));
+            DimensionPortalArtworkReferenceKind kind =
+                DimensionPortalArtworkEditorUtility.ClassifyReference(
+                    reference,
+                    profile,
+                    DimensionPortalArtworkLayer.CenterInstant,
+                    out _);
+            return kind == DimensionPortalArtworkReferenceKind.Managed ||
+                   kind == DimensionPortalArtworkReferenceKind.Framework
+                ? DimensionPortalArtworkLayer.CenterInstant
+                : DimensionPortalArtworkLayer.Center;
+        }
+
         private static string GetReferencePropertyName(DimensionPortalArtworkLayer layer)
         {
             switch (layer)
@@ -717,6 +741,7 @@ namespace ExpandNullforge.EditorTools
                 case DimensionPortalArtworkLayer.Milestones:
                     return "milestoneSpriteAsset";
                 case DimensionPortalArtworkLayer.Center:
+                case DimensionPortalArtworkLayer.CenterInstant:
                     return "centerEffectSpriteAsset";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(layer), layer, null);
@@ -733,7 +758,11 @@ namespace ExpandNullforge.EditorTools
                     return "Charge";
                 case DimensionPortalArtworkLayer.Milestones:
                     return "Milestones";
+                // The instant center shares the placed center's package folder and inventory
+                // role: both contracts occupy the same reference property, so a profile only
+                // ever has one of them.
                 case DimensionPortalArtworkLayer.Center:
+                case DimensionPortalArtworkLayer.CenterInstant:
                     return "Center";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(layer), layer, null);

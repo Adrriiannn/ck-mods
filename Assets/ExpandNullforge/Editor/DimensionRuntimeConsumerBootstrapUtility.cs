@@ -78,6 +78,10 @@ namespace ExpandNullforge.EditorTools
         private const long PortalShadowCasterSpriteAssetAddressHigh = -6927483553930170639L;
         private static readonly Vector3 PortalSpritePivotPosition =
             new Vector3(1.0f, 0.0f, -0.4375f);
+        // The instant portal occupies a single tile, so its visual centers on the entity tile
+        // instead of the middle tile of the placed portal's 3-wide footprint.
+        private static readonly Vector3 ItemPortalSpritePivotPosition =
+            new Vector3(0.0f, 0.0f, -0.4375f);
         private static readonly Color PortalLoadPointEmissiveColor =
             new Color(0.0f, 2.568409f, 3.7735853f, 1.0f);
         private static readonly Color32[] PortalEffectSourcePalette =
@@ -152,6 +156,11 @@ namespace ExpandNullforge.EditorTools
                 modDisplayName = GetLastPathSegment(modRoot);
             }
 
+            // The instant item portal's default center artwork (idle/opening/closing) is a
+            // framework asset built in editor code; make sure it exists before any profile or
+            // generated prefab resolves it.
+            DimensionPortalInstantArtworkEditorUtility.EnsureFrameworkCenterAsset(out _);
+
             DimensionRuntimePortalOutput portalOutput =
                 ResolvePortalOutput(template, preview, modDisplayName, dimensionId);
 
@@ -164,10 +173,22 @@ namespace ExpandNullforge.EditorTools
 
             DimensionRuntimeManifestAsset manifestAsset =
                 EnsureRuntimeManifestAsset(template, preview, generatedFolder);
-            GameObject visualPrefab = EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot);
-            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, false);
-            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, true);
-            EnsureGeneratedBootstrapScript(portalOutput, modDisplayName, scriptFolder);
+
+            // A painted tile map defines the biome's real extent. The compiled starter zone and
+            // terrain pass default to the small landing pad, which would clip the painted map at
+            // their edges — expand every minimum zone/pass to cover the map.
+            DimensionBounds tileMapBounds = default(DimensionBounds);
+            if (manifestAsset != null && manifestAsset.HasTileMap)
+            {
+                tileMapBounds = manifestAsset.TileMap.LocalBounds;
+            }
+
+            GameObject visualPrefab = EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot, false);
+            GameObject itemVisualPrefab = EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot, true);
+            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, PortalEntityVariant.Entry);
+            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, PortalEntityVariant.Return);
+            EnsurePortalEntityPrefab(portalOutput, itemVisualPrefab, portalFolder, PortalEntityVariant.Item);
+            EnsureGeneratedBootstrapScript(portalOutput, modDisplayName, scriptFolder, tileMapBounds, template);
             EnsurePortalTextDataBlocks(portalOutput, modRoot);
             EnsurePortalLocalization(portalOutput, modRoot);
             EnsureConsumerAssemblyReferences(modRoot);
@@ -179,7 +200,7 @@ namespace ExpandNullforge.EditorTools
             return new DimensionRuntimeConsumerBootstrapResult(
                 true,
                 manifestAsset,
-                "Generated runtime manifest, portal prefab, bootstrap script, text data, and framework dependency for " +
+                "Generated runtime manifest, portal prefabs (entry, return, instant item), bootstrap script, text data, and framework dependency for " +
                 portalOutput.DimensionDisplayName +
                 ".");
         }
@@ -207,20 +228,33 @@ namespace ExpandNullforge.EditorTools
         private static GameObject EnsurePortalVisualPrefab(
             DimensionRuntimePortalOutput portalOutput,
             string portalFolder,
-            string modRoot)
+            string modRoot,
+            bool itemPortal)
         {
-            string path = portalFolder + "/" + portalOutput.AssetStem + "PortalVisual.prefab";
-            GameObject root = CreateCleanPortalVisualTemplate();
+            string visualStem = itemPortal ? "ItemPortalVisual" : "PortalVisual";
+            string path = portalFolder + "/" + portalOutput.AssetStem + visualStem + ".prefab";
+            // The item pass wires against the instant visual identity: the item profile drives
+            // the look and every generated artwork file/address is seeded by the item portal's
+            // own names, isolated from the placed portal's generated assets.
+            DimensionRuntimePortalOutput visualOutput = itemPortal
+                ? portalOutput.WithInstantVisualIdentity()
+                : portalOutput;
+            GameObject root = CreateCleanPortalVisualTemplate(itemPortal);
             try
             {
-                root.name = portalOutput.AssetStem + "PortalVisual";
+                root.name = portalOutput.AssetStem + visualStem;
                 DimensionPortal portal = EnsureComponent<DimensionPortal>(root);
                 RemoveComponentByName(root, "Portal", portal);
                 RemoveMissingMonoBehaviours(root);
-                ConfigurePortalRuntimeFields(portal, portalOutput);
-                WirePortalVisualReferences(root, portal, portalOutput, portalFolder, modRoot);
+                ConfigurePortalRuntimeFields(portal, portalOutput, itemPortal);
+                WirePortalVisualReferences(root, portal, visualOutput, portalFolder, modRoot, itemPortal);
                 RewriteInteractableCallbacks(root, portal);
-                ValidateSpriteObjectOnlyPortal(root);
+                if (itemPortal)
+                {
+                    BakeItemPortalVisualMode(root, !portalOutput.ItemProfileIsDedicated);
+                }
+
+                ValidateSpriteObjectOnlyPortal(root, itemPortal);
 
                 return PrefabUtility.SaveAsPrefabAsset(root, path);
             }
@@ -230,20 +264,69 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
+        /// <summary>
+        /// Bakes the instant item-portal (V2) mode into the dedicated visual prefab: the serialized
+        /// item-portal flag that gates the interaction outline, and the closing animation index
+        /// (animation 2 of the instant center contract; the runtime guards gracefully when the
+        /// resolved center asset has no third animation). The layers an instant portal can never
+        /// show — frame, charge wave, milestones and the charge-completion ready burst — are forced
+        /// off regardless of profile, matching the Instant Portal Studio tab which does not offer
+        /// them. The ground shadow stays profile-driven for a dedicated instant profile and is only
+        /// forced off in the shared placed-profile fallback.
+        /// </summary>
+        private static void BakeItemPortalVisualMode(GameObject root, bool forceFrameless)
+        {
+            DimensionPortalVisual visual =
+                root == null ? null : root.GetComponent<DimensionPortalVisual>();
+            if (visual == null)
+            {
+                return;
+            }
+
+            SerializedObject serializedVisual = new SerializedObject(visual);
+            serializedVisual.Update();
+            SetSerializedBool(serializedVisual, "itemPortalMode", true);
+            SetSerializedInt(
+                serializedVisual,
+                "centerClosingAnimationIndex",
+                DimensionPortalInstantArtworkEditorUtility.InstantClosingAnimationIndex);
+            SetSerializedBool(serializedVisual, "portalBodyVisible", false);
+            SetSerializedBool(serializedVisual, "chargeWaveVisible", false);
+            SetSerializedBool(serializedVisual, "milestoneVisible", false);
+            SetSerializedBool(serializedVisual, "playReadyFlash", false);
+            if (forceFrameless)
+            {
+                SetSerializedBool(serializedVisual, "projectedShadowVisible", false);
+            }
+
+            serializedVisual.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private enum PortalEntityVariant
+        {
+            Entry,
+            Return,
+            Item
+        }
+
         private static GameObject EnsurePortalEntityPrefab(
             DimensionRuntimePortalOutput portalOutput,
             GameObject visualPrefab,
             string portalFolder,
-            bool returnPortal)
+            PortalEntityVariant variant)
         {
-            string portalKind = returnPortal ? "ReturnPortal" : "Portal";
+            string portalKind = variant == PortalEntityVariant.Return
+                ? "ReturnPortal"
+                : variant == PortalEntityVariant.Item
+                    ? "ItemPortal"
+                    : "Portal";
             string path = portalFolder + "/" + portalOutput.AssetStem + portalKind + "Entity.prefab";
             bool unloadPrefabContents;
             GameObject root = LoadRequiredPortalEntityTemplate(out unloadPrefabContents);
             try
             {
                 root.name = portalOutput.AssetStem + portalKind + "Entity";
-                EnsurePortalEntityAuthoring(root, portalOutput, visualPrefab, returnPortal);
+                EnsurePortalEntityAuthoring(root, portalOutput, visualPrefab, variant);
 
                 GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, path);
                 ConfigureGhostAuthoringComponent(saved, path);
@@ -267,15 +350,23 @@ namespace ExpandNullforge.EditorTools
             GameObject root,
             DimensionRuntimePortalOutput portalOutput,
             GameObject visualPrefab,
-            bool returnPortal)
+            PortalEntityVariant variant)
         {
+            bool returnPortal = variant == PortalEntityVariant.Return;
+            bool itemPortal = variant == PortalEntityVariant.Item;
+
+            // The instant item portal (V2) bakes the entry definition as its defaults — every live
+            // spawn overwrites DimensionPortalCD from its registered item config in
+            // DimensionItemPortalSpawnSystem, so the baked values only cover the pre-replication frame.
             DimensionPortalDefinition portalDefinition =
                 returnPortal ? portalOutput.ReturnPortal : portalOutput.EntryPortal;
             DimensionPortalPresentationDefinition presentation =
                 returnPortal ? portalOutput.ReturnPresentation : portalOutput.EntryPresentation;
             string objectName = returnPortal
                 ? portalOutput.ReturnPortalObjectName
-                : portalOutput.PortalObjectName;
+                : itemPortal
+                    ? portalOutput.ItemPortalObjectName
+                    : portalOutput.PortalObjectName;
 
             ObjectAuthoring objectAuthoring = EnsureComponent<ObjectAuthoring>(root);
             objectAuthoring.objectName = objectName;
@@ -312,23 +403,37 @@ namespace ExpandNullforge.EditorTools
             localization.termKey = portalOutput.PortalObjectName;
             SetSerializedArraySize(localization, "languageGenders", 0);
 
-            PlaceableObjectAuthoring placeable = EnsureComponent<PlaceableObjectAuthoring>(root);
-            placeable.prefabTileSize = new Vector2Int(3, 1);
-            placeable.prefabCornerOffset = Vector2Int.zero;
-            placeable.centerIsAtEntityPosition = false;
-            placeable.canBePlacedOnPlayer = false;
-            placeable.canBePlacedOnAnyWalkableTile = true;
-            placeable.appearInMapUI = false;
-            placeable.mapColor = portalOutput.MapColor;
-            placeable.canBePlacedOnObjects = new List<ObjectID>();
-            placeable.canNotBePlacedOnObjects = new List<ObjectID>();
+            if (itemPortal)
+            {
+                // The instant portal is a pass-through effect, not a building: it keeps no
+                // placeable footprint at all, so the player walks straight through its tile.
+                // It only ever exists as a spawned world entity, never as a placeable object.
+                objectAuthoring.objectType = ObjectType.NonObtainable;
+                RemoveComponentIfPresent<PlaceableObjectAuthoring>(root);
+            }
+            else
+            {
+                PlaceableObjectAuthoring placeable = EnsureComponent<PlaceableObjectAuthoring>(root);
+                placeable.prefabTileSize = new Vector2Int(3, 1);
+                placeable.prefabCornerOffset = Vector2Int.zero;
+                placeable.centerIsAtEntityPosition = false;
+                placeable.canBePlacedOnPlayer = false;
+                placeable.canBePlacedOnAnyWalkableTile = true;
+                placeable.appearInMapUI = false;
+                placeable.mapColor = portalOutput.MapColor;
+                placeable.canBePlacedOnObjects = new List<ObjectID>();
+                placeable.canNotBePlacedOnObjects = new List<ObjectID>();
+            }
 
             InteractWithEnvironmentAuthoring interact = EnsureComponent<InteractWithEnvironmentAuthoring>(root);
             interact.radius = 1.4f;
 
             RemoveComponentIfPresent<PortalAuthoring>(root);
-            if (returnPortal)
+            if (returnPortal || itemPortal)
             {
+                // Return portals are permanent fixtures; instant item portals are transient and
+                // despawn on their own timer. Neither may be broken or picked up (breaking the shared
+                // entry object used to hand players a free placed portal).
                 EnsureComponent<IndestructibleAuthoring>(root);
                 EnsureComponent<DontDropSelfAuthoring>(root);
                 EnsureComponent<DontDropContainedAuthoring>(root);
@@ -343,19 +448,19 @@ namespace ExpandNullforge.EditorTools
                 EnsureComponent<CanBePickedUpAuthoring>(root);
             }
 
-            EnsurePortalHitAuthoring(root, !returnPortal);
+            EnsurePortalHitAuthoring(root, variant == PortalEntityVariant.Entry);
 
             DimensionPortalAuthoring portal = EnsureComponent<DimensionPortalAuthoring>(root);
             portal.PortalId = portalDefinition.PortalId;
-            portal.ActivationCooldownSeconds = presentation.CooldownSeconds;
-            portal.ActivationChargeSeconds = returnPortal
+            portal.ActivationCooldownSeconds = itemPortal ? 0.0f : presentation.CooldownSeconds;
+            portal.ActivationChargeSeconds = returnPortal || itemPortal
                 ? 0.0f
                 : portalOutput.ActivationChargeSeconds;
             portal.RequireGeneratedArea = presentation.RequireGeneratedAreaOnUse;
             portal.AllowFallbackPosition = presentation.AllowFallbackPositionOnUse;
             portal.ActiveByDefault = true;
-            portal.InteractableByDefault = presentation.Interactable;
-            portal.IndestructibleByDefault = returnPortal;
+            portal.InteractableByDefault = itemPortal || presentation.Interactable;
+            portal.IndestructibleByDefault = returnPortal || itemPortal;
             portal.PreviewTargetDimensionId = portalDefinition.ToDimensionId;
             portal.PreviewTargetLocalX = portalDefinition.ToLocalPosition.x;
             portal.PreviewTargetLocalY = portalDefinition.ToLocalPosition.y;
@@ -364,10 +469,21 @@ namespace ExpandNullforge.EditorTools
             RemoveMissingMonoBehaviours(root);
         }
 
-        private static GameObject CreateCleanPortalVisualTemplate()
+        private static GameObject CreateCleanPortalVisualTemplate(bool itemPortal)
         {
             GameObject root = new GameObject("DimensionPortalVisualTemplate");
-            root.AddComponent<DimensionPortal>();
+            // The pooled graphical-object system buckets view instances by component type, so
+            // the instant visual must carry its own DimensionPortal subclass — otherwise the
+            // pool serves placed-portal clones to instant portal entities.
+            if (itemPortal)
+            {
+                root.AddComponent<DimensionInstantPortal>();
+            }
+            else
+            {
+                root.AddComponent<DimensionPortal>();
+            }
+
             root.AddComponent<DimensionPortalVisual>();
             root.AddComponent<Animator>();
 
@@ -376,7 +492,9 @@ namespace ExpandNullforge.EditorTools
 
             GameObject interactableObject = new GameObject("Interactable");
             interactableObject.transform.SetParent(root.transform, false);
-            interactableObject.transform.localPosition = new Vector3(1.0f, 0.0f, 0.0f);
+            interactableObject.transform.localPosition = itemPortal
+                ? Vector3.zero
+                : new Vector3(1.0f, 0.0f, 0.0f);
             InteractableObject interactable =
                 interactableObject.AddComponent<InteractableObject>();
             interactable.radius = 1.4f;
@@ -411,7 +529,8 @@ namespace ExpandNullforge.EditorTools
 
         private static void ConfigurePortalRuntimeFields(
             DimensionPortal portal,
-            DimensionRuntimePortalOutput portalOutput)
+            DimensionRuntimePortalOutput portalOutput,
+            bool itemPortal)
         {
             if (portal == null)
             {
@@ -426,7 +545,9 @@ namespace ExpandNullforge.EditorTools
             SetSerializedString(
                 serializedObject,
                 "interactionReason",
-                "Enter " + portalOutput.DimensionDisplayName + " through a placed portal.");
+                itemPortal
+                    ? "Enter " + portalOutput.DimensionDisplayName + " through an instant portal."
+                    : "Enter " + portalOutput.DimensionDisplayName + " through a placed portal.");
 
             serializedObject.ApplyModifiedPropertiesWithoutUndo();
         }
@@ -459,7 +580,8 @@ namespace ExpandNullforge.EditorTools
             DimensionPortal portal,
             DimensionRuntimePortalOutput portalOutput,
             string portalFolder,
-            string modRoot)
+            string modRoot,
+            bool itemPortal)
         {
             if (root == null || portal == null)
             {
@@ -498,9 +620,10 @@ namespace ExpandNullforge.EditorTools
                     root,
                     outlineMaskAssets,
                     visualAssets,
-                    visualProfile);
+                    visualProfile,
+                    itemPortal);
             portal.shadow = spriteObjects.ShadowRoot;
-            ManagedLight portalLight = EnsurePortalManagedLight(root, visualProfile);
+            ManagedLight portalLight = EnsurePortalManagedLight(root, visualProfile, itemPortal);
             AssignSerializedObjectReference(portal, "optionalLightOptimizer", portalLight);
             EnsurePortalParticleMaterials(
                 spriteObjects.CenterParticlesRoot,
@@ -544,14 +667,28 @@ namespace ExpandNullforge.EditorTools
                 SetSerializedArraySize(interactable, "additionalOutline" + "Controllers", 0);
 
                 List<Object> outlineSpriteObjects = new List<Object>();
-                if (spriteObjects.OutlineMask != null)
+                if (itemPortal)
                 {
-                    outlineSpriteObjects.Add(spriteObjects.OutlineMask);
+                    // The instant portal has no frame, so the frame-silhouette outline masks
+                    // would draw a ghost frame around nothing. The vanilla interact highlight
+                    // outlines the center silhouette directly instead — SpriteObjects render
+                    // their own outlineColor, which InteractableObject pulses while hovered.
+                    if (spriteObjects.CenterEffect != null)
+                    {
+                        outlineSpriteObjects.Add(spriteObjects.CenterEffect);
+                    }
                 }
-
-                if (spriteObjects.OutlineSupportMask != null)
+                else
                 {
-                    outlineSpriteObjects.Add(spriteObjects.OutlineSupportMask);
+                    if (spriteObjects.OutlineMask != null)
+                    {
+                        outlineSpriteObjects.Add(spriteObjects.OutlineMask);
+                    }
+
+                    if (spriteObjects.OutlineSupportMask != null)
+                    {
+                        outlineSpriteObjects.Add(spriteObjects.OutlineSupportMask);
+                    }
                 }
 
                 AssignSerializedObjectReferenceList(
@@ -638,6 +775,27 @@ namespace ExpandNullforge.EditorTools
             GeneratedPortalSpriteAsset customSwirl = ResolvePortalCustomSwirlSpriteAsset(
                 profile,
                 modRoot);
+
+            // When the profile's center reference is the framework instant center (the item
+            // portal's default three-animation contract), treat it as the framework baseline so
+            // palette-only recolors bake from the instant sheets instead of the reference being
+            // misread as an external override.
+            bool instantCenterReference = profile != null &&
+                profile.CenterEffectSpriteAsset.hasAddress &&
+                profile.CenterEffectSpriteAsset.address.lowBits ==
+                    DimensionPortalInstantArtworkEditorUtility.InstantCenterAddressLow &&
+                profile.CenterEffectSpriteAsset.address.highBits ==
+                    DimensionPortalInstantArtworkEditorUtility.InstantCenterAddressHigh;
+            long centerFallbackAddressLow = instantCenterReference
+                ? DimensionPortalInstantArtworkEditorUtility.InstantCenterAddressLow
+                : PortalCenterEffectSpriteAssetAddressLow;
+            long centerFallbackAddressHigh = instantCenterReference
+                ? DimensionPortalInstantArtworkEditorUtility.InstantCenterAddressHigh
+                : PortalCenterEffectSpriteAssetAddressHigh;
+            string centerFallbackAssetPath = instantCenterReference
+                ? DimensionPortalInstantArtworkEditorUtility.InstantCenterAssetPath
+                : PortalCenterEffectSpriteAssetPath;
+
             GeneratedPortalSpriteAsset chargeProgress;
             GeneratedPortalSpriteAsset centerEffect;
             if (profile == null)
@@ -697,9 +855,9 @@ namespace ExpandNullforge.EditorTools
                     portalFolder,
                     modRoot,
                     profile.CenterEffectSpriteAsset,
-                    PortalCenterEffectSpriteAssetAddressLow,
-                    PortalCenterEffectSpriteAssetAddressHigh,
-                    PortalCenterEffectSpriteAssetPath,
+                    centerFallbackAddressLow,
+                    centerFallbackAddressHigh,
+                    centerFallbackAssetPath,
                     "PortalCenterPalette",
                     "center",
                     "activated portal center",
@@ -2194,26 +2352,8 @@ namespace ExpandNullforge.EditorTools
                 serializedVisual,
                 "thirdMilestone",
                 profile == null ? 0.75f : profile.ThirdMilestone);
-            SetSerializedInt(
-                serializedVisual,
-                "milestoneEmptyFrame",
-                profile == null ? 0 : profile.MilestoneEmptyFrame);
-            SetSerializedInt(
-                serializedVisual,
-                "milestoneFirstFrame",
-                profile == null ? 1 : profile.MilestoneFirstFrame);
-            SetSerializedInt(
-                serializedVisual,
-                "milestoneSecondFrame",
-                profile == null ? 3 : profile.MilestoneSecondFrame);
-            SetSerializedInt(
-                serializedVisual,
-                "milestoneThirdFrame",
-                profile == null ? 4 : profile.MilestoneThirdFrame);
-            SetSerializedInt(
-                serializedVisual,
-                "milestoneReadyFrame",
-                profile == null ? 7 : profile.MilestoneReadyFrame);
+            // Milestone stage->frame mapping is fixed in DimensionPortalVisual (vanilla sheet
+            // order); nothing to bake for it.
             SetSerializedColor(
                 serializedVisual,
                 "centerColor",
@@ -2285,7 +2425,8 @@ namespace ExpandNullforge.EditorTools
             GameObject root,
             GeneratedPortalOutlineSpriteAssets outlineMaskAssets,
             PortalVisualSpriteAssets visualAssets,
-            DimensionPortalVisualProfileAsset visualProfile)
+            DimensionPortalVisualProfileAsset visualProfile,
+            bool itemPortal)
         {
             Transform xScaler = EnsurePortalXScaler(root);
             Transform animPositionRotation = EnsureChild(xScaler, "AnimPositionRotation");
@@ -2301,7 +2442,9 @@ namespace ExpandNullforge.EditorTools
             animScale.gameObject.layer = root.layer;
 
             Transform spritePivot = EnsureChild(animScale, "SRPivot");
-            spritePivot.localPosition = PortalSpritePivotPosition;
+            spritePivot.localPosition = itemPortal
+                ? ItemPortalSpritePivotPosition
+                : PortalSpritePivotPosition;
             spritePivot.localRotation = Quaternion.identity;
             spritePivot.localScale = Vector3.one;
             spritePivot.gameObject.layer = root.layer;
@@ -4151,7 +4294,8 @@ namespace ExpandNullforge.EditorTools
 
         private static ManagedLight EnsurePortalManagedLight(
             GameObject root,
-            DimensionPortalVisualProfileAsset visualProfile)
+            DimensionPortalVisualProfileAsset visualProfile,
+            bool itemPortal)
         {
             if (root == null)
             {
@@ -4184,7 +4328,12 @@ namespace ExpandNullforge.EditorTools
             Vector2 lightOffset = visualProfile == null
                 ? Vector2.zero
                 : visualProfile.GroundLightOffsetPixels;
-            clone.transform.localPosition = source.localPosition + new Vector3(
+            // The instant portal's visual centers on its single tile (x + 0) instead of the
+            // placed portal's middle tile (x + 1); keep the light on the visual center.
+            Vector3 footprintShift = itemPortal
+                ? new Vector3(-1.0f, 0.0f, 0.0f)
+                : Vector3.zero;
+            clone.transform.localPosition = source.localPosition + footprintShift + new Vector3(
                 lightOffset.x / DimensionPortalVisualContract.PixelsPerUnit,
                 0.0f,
                 lightOffset.y / DimensionPortalVisualContract.PixelsPerUnit);
@@ -4589,8 +4738,11 @@ namespace ExpandNullforge.EditorTools
                 name == "Shadow";
         }
 
-        private static void ValidateSpriteObjectOnlyPortal(GameObject root)
+        private static void ValidateSpriteObjectOnlyPortal(GameObject root, bool itemPortal)
         {
+            Vector3 expectedPivot = itemPortal
+                ? ItemPortalSpritePivotPosition
+                : PortalSpritePivotPosition;
             string forbiddenComponent = FindForbiddenPortalVisualComponent(root);
             if (!string.IsNullOrEmpty(forbiddenComponent))
             {
@@ -4619,7 +4771,7 @@ namespace ExpandNullforge.EditorTools
             if (spritePivot == null ||
                 animScale == null ||
                 animPositionRotation == null ||
-                (spritePivot.localPosition - PortalSpritePivotPosition).sqrMagnitude > 0.000001f ||
+                (spritePivot.localPosition - expectedPivot).sqrMagnitude > 0.000001f ||
                 spriteRoot.localPosition.sqrMagnitude > 0.000001f ||
                 animScale.localPosition.sqrMagnitude > 0.000001f ||
                 animPositionRotation.localPosition.sqrMagnitude > 0.000001f ||
@@ -4635,7 +4787,7 @@ namespace ExpandNullforge.EditorTools
                 throw new System.InvalidOperationException(
                     "Generated dimension portal visual has invalid vanilla animator wrapper " +
                     "transforms. SRPivot must be anchored at " +
-                    PortalSpritePivotPosition +
+                    expectedPivot +
                     " and all wrapper rotations/scales plus the SpriteObject root transform " +
                     "must remain at their vanilla defaults.");
             }
@@ -5376,14 +5528,16 @@ namespace ExpandNullforge.EditorTools
         private static void EnsureGeneratedBootstrapScript(
             DimensionRuntimePortalOutput portalOutput,
             string modDisplayName,
-            string scriptFolder)
+            string scriptFolder,
+            DimensionBounds tileMapBounds,
+            DimensionTemplateAsset template)
         {
             string className =
                 SanitizeIdentifier(modDisplayName, "DimensionMod") +
                 SanitizeIdentifier(portalOutput.DimensionId, "Dimension") +
                 "RuntimeBootstrap";
             string path = scriptFolder + "/" + className + ".cs";
-            string content = BuildBootstrapScript(portalOutput, className);
+            string content = BuildBootstrapScript(portalOutput, className, tileMapBounds, template);
             WriteTextAssetIfChanged(path, content);
         }
 
@@ -5564,7 +5718,9 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
-            string itemKey = "Items/" + objectName;
+            // The game's LocalizationManager replaces ':' with '_' in every term before lookup,
+            // so keys must be written in that form or they can never resolve.
+            string itemKey = "Items/" + objectName.Replace(':', '_');
             rows.Add(new GeneratedLocalizationRow(itemKey, displayName));
             rows.Add(new GeneratedLocalizationRow(itemKey + "Desc", description));
         }
@@ -5654,6 +5810,14 @@ namespace ExpandNullforge.EditorTools
             {
                 ownedKeys.Add("terms/" + portalObjectName);
                 ownedKeys.Add("terms/" + portalObjectName + "Desc");
+
+                // Colon-form keys are unresolvable (the game replaces ':' with '_' before every
+                // lookup) — own them so stale rows written before the fix are dropped on rewrite.
+                if (portalObjectName.IndexOf(':') >= 0)
+                {
+                    ownedKeys.Add("Items/" + portalObjectName);
+                    ownedKeys.Add("Items/" + portalObjectName + "Desc");
+                }
             }
 
             if (generatedRows != null)
@@ -5800,7 +5964,9 @@ namespace ExpandNullforge.EditorTools
 
         private static string BuildBootstrapScript(
             DimensionRuntimePortalOutput portalOutput,
-            string className)
+            string className,
+            DimensionBounds tileMapBounds,
+            DimensionTemplateAsset template)
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("using System.Collections.Generic;");
@@ -5935,6 +6101,16 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      portalDefinitionsRegistered = false;");
             builder.AppendLine("    }");
             builder.AppendLine();
+            builder.AppendLine("    // Register the painted tile map the moment the manifest asset loads — before the");
+            builder.AppendLine("    // world generates the dimension area. DimensionTileMapRegistry is a plain static");
+            builder.AppendLine("    // store, so this does not need the dimension service (not ready this early);");
+            builder.AppendLine("    // registering here lets the tile-map provider win over the flat safe platform.");
+            builder.AppendLine("    if (manifest.HasTileMap)");
+            builder.AppendLine("    {");
+            builder.AppendLine("      DimensionTileMapRegistry.Register(");
+            builder.AppendLine("          manifest.GeneratedFromDimensionId, manifest.TileMap);");
+            builder.AppendLine("    }");
+            builder.AppendLine();
             builder.AppendLine("    TryApplyRuntimeOutput();");
             builder.AppendLine("  }");
             builder.AppendLine();
@@ -5992,13 +6168,19 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      return;");
             builder.AppendLine("    }");
             builder.AppendLine();
-            builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
-            builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
-            builder.AppendLine("            PortalObjectName,");
-            builder.AppendLine("            ObjectID.WoodenWorkBench,");
-            builder.AppendLine("            1,");
-            builder.AppendLine("            CraftingTimeSeconds,");
-            builder.AppendLine("            PortalDisplayName));");
+            // The placed portal (V1) is only craftable while an enabled placed-portal rule says
+            // so — this is what makes the Portal Studio's Enabled toggle real for V1. (A template
+            // without any placed rule keeps the legacy always-craftable default.)
+            if (IsPlacedPortalCraftable(template))
+            {
+                builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
+                builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
+                builder.AppendLine("            PortalObjectName,");
+                builder.AppendLine("            ObjectID.WoodenWorkBench,");
+                builder.AppendLine("            1,");
+                builder.AppendLine("            CraftingTimeSeconds,");
+                builder.AppendLine("            PortalDisplayName));");
+            }
             builder.AppendLine("    DimensionPortalItemPresentationRegistry.Register(");
             builder.AppendLine("        new DimensionPortalItemPresentationDefinition(");
             builder.AppendLine("            PortalObjectName,");
@@ -6027,6 +6209,81 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("            ReturnAllowFallbackPosition,");
             builder.AppendLine("            PortalDisplayName + \" Return\",");
             builder.AppendLine("            ReturnInteractable));");
+
+            // Portal sounds, straight from the template's dashboard settings. The placed portal
+            // only has an activation sound (Peak mode by construction); the instant portal uses
+            // whichever exclusive mode the creator chose. The return portal shares the placed
+            // portal's activation sound — same object family, same "lights up" moment.
+            string placedActivationSound = template == null ? string.Empty : template.PlacedPortalActivationSound;
+            int instantSoundMode = template == null ? 0 : template.InstantPortalSoundMode;
+            string instantActivationSound = template == null ? string.Empty : template.InstantPortalActivationSound;
+            string instantDeactivationSound = template == null ? string.Empty : template.InstantPortalDeactivationSound;
+            string instantLoopSound = template == null ? string.Empty : template.InstantPortalLoopSound;
+            builder.AppendLine("    DimensionPortalSoundRegistry.Register(");
+            builder.AppendLine("        PortalObjectName,");
+            builder.AppendLine("        0,");
+            builder.Append("        ").Append(ToCSharpString(placedActivationSound)).AppendLine(",");
+            builder.AppendLine("        string.Empty,");
+            builder.AppendLine("        string.Empty);");
+            builder.AppendLine("    DimensionPortalSoundRegistry.Register(");
+            builder.AppendLine("        ReturnPortalObjectName,");
+            builder.AppendLine("        0,");
+            builder.Append("        ").Append(ToCSharpString(placedActivationSound)).AppendLine(",");
+            builder.AppendLine("        string.Empty,");
+            builder.AppendLine("        string.Empty);");
+            builder.AppendLine("    DimensionPortalSoundRegistry.Register(");
+            builder.Append("        ").Append(ToCSharpString(portalOutput.ItemPortalObjectName)).AppendLine(",");
+            builder.Append("        ").Append(instantSoundMode.ToString(System.Globalization.CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.Append("        ").Append(ToCSharpString(instantActivationSound)).AppendLine(",");
+            builder.Append("        ").Append(ToCSharpString(instantDeactivationSound)).AppendLine(",");
+            builder.Append("        ").Append(ToCSharpString(instantLoopSound)).AppendLine(");");
+            if (pendingPortalDrops.TryGetValue(portalOutput.DimensionId, out List<PortalDropEmission> portalDrops) &&
+                portalDrops.Count > 0)
+            {
+                System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+                for (int i = 0; i < portalDrops.Count; i++)
+                {
+                    PortalDropEmission drop = portalDrops[i];
+                    builder.AppendLine("    DimensionPortalDropRegistry.Register(");
+                    builder.Append("        ").Append(ToCSharpString(drop.Target)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(drop.Item)).AppendLine(",");
+                    builder.Append("        ").Append(drop.Weight.ToString(inv)).AppendLine("f,");
+                    builder.Append("        ").Append(drop.Chance.ToString(inv)).AppendLine("f,");
+                    builder.Append("        ").Append(drop.Min.ToString(inv)).AppendLine(",");
+                    builder.Append("        ").Append(drop.Max.ToString(inv)).AppendLine(");");
+                }
+            }
+
+            if (pendingItemPortals.TryGetValue(portalOutput.DimensionId, out List<PortalItemEmission> itemPortalEmissions) &&
+                itemPortalEmissions.Count > 0)
+            {
+                System.Globalization.CultureInfo invItem = System.Globalization.CultureInfo.InvariantCulture;
+                for (int i = 0; i < itemPortalEmissions.Count; i++)
+                {
+                    PortalItemEmission ip = itemPortalEmissions[i];
+                    builder.AppendLine("    DimensionItemPortalRegistry.Register(");
+                    builder.Append("        ").Append(ToCSharpString(ip.Item)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(ip.PortalObject)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(ip.PortalId)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(ip.ToDimension)).AppendLine(",");
+                    builder.Append("        ").Append(ip.Duration.ToString(invItem)).AppendLine("f);");
+
+                    // Make the item portal craftable at the same station as the placed portal (the
+                    // Wooden Workbench). Ingredients come from the item's own InventoryItem authoring
+                    // (empty unless the creator adds a recipe that outputs it).
+                    if (ip.Craftable)
+                    {
+                        builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
+                        builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
+                        builder.Append("            ").Append(ToCSharpString(ip.Item)).AppendLine(",");
+                        builder.AppendLine("            ObjectID.WoodenWorkBench,");
+                        builder.AppendLine("            1,");
+                        builder.AppendLine("            CraftingTimeSeconds,");
+                        builder.Append("            ").Append(ToCSharpString(ip.DisplayName)).AppendLine("));");
+                    }
+                }
+            }
+
             builder.AppendLine("    staticRuntimeExtrasRegistered = true;");
             builder.AppendLine("  }");
             builder.AppendLine();
@@ -6143,12 +6400,27 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("            StarterId,");
             builder.AppendLine("            \"dimension-starter:\" + StarterId,");
             builder.AppendLine("            DimensionId,");
-            builder.AppendLine("            new DimensionBounds(");
-            builder.AppendLine("                new int2(StarterGenerationMinX, StarterGenerationMinY),");
-            builder.AppendLine("                new int2(StarterGenerationMaxX, StarterGenerationMaxY)),");
+            builder.AppendLine("            ResolveStarterGenerationBounds(),");
             builder.AppendLine("            100,");
             builder.AppendLine("            true,");
             builder.AppendLine("            \"Starter generation area for \" + DimensionDisplayName + \" Starter.\"));");
+            builder.AppendLine("  }");
+            builder.AppendLine();
+            builder.AppendLine("  private static DimensionBounds ResolveStarterGenerationBounds()");
+            builder.AppendLine("  {");
+            builder.AppendLine("    // A painted tile map defines the biome's extent; generate exactly that region so the");
+            builder.AppendLine("    // whole authored map lands and nothing is clipped. Fall back to the authored starter");
+            builder.AppendLine("    // area when the dimension has no painted map (a flat safe platform is generated there).");
+            builder.AppendLine("    DimensionTileMapModel tileMap;");
+            builder.AppendLine("    if (DimensionTileMapRegistry.TryGet(DimensionId, out tileMap) &&");
+            builder.AppendLine("        tileMap != null && tileMap.PaintedTileCount() > 0)");
+            builder.AppendLine("    {");
+            builder.AppendLine("      return tileMap.LocalBounds;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+            builder.AppendLine("    return new DimensionBounds(");
+            builder.AppendLine("        new int2(StarterGenerationMinX, StarterGenerationMinY),");
+            builder.AppendLine("        new int2(StarterGenerationMaxX, StarterGenerationMaxY));");
             builder.AppendLine("  }");
             builder.AppendLine();
             builder.AppendLine("  private static List<string> CreateContentPackDependencyIds()");
@@ -6173,8 +6445,8 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("    return dependencies;");
             builder.AppendLine("  }");
             builder.AppendLine();
-            AppendMinimumZonesMethod(builder, portalOutput);
-            AppendMinimumGenerationPassesMethod(builder, portalOutput);
+            AppendMinimumZonesMethod(builder, portalOutput, tileMapBounds);
+            AppendMinimumGenerationPassesMethod(builder, portalOutput, tileMapBounds);
             builder.AppendLine("  private bool ApplyManifests(IDimensionService current)");
             builder.AppendLine("  {");
             builder.AppendLine("    if (manifestsApplied)");
@@ -6202,13 +6474,8 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      DimensionItemObjectRegistry.Declare(");
             builder.AppendLine("          manifest.GeneratedFromContentPackId, manifest.GeneratedItemIds);");
             builder.AppendLine();
-            builder.AppendLine("      // Register the dimension's painted tile map so the tile-map");
-            builder.AppendLine("      // generation provider can write it into the world at generation.");
-            builder.AppendLine("      if (manifest.HasTileMap)");
-            builder.AppendLine("      {");
-            builder.AppendLine("        DimensionTileMapRegistry.Register(");
-            builder.AppendLine("            manifest.GeneratedFromDimensionId, manifest.TileMap);");
-            builder.AppendLine("      }");
+            builder.AppendLine("      // The dimension's painted tile map is registered early in ModObjectLoaded, before");
+            builder.AppendLine("      // world generation — not here, which runs too late in the service-gated apply loop.");
             builder.AppendLine();
             builder.AppendLine("      DimensionContentManifestResult applyResult;");
             builder.AppendLine("      DimensionOperationResult buildResult;");
@@ -6318,6 +6585,100 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      return;");
             builder.AppendLine("    }");
             builder.AppendLine();
+            if (pendingItemPortals.TryGetValue(portalOutput.DimensionId, out List<PortalItemEmission> itemPortalDefinitions) &&
+                itemPortalDefinitions.Count > 0)
+            {
+                for (int i = 0; i < itemPortalDefinitions.Count; i++)
+                {
+                    PortalItemEmission ip = itemPortalDefinitions[i];
+                    string ipPortalId = ToCSharpString(ip.PortalId);
+                    string ipDisplayName = string.IsNullOrEmpty(ip.DisplayName)
+                        ? "PortalDisplayName"
+                        : ToCSharpString(ip.DisplayName);
+                    builder.AppendLine("    // Instant item portal (V2): the spawned temporary portal carries this id,");
+                    builder.AppendLine("    // so travel must resolve it like any other portal. It lands at the entry");
+                    builder.AppendLine("    // portal's arrival point.");
+                    builder.AppendLine("    if (!TryEnsurePortal(");
+                    builder.AppendLine("        current,");
+                    builder.AppendLine("        new DimensionPortalDefinition(");
+                    builder.AppendLine("            " + ipPortalId + ",");
+                    builder.AppendLine("            " + ipDisplayName + ",");
+                    builder.AppendLine("            EntryFromDimensionId,");
+                    builder.AppendLine("            float2.zero,");
+                    builder.AppendLine("            " + ToCSharpString(ip.ToDimension) + ",");
+                    builder.AppendLine("            new float2(EntryToLocalX, EntryToLocalY),");
+                    builder.AppendLine("            DimensionPortalState.Available)))");
+                    builder.AppendLine("    {");
+                    builder.AppendLine("      ScheduleRetry();");
+                    builder.AppendLine("      return;");
+                    builder.AppendLine("    }");
+                    builder.AppendLine();
+                    builder.AppendLine("    if (!TryEnsurePortalPresentation(");
+                    builder.AppendLine("        current,");
+                    builder.AppendLine("        new DimensionPortalPresentationDefinition(");
+                    builder.AppendLine("            " + ipPortalId + " + \".presentation\",");
+                    builder.AppendLine("            " + ipPortalId + ",");
+                    builder.AppendLine("            " + ipDisplayName + ",");
+                    builder.AppendLine("            \"Enter \" + " + ipDisplayName + ",");
+                    builder.AppendLine("            \"The portal is not active yet.\",");
+                    builder.AppendLine("            string.Empty,");
+                    builder.AppendLine("            string.Empty,");
+                    builder.AppendLine("            string.Empty,");
+                    builder.AppendLine("            0f,");
+                    builder.AppendLine("            0,");
+                    builder.AppendLine("            true,");
+                    builder.AppendLine("            EntryRequireGeneratedArea,");
+                    builder.AppendLine("            EntryAllowFallbackPosition,");
+                    builder.AppendLine("            true)))");
+                    builder.AppendLine("    {");
+                    builder.AppendLine("      ScheduleRetry();");
+                    builder.AppendLine("      return;");
+                    builder.AppendLine("    }");
+                    builder.AppendLine();
+                    builder.AppendLine("    // Its \".back\" twin: using the portal item INSIDE the target dimension");
+                    builder.AppendLine("    // opens a temporary portal home instead. Dimension -> overworld, so travel");
+                    builder.AppendLine("    // lands at the player's tracked overworld exit point; the entry portal's");
+                    builder.AppendLine("    // overworld position is only the fallback when no visit is recorded.");
+                    builder.AppendLine("    if (!TryEnsurePortal(");
+                    builder.AppendLine("        current,");
+                    builder.AppendLine("        new DimensionPortalDefinition(");
+                    builder.AppendLine("            " + ipPortalId + " + \".back\",");
+                    builder.AppendLine("            " + ipDisplayName + " + \" Return\",");
+                    builder.AppendLine("            " + ToCSharpString(ip.ToDimension) + ",");
+                    builder.AppendLine("            float2.zero,");
+                    builder.AppendLine("            EntryFromDimensionId,");
+                    builder.AppendLine("            new float2(EntryFromLocalX, EntryFromLocalY),");
+                    builder.AppendLine("            DimensionPortalState.Available)))");
+                    builder.AppendLine("    {");
+                    builder.AppendLine("      ScheduleRetry();");
+                    builder.AppendLine("      return;");
+                    builder.AppendLine("    }");
+                    builder.AppendLine();
+                    builder.AppendLine("    if (!TryEnsurePortalPresentation(");
+                    builder.AppendLine("        current,");
+                    builder.AppendLine("        new DimensionPortalPresentationDefinition(");
+                    builder.AppendLine("            " + ipPortalId + " + \".back.presentation\",");
+                    builder.AppendLine("            " + ipPortalId + " + \".back\",");
+                    builder.AppendLine("            " + ipDisplayName + " + \" Return\",");
+                    builder.AppendLine("            \"Return home.\",");
+                    builder.AppendLine("            \"The portal is not active yet.\",");
+                    builder.AppendLine("            string.Empty,");
+                    builder.AppendLine("            string.Empty,");
+                    builder.AppendLine("            string.Empty,");
+                    builder.AppendLine("            0f,");
+                    builder.AppendLine("            0,");
+                    builder.AppendLine("            true,");
+                    builder.AppendLine("            false,");
+                    builder.AppendLine("            true,");
+                    builder.AppendLine("            true)))");
+                    builder.AppendLine("    {");
+                    builder.AppendLine("      ScheduleRetry();");
+                    builder.AppendLine("      return;");
+                    builder.AppendLine("    }");
+                    builder.AppendLine();
+                }
+            }
+
             builder.AppendLine("    portalDefinitionsRegistered = true;");
             builder.AppendLine("  }");
             builder.AppendLine();
@@ -6443,7 +6804,8 @@ namespace ExpandNullforge.EditorTools
 
         private static void AppendMinimumZonesMethod(
             StringBuilder builder,
-            DimensionRuntimePortalOutput portalOutput)
+            DimensionRuntimePortalOutput portalOutput,
+            DimensionBounds tileMapBounds)
         {
             builder.AppendLine("  private bool EnsureMinimumZones(IDimensionService current)");
             builder.AppendLine("  {");
@@ -6470,7 +6832,7 @@ namespace ExpandNullforge.EditorTools
                 builder.Append("            ").Append(ToCSharpString(zone.ZoneId)).AppendLine(",");
                 builder.Append("            ").Append(ToCSharpString(zone.DisplayName)).AppendLine(",");
                 builder.Append("            ").Append(ToCSharpString(zone.DimensionId)).AppendLine(",");
-                AppendBoundsConstructor(builder, zone.LocalBounds, "            ");
+                AppendBoundsConstructor(builder, UnionBounds(zone.LocalBounds, tileMapBounds), "            ");
                 builder.AppendLine(",");
                 builder.Append("            ").Append(ToCSharpString(zone.Kind)).AppendLine(",");
                 builder.Append("            ").Append(zone.Priority.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
@@ -6488,7 +6850,8 @@ namespace ExpandNullforge.EditorTools
 
         private static void AppendMinimumGenerationPassesMethod(
             StringBuilder builder,
-            DimensionRuntimePortalOutput portalOutput)
+            DimensionRuntimePortalOutput portalOutput,
+            DimensionBounds tileMapBounds)
         {
             builder.AppendLine("  private bool EnsureMinimumGenerationPasses(IDimensionService current)");
             builder.AppendLine("  {");
@@ -6518,7 +6881,7 @@ namespace ExpandNullforge.EditorTools
                 builder.Append("            ").Append(ToCSharpString(generationPass.DimensionId)).AppendLine(",");
                 builder.Append("            ").Append(ToCSharpString(generationPass.ZoneId)).AppendLine(",");
                 builder.Append("            ").Append(generationPass.HasLocalBounds ? "true" : "false").AppendLine(",");
-                AppendBoundsConstructor(builder, generationPass.LocalBounds, "            ");
+                AppendBoundsConstructor(builder, UnionBounds(generationPass.LocalBounds, tileMapBounds), "            ");
                 builder.AppendLine(",");
                 builder.Append("            (DimensionGenerationPassPhase)")
                     .Append(((int)generationPass.Phase).ToString(CultureInfo.InvariantCulture))
@@ -6558,6 +6921,39 @@ namespace ExpandNullforge.EditorTools
                 .Append("))");
         }
 
+        /// <summary>
+        /// True when the placed portal (V1) should be craftable: an enabled user-accessible rule
+        /// with Craftable set exists — or no placed rule was authored at all (legacy default).
+        /// </summary>
+        private static bool IsPlacedPortalCraftable(DimensionTemplateAsset template)
+        {
+            DimensionPortalAccessRuleAsset[] rules = template == null
+                ? null
+                : template.PortalAccessRules;
+            if (rules == null || rules.Length == 0)
+            {
+                return true;
+            }
+
+            bool anyPlacedRule = false;
+            for (int i = 0; i < rules.Length; i++)
+            {
+                DimensionPortalAccessRuleAsset rule = rules[i];
+                if (rule == null || !DimensionPortalVersions.IsUserAccessible(rule.AccessKind))
+                {
+                    continue;
+                }
+
+                anyPlacedRule = true;
+                if (rule.Enabled && rule.Craftable)
+                {
+                    return true;
+                }
+            }
+
+            return !anyPlacedRule;
+        }
+
         private static DimensionRuntimePortalOutput ResolvePortalOutput(
             DimensionTemplateAsset template,
             DimensionTemplateManifestExportPreview preview,
@@ -6575,9 +6971,20 @@ namespace ExpandNullforge.EditorTools
                 SanitizeIdentifier(dimensionId, "Dimension") +
                 "_Portal";
             string returnPortalObjectName = portalObjectName + "_Return";
+            // "_Instant" (not "_Item") so the spawned-portal OBJECT can never collide with the
+            // modder-named portal ITEM id from the V2 access rule.
+            string itemPortalObjectName = portalObjectName + "_Instant";
             string assetStem =
                 SanitizeIdentifier(dimensionDisplayName, "Dimension") +
                 "Runtime";
+
+            // Invariant: at least one player-facing entry version (placed portal V1 or item portal
+            // V2) must stay enabled so the dimension is always reachable. If the modder disabled
+            // both, re-enable the placed portal before anything reads the rules.
+            if (template != null)
+            {
+                DimensionPortalVersions.EnsureAtLeastOneEntryEnabled(template.PortalAccessRules);
+            }
 
             DimensionPortalDefinition entryPortal;
             DimensionPortalPresentationDefinition entryPresentation;
@@ -6619,11 +7026,14 @@ namespace ExpandNullforge.EditorTools
                     ? preview.CompiledPlan.GenerationPasses
                     : new List<DimensionGenerationPassDefinition>();
 
+            StorePortalDrops(template, dimensionId, portalObjectName, itemPortalObjectName);
+
             return new DimensionRuntimePortalOutput(
                 dimensionId,
                 dimensionDisplayName,
                 portalObjectName,
                 returnPortalObjectName,
+                itemPortalObjectName,
                 portalDisplayName,
                 assetStem,
                 contentPack,
@@ -6641,7 +7051,9 @@ namespace ExpandNullforge.EditorTools
                 mapColor,
                 2.0f,
                 template.PortalActivationChargeSeconds,
-                template.PortalVisualProfile);
+                template.PortalVisualProfile,
+                template.ItemPortalVisualProfile,
+                template.ItemPortalVisualProfile != null);
         }
 
         private static string BuildDefaultPortalDisplayName(
@@ -6786,6 +7198,119 @@ namespace ExpandNullforge.EditorTools
                 true);
         }
 
+        private struct PortalDropEmission
+        {
+            public string Target;
+            public string Item;
+            public float Weight;
+            public float Chance;
+            public int Min;
+            public int Max;
+        }
+
+        private static readonly Dictionary<string, List<PortalDropEmission>> pendingPortalDrops =
+            new Dictionary<string, List<PortalDropEmission>>();
+
+        private struct PortalItemEmission
+        {
+            public string Item;
+            public string PortalObject;
+            public string PortalId;
+            public string ToDimension;
+            public float Duration;
+            public bool Craftable;
+            public string DisplayName;
+        }
+
+        private static readonly Dictionary<string, List<PortalItemEmission>> pendingItemPortals =
+            new Dictionary<string, List<PortalItemEmission>>();
+
+        /// <summary>
+        /// Resolves every droppable portal version's mob/boss targets into a flat emission list keyed
+        /// by dimension id, consumed by the bootstrap emitter. The dropped item is the placed portal
+        /// object for V1/generated versions and the portal item id for the V2 item version.
+        /// </summary>
+        private static void StorePortalDrops(
+            DimensionTemplateAsset template,
+            string dimensionId,
+            string portalObjectName,
+            string itemPortalObjectName)
+        {
+            List<PortalDropEmission> drops = new List<PortalDropEmission>();
+            DimensionPortalAccessRuleAsset[] rules = template == null ? null : template.PortalAccessRules;
+            if (rules != null)
+            {
+                for (int i = 0; i < rules.Length; i++)
+                {
+                    DimensionPortalAccessRuleAsset rule = rules[i];
+                    if (rule == null || !rule.Enabled || !rule.Droppable)
+                    {
+                        continue;
+                    }
+
+                    string itemName = rule.AccessKind == DimensionPortalAccessKind.InventoryItem
+                        ? rule.PortalItemObjectId
+                        : portalObjectName;
+                    if (string.IsNullOrEmpty(itemName))
+                    {
+                        continue;
+                    }
+
+                    DimensionPortalDropTarget[] targets = rule.DropTargets;
+                    for (int t = 0; t < targets.Length; t++)
+                    {
+                        DimensionPortalDropTarget target = targets[t];
+                        if (string.IsNullOrEmpty(target.TargetObjectId))
+                        {
+                            continue;
+                        }
+
+                        drops.Add(new PortalDropEmission
+                        {
+                            Target = target.TargetObjectId,
+                            Item = itemName,
+                            Weight = target.Weight,
+                            Chance = target.ChancePercent,
+                            Min = target.MinAmount,
+                            Max = target.MaxAmount
+                        });
+                    }
+                }
+            }
+
+            pendingPortalDrops[dimensionId ?? string.Empty] = drops;
+
+            List<PortalItemEmission> itemPortals = new List<PortalItemEmission>();
+            if (rules != null)
+            {
+                for (int i = 0; i < rules.Length; i++)
+                {
+                    DimensionPortalAccessRuleAsset rule = rules[i];
+                    if (rule == null || !rule.Enabled ||
+                        rule.AccessKind != DimensionPortalAccessKind.InventoryItem ||
+                        string.IsNullOrEmpty(rule.PortalItemObjectId))
+                    {
+                        continue;
+                    }
+
+                    itemPortals.Add(new PortalItemEmission
+                    {
+                        Item = rule.PortalItemObjectId,
+                        // The dedicated frameless instant-portal object, not the shared placed-portal
+                        // object — this is what DimensionItemPortalSpawnSystem spawns.
+                        PortalObject = itemPortalObjectName,
+                        PortalId = rule.PortalId,
+                        ToDimension = rule.ToDimensionId,
+                        Duration = rule.ItemPortalDurationSeconds,
+                        Craftable = rule.Craftable,
+                        DisplayName = rule.DisplayName
+                    });
+                }
+            }
+
+            pendingItemPortals[dimensionId ?? string.Empty] = itemPortals;
+        }
+
         private static DimensionPortalAccessRuleAsset FindPortalRule(
             DimensionTemplateAsset template,
             DimensionPortalAccessKind accessKind,
@@ -6907,6 +7432,27 @@ namespace ExpandNullforge.EditorTools
         {
             return bounds.MaxExclusive.x > bounds.Min.x &&
                    bounds.MaxExclusive.y > bounds.Min.y;
+        }
+
+        private static DimensionBounds UnionBounds(DimensionBounds bounds, DimensionBounds other)
+        {
+            if (!IsValidBounds(other))
+            {
+                return bounds;
+            }
+
+            if (!IsValidBounds(bounds))
+            {
+                return other;
+            }
+
+            return new DimensionBounds(
+                new int2(
+                    math.min(bounds.Min.x, other.Min.x),
+                    math.min(bounds.Min.y, other.Min.y)),
+                new int2(
+                    math.max(bounds.MaxExclusive.x, other.MaxExclusive.x),
+                    math.max(bounds.MaxExclusive.y, other.MaxExclusive.y)));
         }
 
         private static Color ResolveMapColor(
@@ -7611,6 +8157,7 @@ namespace ExpandNullforge.EditorTools
             public readonly string DimensionDisplayName;
             public readonly string PortalObjectName;
             public readonly string ReturnPortalObjectName;
+            public readonly string ItemPortalObjectName;
             public readonly string PortalDisplayName;
             public readonly string AssetStem;
             public readonly DimensionContentPackDefinition ContentPack;
@@ -7629,12 +8176,15 @@ namespace ExpandNullforge.EditorTools
             public readonly float CraftingTimeSeconds;
             public readonly float ActivationChargeSeconds;
             public readonly DimensionPortalVisualProfileAsset VisualProfile;
+            public readonly DimensionPortalVisualProfileAsset ItemVisualProfile;
+            public readonly bool ItemProfileIsDedicated;
 
             public DimensionRuntimePortalOutput(
                 string dimensionId,
                 string dimensionDisplayName,
                 string portalObjectName,
                 string returnPortalObjectName,
+                string itemPortalObjectName,
                 string portalDisplayName,
                 string assetStem,
                 DimensionContentPackDefinition contentPack,
@@ -7652,7 +8202,9 @@ namespace ExpandNullforge.EditorTools
                 Color mapColor,
                 float craftingTimeSeconds,
                 float activationChargeSeconds,
-                DimensionPortalVisualProfileAsset visualProfile)
+                DimensionPortalVisualProfileAsset visualProfile,
+                DimensionPortalVisualProfileAsset itemVisualProfile,
+                bool itemProfileIsDedicated)
             {
                 DimensionId = dimensionId ?? string.Empty;
                 DimensionDisplayName = string.IsNullOrEmpty(dimensionDisplayName)
@@ -7662,6 +8214,9 @@ namespace ExpandNullforge.EditorTools
                 ReturnPortalObjectName = string.IsNullOrEmpty(returnPortalObjectName)
                     ? PortalObjectName + "_Return"
                     : returnPortalObjectName;
+                ItemPortalObjectName = string.IsNullOrEmpty(itemPortalObjectName)
+                    ? PortalObjectName + "_Instant"
+                    : itemPortalObjectName;
                 PortalDisplayName = string.IsNullOrEmpty(portalDisplayName)
                     ? PortalObjectName
                     : portalDisplayName;
@@ -7684,6 +8239,44 @@ namespace ExpandNullforge.EditorTools
                     ? 0.0f
                     : activationChargeSeconds;
                 VisualProfile = visualProfile;
+                ItemVisualProfile = itemVisualProfile != null ? itemVisualProfile : visualProfile;
+                ItemProfileIsDedicated = itemProfileIsDedicated && itemVisualProfile != null;
+            }
+
+            /// <summary>
+            /// A copy whose visual identity belongs to the instant item portal: the item profile
+            /// drives the look, and the asset-stem / object-name seeds that name generated
+            /// artwork files and derive SpriteAsset addresses are the item portal's own, so the
+            /// item visual pass can never clobber the placed portal's generated assets.
+            /// </summary>
+            public DimensionRuntimePortalOutput WithInstantVisualIdentity()
+            {
+                return new DimensionRuntimePortalOutput(
+                    DimensionId,
+                    DimensionDisplayName,
+                    ItemPortalObjectName,
+                    ReturnPortalObjectName,
+                    ItemPortalObjectName,
+                    PortalDisplayName,
+                    AssetStem + "Item",
+                    ContentPack,
+                    Dimension,
+                    EntryPortal,
+                    EntryPresentation,
+                    ReturnPortal,
+                    ReturnPresentation,
+                    ReturnRequiredBounds,
+                    StarterId,
+                    StarterGenerationBounds,
+                    StarterTargetLandingBounds,
+                    MinimumZones,
+                    MinimumGenerationPasses,
+                    MapColor,
+                    CraftingTimeSeconds,
+                    ActivationChargeSeconds,
+                    ItemVisualProfile,
+                    ItemVisualProfile,
+                    ItemProfileIsDedicated);
             }
         }
     }

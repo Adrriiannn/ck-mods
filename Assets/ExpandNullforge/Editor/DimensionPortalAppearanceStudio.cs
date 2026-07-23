@@ -398,6 +398,7 @@ namespace ExpandNullforge.EditorTools
             "Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalCenterEffect_idle.png";
         private const string CenterOpeningTexturePath =
             "Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalCenterEffect_open.png";
+        private const int CenterOpeningFrameCountVanilla = 4;
 
         private static readonly Color32[] EffectSourcePalette =
         {
@@ -504,7 +505,6 @@ namespace ExpandNullforge.EditorTools
         private bool showGrid = true;
         private bool showGuides = true;
         private int pinnedLayerIndex = -1;
-        private bool milestoneAdvancedSettings;
         private bool paletteFocusActive;
         private StudioLayer paletteFocusLayer;
         private int paletteFocusRoleIndex = -1;
@@ -524,6 +524,10 @@ namespace ExpandNullforge.EditorTools
         private float currentCenterOpeningDuration = 0.4f;
         private bool skipCenterOpeningOnNextBuild = true;
         private bool currentCenterIsOpening;
+        // One-shot closing replay for the instant portal preview: plays the closing sheet from
+        // a fresh clock, hides the swirls while it runs (matching the in-game close), then
+        // returns to the mature loop.
+        private bool previewCenterClosingActive;
         private double lastClockTime;
         private double nextRepaintTime;
         private Vector2Int selectedPixel = new Vector2Int(-1, -1);
@@ -558,7 +562,7 @@ namespace ExpandNullforge.EditorTools
         private GUIStyle swatchLabelStyle;
         private GUIStyle selectedSwatchLabelStyle;
         private readonly float[] measuredArtworkMainPanelHeights =
-            { 190f, 190f, 190f, 190f };
+            { 190f, 190f, 190f, 190f, 190f };
         private float measuredSwirlMainPanelHeight = 190f;
         private readonly Dictionary<TextureSlotCacheKey, TextureSlotCacheEntry>
             textureSlotCache =
@@ -614,10 +618,60 @@ namespace ExpandNullforge.EditorTools
         private string pendingArtworkMessage;
         private MessageType pendingArtworkMessageType = MessageType.Info;
 
+        private bool instantPortalMode;
+
         public DimensionPortalAppearanceStudio()
         {
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
             EditorApplication.projectChanged += OnProjectChanged;
+        }
+
+        /// <summary>
+        /// Switches this studio instance to the instant item-portal (V2) flavor: the Center layer
+        /// edits the three-animation instant contract (idle, opening, closing at five 20 x 25
+        /// frames), every bound-profile check reads the template's item portal profile, and the
+        /// layers an instant portal can never show (frame, charge sweep, milestones, ready burst)
+        /// are removed from the navigation.
+        /// </summary>
+        public void ConfigureInstantPortalMode()
+        {
+            instantPortalMode = true;
+            selectedLayer = StudioLayer.Center;
+            // An instant portal spawns fully charged, so its preview has no charging phase.
+            previewPhase = PreviewPhase.Activated;
+            skipCenterOpeningOnNextBuild = true;
+        }
+
+        /// <summary>
+        /// Layers hidden in the instant-portal studio: an instant portal is inherently frameless
+        /// and spawns fully charged, so the frame, charge sweep, milestones and the
+        /// charge-completion ready burst can never appear on it.
+        /// </summary>
+        private static bool IsHiddenInstantLayer(StudioLayer layer)
+        {
+            return layer == StudioLayer.Frame ||
+                   layer == StudioLayer.ChargeSweep ||
+                   layer == StudioLayer.Milestones ||
+                   layer == StudioLayer.ReadyBurst;
+        }
+
+        private DimensionPortalArtworkLayer CenterArtworkLayer
+        {
+            get
+            {
+                return instantPortalMode
+                    ? DimensionPortalArtworkLayer.CenterInstant
+                    : DimensionPortalArtworkLayer.Center;
+            }
+        }
+
+        private DimensionPortalVisualProfileAsset GetBoundProfile(DimensionTemplateAsset template)
+        {
+            return template == null
+                ? null
+                : instantPortalMode
+                    ? template.ItemPortalVisualProfile
+                    : template.PortalVisualProfile;
         }
 
         public bool IsPlaying
@@ -671,7 +725,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             DimensionPortalVisualProfileAsset boundProfile =
-                template.PortalVisualProfile;
+                GetBoundProfile(template);
             runtimeUpdateRequired =
                 profile == boundProfile ||
                 templateSettingsChanged ||
@@ -793,6 +847,23 @@ namespace ExpandNullforge.EditorTools
             float availableWidth,
             float availableHeight)
         {
+            if (instantPortalMode)
+            {
+                if (IsHiddenInstantLayer(selectedLayer))
+                {
+                    selectedLayer = StudioLayer.Center;
+                }
+
+                // No charging phase exists for an instant portal; heal any state a hot
+                // reload restored.
+                if (previewPhase == PreviewPhase.Charging)
+                {
+                    previewPhase = PreviewPhase.Activated;
+                    skipCenterOpeningOnNextBuild = true;
+                    previewCompositionDirty = true;
+                }
+            }
+
             profile = ResolveEditingProfile(template, profile);
             DrawResult result = new DrawResult
             {
@@ -917,7 +988,7 @@ namespace ExpandNullforge.EditorTools
                 previewCompositionDirty = true;
                 repaintRequested = true;
                 if (paletteBakeRequested &&
-                    TryGetArtworkLayer(paletteBakeLayer, out DimensionPortalArtworkLayer artworkLayer))
+                    TryGetArtworkLayer(paletteBakeLayer, out DimensionPortalArtworkLayer artworkLayer, instantPortalMode))
                 {
                     DimensionPortalArtworkEditorUtility.QueuePaletteBake(
                         template,
@@ -1203,7 +1274,7 @@ namespace ExpandNullforge.EditorTools
                 template,
                 profile,
                 serializedProfile,
-                DimensionPortalArtworkLayer.Center,
+                CenterArtworkLayer,
                 "centerEffectSpriteAsset",
                 centerHash != centerPaletteSnapshotHash);
         }
@@ -1410,11 +1481,14 @@ namespace ExpandNullforge.EditorTools
             float availableWidth)
         {
             bool wide = availableWidth >= 860f;
+            // The charge duration is the placed portal's charge-up time; an instant portal
+            // spawns fully charged (the generator bakes zero charge), so the field is omitted.
+            bool showChargeDuration = !instantPortalMode;
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Portal Studio", EditorStyles.boldLabel);
             GUILayout.FlexibleSpace();
-            if (wide)
+            if (wide && showChargeDuration)
             {
                 DrawChargeDuration(serializedTemplate);
                 GUILayout.Space(8f);
@@ -1431,7 +1505,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUILayout.EndHorizontal();
-            if (!wide)
+            if (!wide && showChargeDuration)
             {
                 GUILayout.Space(2f);
                 EditorGUILayout.BeginHorizontal();
@@ -1492,7 +1566,7 @@ namespace ExpandNullforge.EditorTools
             Color previousBackground = GUI.backgroundColor;
             bool saveNeedsAttention =
                 profileEditSession.HasChanges ||
-                (profile == template.PortalVisualProfile &&
+                (profile == GetBoundProfile(template) &&
                  runtimeOutOfDateProfile == profile);
             if (saveNeedsAttention)
             {
@@ -1502,7 +1576,7 @@ namespace ExpandNullforge.EditorTools
             if (GUILayout.Button(
                     new GUIContent(
                         "Save & Update",
-                        profile == template.PortalVisualProfile
+                        profile == GetBoundProfile(template)
                             ? "Save this profile and update the portal generated for the mod."
                             : "Save this profile without changing the profile used by the mod."),
                     EditorStyles.toolbarButton,
@@ -1542,7 +1616,7 @@ namespace ExpandNullforge.EditorTools
                     profile);
             }
             GUILayout.FlexibleSpace();
-            bool profileInUse = profile == template.PortalVisualProfile;
+            bool profileInUse = profile == GetBoundProfile(template);
             EditorGUI.BeginDisabledGroup(!canApply || profileInUse);
             if (GUILayout.Button(
                     new GUIContent(
@@ -1894,6 +1968,13 @@ namespace ExpandNullforge.EditorTools
 
         private void DrawPortalStateControls(float width)
         {
+            // The instant portal preview is always in the activated phase; there is no
+            // charging state to switch to, so the phase toolbar is omitted entirely.
+            if (instantPortalMode)
+            {
+                return;
+            }
+
             PreviewPhase previousPhase = previewPhase;
             previewPhase = (PreviewPhase)GUILayout.Toolbar(
                 (int)previewPhase,
@@ -1923,6 +2004,32 @@ namespace ExpandNullforge.EditorTools
                     EditorStyles.toolbarButton,
                     GUILayout.Width(94f)))
             {
+                previewCenterClosingActive = false;
+                activatedClock = 0f;
+                skipCenterOpeningOnNextBuild = false;
+                isPlaying = true;
+                lastClockTime = EditorApplication.timeSinceStartup;
+                nextRepaintTime = 0.0;
+                previewCompositionDirty = true;
+            }
+            EditorGUI.EndDisabledGroup();
+        }
+
+        private void DrawReplayClosingControl()
+        {
+            // Closing exists only on the instant portal's three-animation center contract.
+            if (!instantPortalMode)
+            {
+                return;
+            }
+
+            EditorGUI.BeginDisabledGroup(previewPhase != PreviewPhase.Activated);
+            if (GUILayout.Button(
+                    "Replay closing",
+                    EditorStyles.toolbarButton,
+                    GUILayout.Width(94f)))
+            {
+                previewCenterClosingActive = true;
                 activatedClock = 0f;
                 skipCenterOpeningOnNextBuild = false;
                 isPlaying = true;
@@ -2028,14 +2135,22 @@ namespace ExpandNullforge.EditorTools
         {
             EditorGUILayout.BeginVertical(GUILayout.Width(SidebarWidth));
             EditorGUILayout.LabelField("LAYERS", EditorStyles.miniBoldLabel);
-            DrawLayerButton(StudioLayer.Frame, "FRAME", "Base artwork");
-            DrawLayerButton(StudioLayer.ChargeSweep, "CHARGE", "Continuous sweep");
-            DrawLayerButton(StudioLayer.Milestones, "MILESTONES", "Persistent blobs");
+            if (!instantPortalMode)
+            {
+                DrawLayerButton(StudioLayer.Frame, "FRAME", "Base artwork");
+                DrawLayerButton(StudioLayer.ChargeSweep, "CHARGE", "Continuous sweep");
+                DrawLayerButton(StudioLayer.Milestones, "MILESTONES", "Persistent blobs");
+            }
+
             DrawLayerButton(StudioLayer.Center, "CENTER", "Activated ring");
             DrawLayerButton(StudioLayer.InnerFlecks, "SWIRLS", "Inner motion");
             GUILayout.Space(8f);
             EditorGUILayout.LabelField("IN-GAME", EditorStyles.miniBoldLabel);
-            DrawLayerButton(StudioLayer.ReadyBurst, "EFFECTS", "Ready activation burst");
+            if (!instantPortalMode)
+            {
+                DrawLayerButton(StudioLayer.ReadyBurst, "EFFECTS", "Ready activation burst");
+            }
+
             DrawLayerButton(StudioLayer.GroundLight, "LIGHT", "Ground light / shadow");
             EditorGUILayout.EndVertical();
         }
@@ -2090,7 +2205,14 @@ namespace ExpandNullforge.EditorTools
         private void DrawCompactLayerNavigation(bool twoRows)
         {
             EditorGUILayout.LabelField("LAYERS", EditorStyles.miniBoldLabel);
-            if (twoRows)
+            if (instantPortalMode)
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+                DrawLayerChip(StudioLayer.Center, "Center", "Activated center ring");
+                DrawLayerChip(StudioLayer.InnerFlecks, "Swirls", "Persistent inner motion");
+                EditorGUILayout.EndHorizontal();
+            }
+            else if (twoRows)
             {
                 EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
                 DrawLayerChip(StudioLayer.Frame, "Frame", "Base portal artwork");
@@ -2115,7 +2237,11 @@ namespace ExpandNullforge.EditorTools
 
             EditorGUILayout.LabelField("IN-GAME", EditorStyles.miniBoldLabel);
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            DrawLayerChip(StudioLayer.ReadyBurst, "Effects", "Ready activation burst");
+            if (!instantPortalMode)
+            {
+                DrawLayerChip(StudioLayer.ReadyBurst, "Effects", "Ready activation burst");
+            }
+
             DrawLayerChip(StudioLayer.GroundLight, "Light", "Projected light and shadows");
             EditorGUILayout.EndHorizontal();
         }
@@ -2255,6 +2381,7 @@ namespace ExpandNullforge.EditorTools
 
         private void SetPreviewPhaseFromLayer(PreviewPhase phase)
         {
+            previewCenterClosingActive = false;
             if (previewPhase == phase)
             {
                 if (phase == PreviewPhase.Activated)
@@ -2414,16 +2541,20 @@ namespace ExpandNullforge.EditorTools
             bool compact = viewportWidth < 470f;
             if (compact)
             {
-                EditorGUILayout.BeginHorizontal(
-                    EditorStyles.toolbar,
-                    GUILayout.Width(viewportWidth));
-                DrawPortalStateControls(Mathf.Max(1f, viewportWidth));
-                EditorGUILayout.EndHorizontal();
+                if (!instantPortalMode)
+                {
+                    EditorGUILayout.BeginHorizontal(
+                        EditorStyles.toolbar,
+                        GUILayout.Width(viewportWidth));
+                    DrawPortalStateControls(Mathf.Max(1f, viewportWidth));
+                    EditorGUILayout.EndHorizontal();
+                }
 
                 EditorGUILayout.BeginHorizontal(
                     EditorStyles.toolbar,
                     GUILayout.Width(viewportWidth));
                 DrawReplayOpeningControl();
+                DrawReplayClosingControl();
                 GUILayout.FlexibleSpace();
                 DrawViewControls();
                 EditorGUILayout.EndHorizontal();
@@ -2435,6 +2566,7 @@ namespace ExpandNullforge.EditorTools
                 GUILayout.Width(viewportWidth));
             DrawPortalStateControls(170f);
             DrawReplayOpeningControl();
+            DrawReplayClosingControl();
             GUILayout.FlexibleSpace();
             DrawViewControls();
             EditorGUILayout.EndHorizontal();
@@ -2670,6 +2802,7 @@ namespace ExpandNullforge.EditorTools
 
             bool customSwirlPreview =
                 previewPhase != PreviewPhase.Charging &&
+                !previewCenterClosingActive &&
                 GetBool(profile, "centerSwirlVisible", true) &&
                 GetBool(profile, "centerSwirlOverrideVanilla", false);
             if (customSwirlPreview)
@@ -2719,7 +2852,10 @@ namespace ExpandNullforge.EditorTools
             {
                 AddMilestoneFrame(profile, true);
                 AddCenterFrame(profile);
-                if (!customSwirlPreview)
+                // The in-game close hides the swirls the moment it starts, so the closing
+                // replay does too. AddCenterFrame clears the flag when the one-shot ends,
+                // which lets the flecks return on the same repaint.
+                if (!customSwirlPreview && !previewCenterClosingActive)
                 {
                     BuildFleckPreview(profile);
                 }
@@ -3074,10 +3210,14 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
+            // Stage -> frame follows the fixed vanilla sheet order (empty 0, bottom 1,
+            // middle 3, upper 4, ready 7) — matching the runtime visual. Frame zero is
+            // transparent in the vanilla sheet, so the pre-threshold state draws nothing
+            // unless custom artwork fills it in.
             int frame;
             if (ready)
             {
-                frame = GetInt(profile, "milestoneReadyFrame", 7);
+                frame = 7;
             }
             else
             {
@@ -3092,22 +3232,19 @@ namespace ExpandNullforge.EditorTools
                     1f);
                 if (chargeProgress >= third)
                 {
-                    frame = GetInt(profile, "milestoneThirdFrame", 4);
+                    frame = 4;
                 }
                 else if (chargeProgress >= second)
                 {
-                    frame = GetInt(profile, "milestoneSecondFrame", 3);
+                    frame = 3;
                 }
                 else if (chargeProgress >= first)
                 {
-                    frame = GetInt(profile, "milestoneFirstFrame", 1);
+                    frame = 1;
                 }
                 else
                 {
-                    // Frame zero is transparent in the vanilla sheet. Drawing the
-                    // mapped pre-threshold frame keeps the vanilla result identical
-                    // and lets custom milestone artwork define that state explicitly.
-                    frame = GetInt(profile, "milestoneEmptyFrame", 0);
+                    frame = 0;
                 }
             }
 
@@ -3201,13 +3338,13 @@ namespace ExpandNullforge.EditorTools
                 DimensionPortalArtworkEditorUtility.ClassifyReference(
                     overrideProperty,
                     profile.targetObject as DimensionPortalVisualProfileAsset,
-                    DimensionPortalArtworkLayer.Center,
+                    CenterArtworkLayer,
                     out SpriteAsset overrideAsset);
             bool hasOverrideAddress = referenceKind !=
                                       DimensionPortalArtworkReferenceKind.Empty;
             bool hasDirectOverride = IsDirectTextureReference(
                 profile.targetObject as DimensionPortalVisualProfileAsset,
-                DimensionPortalArtworkLayer.Center,
+                CenterArtworkLayer,
                 referenceKind,
                 overrideAsset,
                 overrideProperty);
@@ -3218,18 +3355,27 @@ namespace ExpandNullforge.EditorTools
 
             const int openingIndex = 1;
             const int idleIndex = 0;
+            string fallbackOpeningPath = instantPortalMode
+                ? DimensionPortalInstantArtworkEditorUtility.InstantOpenTexturePath
+                : CenterOpeningTexturePath;
+            string fallbackIdlePath = instantPortalMode
+                ? DimensionPortalInstantArtworkEditorUtility.InstantIdleTexturePath
+                : CenterIdleTexturePath;
+            int fallbackOpeningFrames = instantPortalMode
+                ? DimensionPortalInstantArtworkEditorUtility.InstantFrameCount
+                : CenterOpeningFrameCountVanilla;
 
             AnimationSheet opening = !hasDirectOverride
                 ? new AnimationSheet
                 {
-                    Sheet = GetSourceSheet(CenterOpeningTexturePath, 4),
-                    FrameCount = 4,
+                    Sheet = GetSourceSheet(fallbackOpeningPath, fallbackOpeningFrames),
+                    FrameCount = fallbackOpeningFrames,
                     Fps = 10f,
                     Loop = false,
                     Pivot = new Vector2(0.5f, 0.5f),
                     SourceLabel = "Framework vanilla center opening"
                 }
-                : GetAnimationSheet(overrideAsset, openingIndex, 4, 10f);
+                : GetAnimationSheet(overrideAsset, openingIndex, fallbackOpeningFrames, 10f);
             float openingDuration = GetAnimationDuration(opening, 0.4f);
             if (skipCenterOpeningOnNextBuild)
             {
@@ -3240,20 +3386,58 @@ namespace ExpandNullforge.EditorTools
                 skipCenterOpeningOnNextBuild = false;
             }
 
-            bool isOpening = opening.Sheet != null && activatedClock < openingDuration;
-            AnimationSheet animation = isOpening
-                ? opening
-                : !hasDirectOverride
+            // The one-shot closing replay (instant portal only): the closing sheet runs on a
+            // fresh clock, then the preview returns to the mature loop. The clock is clamped
+            // past the opening on exit so the opening cannot restart afterwards.
+            bool isClosing = false;
+            AnimationSheet closing = default(AnimationSheet);
+            if (previewCenterClosingActive && instantPortalMode)
+            {
+                closing = !hasDirectOverride
                     ? new AnimationSheet
                     {
-                        Sheet = GetSourceSheet(CenterIdleTexturePath, 5),
-                        FrameCount = 5,
+                        Sheet = GetSourceSheet(
+                            DimensionPortalInstantArtworkEditorUtility.InstantCloseTexturePath,
+                            DimensionPortalInstantArtworkEditorUtility.InstantFrameCount),
+                        FrameCount = DimensionPortalInstantArtworkEditorUtility.InstantFrameCount,
                         Fps = 10f,
-                        Loop = true,
+                        Loop = false,
                         Pivot = new Vector2(0.5f, 0.5f),
-                        SourceLabel = "Framework vanilla center idle"
+                        SourceLabel = "Framework instant center closing"
                     }
-                    : GetAnimationSheet(overrideAsset, idleIndex, 5, 10f);
+                    : GetAnimationSheet(
+                        overrideAsset,
+                        DimensionPortalInstantArtworkEditorUtility.InstantClosingAnimationIndex,
+                        DimensionPortalInstantArtworkEditorUtility.InstantFrameCount,
+                        10f);
+                float closingDuration = GetAnimationDuration(closing, 0.5f);
+                if (closing.Sheet != null && activatedClock < closingDuration)
+                {
+                    isClosing = true;
+                }
+                else
+                {
+                    previewCenterClosingActive = false;
+                    activatedClock = Mathf.Max(activatedClock, openingDuration);
+                }
+            }
+
+            bool isOpening = !isClosing && opening.Sheet != null && activatedClock < openingDuration;
+            AnimationSheet animation = isClosing
+                ? closing
+                : isOpening
+                    ? opening
+                    : !hasDirectOverride
+                        ? new AnimationSheet
+                        {
+                            Sheet = GetSourceSheet(fallbackIdlePath, 5),
+                            FrameCount = 5,
+                            Fps = 10f,
+                            Loop = true,
+                            Pivot = new Vector2(0.5f, 0.5f),
+                            SourceLabel = "Framework vanilla center idle"
+                        }
+                        : GetAnimationSheet(overrideAsset, idleIndex, 5, 10f);
             if (animation.Sheet == null)
             {
                 return;
@@ -3263,7 +3447,7 @@ namespace ExpandNullforge.EditorTools
             if (!hasDirectOverride)
             {
                 display = GetRecoloredSheet(
-                    isOpening ? "center-opening" : "center-idle",
+                    isClosing ? "center-closing" : isOpening ? "center-opening" : "center-idle",
                     animation.Sheet,
                     CenterSourcePalette,
                     GetPalette(profile, CenterPaletteProperties));
@@ -3276,9 +3460,11 @@ namespace ExpandNullforge.EditorTools
                 animation,
                 DimensionPortalVisualContract.CanonicalCenterWidth,
                 DimensionPortalVisualContract.CanonicalCenterHeight,
-                isOpening ? "Center opening" : "Center idle",
+                isClosing ? "Center closing" : isOpening ? "Center opening" : "Center idle",
                 true);
-            float localClock = isOpening ? activatedClock : Mathf.Max(0f, activatedClock - openingDuration);
+            float localClock = isOpening || isClosing
+                ? activatedClock
+                : Mathf.Max(0f, activatedClock - openingDuration);
             int frame = GetAnimationFrame(animation, localClock);
             Vector2 centerOffset = GetVector2(profile, "centerOffsetPixels", Vector2.zero);
             Rect layerRect = ResolveLayerRect(
@@ -3456,19 +3642,8 @@ namespace ExpandNullforge.EditorTools
                     " is not divisible by its " + animation.FrameCount + " source frames.");
             }
 
-            int frameWidth = animation.Sheet.FrameWidth;
-            bool usesFullCanvasFrames =
-                allowFullCanvasFrames &&
-                frameWidth == CanonicalCanvasPixels &&
-                animation.Sheet.Height == CanonicalCanvasPixels;
-            if (!usesFullCanvasFrames &&
-                (frameWidth != expectedWidth || animation.Sheet.Height != expectedHeight))
-            {
-                AddPreviewWarning(
-                    label + " uses native " + frameWidth + " x " + animation.Sheet.Height +
-                    " frames instead of the vanilla " + expectedWidth + " x " + expectedHeight +
-                    " contract. It is shown at native size/pivot and is never stretched.");
-            }
+            // Non-vanilla frame sizes are fully supported (shown at native size/pivot, never
+            // stretched) — deliberately no advisory about them; creators chose their size.
 
             if (animation.Sheet.Pixels == null)
             {
@@ -4339,7 +4514,8 @@ namespace ExpandNullforge.EditorTools
                     profile.targetObject as DimensionPortalVisualProfileAsset;
                 if (TryGetArtworkLayer(
                         selectedLayer,
-                        out DimensionPortalArtworkLayer restoreArtworkLayer))
+                        out DimensionPortalArtworkLayer restoreArtworkLayer,
+                        instantPortalMode))
                 {
                     DimensionPortalArtworkEditorUtility.CancelPending(
                         restoreProfile,
@@ -4353,7 +4529,8 @@ namespace ExpandNullforge.EditorTools
                 if (!RestoreLayerToVanilla(
                         profile,
                         selectedLayer,
-                        out string restoreMessage))
+                        out string restoreMessage,
+                        instantPortalMode))
                 {
                     result.Message = restoreMessage;
                     result.MessageType = MessageType.Error;
@@ -4364,7 +4541,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUILayout.EndHorizontal();
-            EditorGUILayout.LabelField(GetLayerDescription(selectedLayer), EditorStyles.wordWrappedMiniLabel);
             GUILayout.Space(4f);
 
             bool directOverride = false;
@@ -4386,7 +4562,8 @@ namespace ExpandNullforge.EditorTools
                     ref result);
                 if (TryGetArtworkLayer(
                         selectedLayer,
-                        out DimensionPortalArtworkLayer artworkLayer))
+                        out DimensionPortalArtworkLayer artworkLayer,
+                        instantPortalMode))
                 {
                     artworkReferenceKind =
                         DimensionPortalArtworkEditorUtility.ClassifyReference(
@@ -4494,7 +4671,8 @@ namespace ExpandNullforge.EditorTools
             EditorGUILayout.EndVertical();
             if (TryGetArtworkLayer(
                     selectedLayer,
-                    out DimensionPortalArtworkLayer selectedArtworkLayer) &&
+                    out DimensionPortalArtworkLayer selectedArtworkLayer,
+                    instantPortalMode) &&
                 Event.current.type == EventType.Repaint &&
                 mainPanelRect.height > 1f)
             {
@@ -4510,7 +4688,8 @@ namespace ExpandNullforge.EditorTools
 
             if (TryGetArtworkLayer(
                     selectedLayer,
-                    out selectedArtworkLayer))
+                    out selectedArtworkLayer,
+                    instantPortalMode))
             {
                 GUILayout.Space(4f);
                 float minimumTexturePanelHeight = GetTexturePanelMinimumHeight(
@@ -4520,8 +4699,9 @@ namespace ExpandNullforge.EditorTools
                         minimumTexturePanelHeight,
                         minimumHeight -
                         measuredArtworkMainPanelHeights[(int)selectedArtworkLayer] -
-                        4f -
-                        EditorGUIUtility.standardVerticalSpacing * 2f)
+                        measuredSoundsPanelHeight -
+                        8f -
+                        EditorGUIUtility.standardVerticalSpacing * 3f)
                     : 0f;
                 DrawTexturePanel(
                     template,
@@ -4537,14 +4717,15 @@ namespace ExpandNullforge.EditorTools
             else if (selectedLayer == StudioLayer.InnerFlecks)
             {
                 GUILayout.Space(4f);
-                const float minimumSwirlTexturePanelHeight = 112f;
+                const float minimumSwirlTexturePanelHeight = 64f;
                 float texturePanelHeight = minimumHeight > 0f
                     ? Mathf.Max(
                         minimumSwirlTexturePanelHeight,
                         minimumHeight -
                         measuredSwirlMainPanelHeight -
-                        4f -
-                        EditorGUIUtility.standardVerticalSpacing * 2f)
+                        measuredSoundsPanelHeight -
+                        8f -
+                        EditorGUIUtility.standardVerticalSpacing * 3f)
                     : 0f;
                 DrawSwirlTexturePanel(
                     template,
@@ -4554,7 +4735,145 @@ namespace ExpandNullforge.EditorTools
                     fixedWidth);
             }
 
+            GUILayout.Space(4f);
+            DrawPortalSoundsPanel(template, fixedWidth);
+
             EditorGUILayout.EndVertical();
+        }
+
+        // Measured on repaint so the texture panel above can budget its height around the
+        // sounds panel; seeded with a sensible estimate for the first frame.
+        private float measuredSoundsPanelHeight = 92f;
+
+        /// <summary>
+        /// Portal sound configuration, living under the Textures panel. The placed portal only
+        /// offers an activation sound; the instant portal picks ONE exclusive mode — Peak
+        /// (activation/deactivation one-shots) or Loop (a bed while it stands open). Each field
+        /// takes an SfxID name or a Sound Library key; the Pick button browses and previews.
+        /// </summary>
+        private void DrawPortalSoundsPanel(DimensionTemplateAsset template, float fixedWidth)
+        {
+            if (template == null)
+            {
+                return;
+            }
+
+            if (fixedWidth > 0f)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(fixedWidth));
+            }
+            else
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            }
+
+            EditorGUILayout.LabelField("Sounds", EditorStyles.boldLabel);
+
+            string placedActivation = template.PlacedPortalActivationSound;
+            int instantMode = template.InstantPortalSoundMode;
+            string instantActivation = template.InstantPortalActivationSound;
+            string instantDeactivation = template.InstantPortalDeactivationSound;
+            string instantLoop = template.InstantPortalLoopSound;
+
+            EditorGUI.BeginChangeCheck();
+            if (!instantPortalMode)
+            {
+                placedActivation = DrawSoundKeyField(
+                    template,
+                    "Activation",
+                    "Plays once when the portal finishes charging and lights up. SfxID name or " +
+                    "a Sound Library key. Heard within 8 tiles. Empty = silent.",
+                    DimensionSoundPickerWindow.FieldPlacedActivation,
+                    placedActivation,
+                    false);
+            }
+            else
+            {
+                instantMode = GUILayout.Toolbar(
+                    instantMode,
+                    new[]
+                    {
+                        new GUIContent(
+                            "Peak",
+                            "One-shots at the portal's edges: an activation sound when it opens " +
+                            "and a deactivation sound as it closes."),
+                        new GUIContent(
+                            "Loop",
+                            "A looping bed that plays the whole time the portal stands open.")
+                    },
+                    GUILayout.Width(160f));
+                GUILayout.Space(2f);
+
+                if (instantMode == 0)
+                {
+                    instantActivation = DrawSoundKeyField(
+                        template,
+                        "Activation",
+                        "Plays once as the portal tears open. SfxID name or a Sound Library " +
+                        "key. Heard within 8 tiles.",
+                        DimensionSoundPickerWindow.FieldInstantActivation,
+                        instantActivation,
+                        false);
+                    instantDeactivation = DrawSoundKeyField(
+                        template,
+                        "Deactivation",
+                        "Plays once as the portal winks out. SfxID name or a Sound Library " +
+                        "key. Heard within 8 tiles.",
+                        DimensionSoundPickerWindow.FieldInstantDeactivation,
+                        instantDeactivation,
+                        false);
+                }
+                else
+                {
+                    instantLoop = DrawSoundKeyField(
+                        template,
+                        "Loop",
+                        "Loops while the portal stands open and stops as it closes. Needs a " +
+                        "Sound Library clip (SfxID names cannot loop). Heard within 8 tiles.",
+                        DimensionSoundPickerWindow.FieldInstantLoop,
+                        instantLoop,
+                        true);
+                }
+            }
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(template, "Portal Sounds");
+                template.SetPortalSoundSettings(
+                    placedActivation,
+                    instantMode,
+                    instantActivation,
+                    instantDeactivation,
+                    instantLoop);
+                EditorUtility.SetDirty(template);
+            }
+
+            EditorGUILayout.EndVertical();
+            if (Event.current.type == EventType.Repaint)
+            {
+                measuredSoundsPanelHeight = GUILayoutUtility.GetLastRect().height;
+            }
+        }
+
+        private static string DrawSoundKeyField(
+            DimensionTemplateAsset template,
+            string label,
+            string tooltip,
+            string fieldId,
+            string value,
+            bool clipOnly)
+        {
+            EditorGUILayout.BeginHorizontal();
+            string result = EditorGUILayout.TextField(new GUIContent(label, tooltip), value);
+            if (GUILayout.Button(
+                new GUIContent("Pick", "Browse the game's sounds, listen, and select."),
+                GUILayout.Width(40f)))
+            {
+                DimensionSoundPickerWindow.Open(template, fieldId, clipOnly);
+            }
+
+            EditorGUILayout.EndHorizontal();
+            return result;
         }
 
         private void DrawTexturePanel(
@@ -4635,68 +4954,35 @@ namespace ExpandNullforge.EditorTools
                 expectedSlotCount);
             bool changed = false;
             EditorGUI.BeginDisabledGroup(!slotsReady);
+            // One field per animation, labeled with the animation's name ("Loop", "Opening",
+            // "Closing", or the layer's own name for single-sheet layers). It edits the COLOR
+            // sheet — the artwork itself. Emissive (the self-glow sheet, cloned from the same
+            // art in managed assets) and normal maps are intentionally not exposed; existing
+            // values pass through QueueTextureUpdate untouched.
             for (int i = 0; i < expectedSlotCount; i++)
             {
                 DimensionPortalArtworkEditorUtility.TextureSlot slot =
                     i < slots.Length ? slots[i] : null;
-                if (slot != null)
-                {
-                    DrawTextureSlotHeader(slot);
-                }
-                else
+                if (slot == null)
                 {
                     DrawTextureSlotPlaceholder(layer, i, unavailableMessage);
+                    continue;
                 }
 
-                string slotTooltip = slot == null
-                    ? unavailableMessage
-                    : null;
                 Rect textureRect = EditorGUILayout.GetControlRect(
                     false,
                     EditorGUIUtility.singleLineHeight);
                 Texture2D texture = EditorGUI.ObjectField(
                     textureRect,
                     new GUIContent(
-                        "Color",
-                        slot == null
-                            ? slotTooltip
-                            : GetTextureFieldTooltip(slot, "Color")),
+                        slot.DisplayName ?? "Texture",
+                        GetTextureFieldTooltip(slot, "Color")),
                     displayedTextures[i],
                     typeof(Texture2D),
                     false) as Texture2D;
-                Rect emissiveRect = EditorGUILayout.GetControlRect(
-                    false,
-                    EditorGUIUtility.singleLineHeight);
-                Texture2D emissive = EditorGUI.ObjectField(
-                    emissiveRect,
-                    new GUIContent(
-                        "Emissive",
-                        slot == null
-                            ? slotTooltip
-                            : GetTextureFieldTooltip(slot, "Emissive")),
-                    displayedEmissive[i],
-                    typeof(Texture2D),
-                    false) as Texture2D;
-                Rect normalRect = EditorGUILayout.GetControlRect(
-                    false,
-                    EditorGUIUtility.singleLineHeight);
-                Texture2D normal = EditorGUI.ObjectField(
-                    normalRect,
-                    new GUIContent(
-                        "Normal",
-                        slot == null
-                            ? slotTooltip
-                            : GetTextureFieldTooltip(slot, "Normal")),
-                    displayedNormals[i],
-                    typeof(Texture2D),
-                    false) as Texture2D;
-                if (texture != displayedTextures[i] ||
-                    emissive != displayedEmissive[i] ||
-                    normal != displayedNormals[i])
+                if (texture != displayedTextures[i])
                 {
                     displayedTextures[i] = texture;
-                    displayedEmissive[i] = emissive;
-                    displayedNormals[i] = normal;
                     changed = true;
                 }
             }
@@ -4774,40 +5060,30 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUILayout.LabelField("Textures", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Loop animation", EditorStyles.miniBoldLabel);
             bool fieldsEnabled = customMode && slot != null;
             string modeTooltip = customMode
                 ? unavailableMessage
                 : "Enable Override vanilla to use and edit this custom animation.";
             EditorGUI.BeginDisabledGroup(!fieldsEnabled);
             EditorGUI.BeginChangeCheck();
-            Texture2D selectedColor = EditorGUILayout.ObjectField(
+            // Draw the texture slot with an explicit single-line rect so Unity renders the compact
+            // one-line object field (small circle picker), matching the other artwork panels —
+            // rather than the large checkerboard Texture2D thumbnail the layout overload reserves.
+            Rect swirlColorRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
+            Texture2D selectedColor = EditorGUI.ObjectField(
+                swirlColorRect,
                 new GUIContent(
-                    "Color",
+                    "Loop",
                     fieldsEnabled
-                        ? "Color sheet for custom Swirls animation 0."
+                        ? "Sheet for the custom Swirls loop animation."
                         : modeTooltip),
                 colorTexture,
                 typeof(Texture2D),
                 false) as Texture2D;
-            Texture2D selectedEmissive = EditorGUILayout.ObjectField(
-                new GUIContent(
-                    "Emissive",
-                    fieldsEnabled
-                        ? "Optional emissive sheet for custom Swirls animation 0."
-                        : modeTooltip),
-                emissiveTexture,
-                typeof(Texture2D),
-                false) as Texture2D;
-            Texture2D selectedNormal = EditorGUILayout.ObjectField(
-                new GUIContent(
-                    "Normal",
-                    fieldsEnabled
-                        ? "Optional normal sheet for custom Swirls animation 0."
-                        : modeTooltip),
-                normalTexture,
-                typeof(Texture2D),
-                false) as Texture2D;
+            // Emissive (self-glow) and normal maps are intentionally not exposed; the existing
+            // values pass through QueueSwirlTextureUpdate untouched.
+            Texture2D selectedEmissive = emissiveTexture;
+            Texture2D selectedNormal = normalTexture;
             bool changed = EditorGUI.EndChangeCheck();
             EditorGUI.EndDisabledGroup();
 
@@ -5034,14 +5310,6 @@ namespace ExpandNullforge.EditorTools
             return true;
         }
 
-        private static void DrawTextureSlotHeader(
-            DimensionPortalArtworkEditorUtility.TextureSlot slot)
-        {
-            EditorGUILayout.LabelField(
-                slot.DisplayName ?? "Texture",
-                EditorStyles.miniBoldLabel);
-        }
-
         private static void DrawTextureSlotPlaceholder(
             DimensionPortalArtworkLayer layer,
             int slotIndex,
@@ -5074,22 +5342,36 @@ namespace ExpandNullforge.EditorTools
         private static float GetTexturePanelMinimumHeight(
             DimensionPortalArtworkLayer layer)
         {
-            return 34f + GetExpectedTextureSlotCount(layer) * 78f;
+            // One labeled row per animation slot; emissive and normal maps are not exposed.
+            return 34f + GetExpectedTextureSlotCount(layer) * 24f;
         }
 
         private static int GetExpectedTextureSlotCount(
             DimensionPortalArtworkLayer layer)
         {
-            return layer == DimensionPortalArtworkLayer.Center ? 2 : 1;
+            return layer == DimensionPortalArtworkLayer.CenterInstant
+                ? 3
+                : layer == DimensionPortalArtworkLayer.Center
+                    ? 2
+                    : 1;
         }
 
         private static string GetExpectedTextureSlotDisplayName(
             DimensionPortalArtworkLayer layer,
             int slotIndex)
         {
+            if (layer == DimensionPortalArtworkLayer.CenterInstant)
+            {
+                return slotIndex == 0
+                    ? "Loop"
+                    : slotIndex == 1
+                        ? "Opening"
+                        : "Closing";
+            }
+
             if (layer == DimensionPortalArtworkLayer.Center)
             {
-                return slotIndex == 0 ? "Mature loop" : "Opening";
+                return slotIndex == 0 ? "Loop" : "Opening";
             }
 
             return GetArtworkLayerDisplayName(layer);
@@ -5107,6 +5389,7 @@ namespace ExpandNullforge.EditorTools
                 case DimensionPortalArtworkLayer.Milestones:
                     return "Milestones";
                 case DimensionPortalArtworkLayer.Center:
+                case DimensionPortalArtworkLayer.CenterInstant:
                     return "Center";
                 default:
                     return "portal artwork";
@@ -5125,6 +5408,7 @@ namespace ExpandNullforge.EditorTools
                 case DimensionPortalArtworkLayer.Milestones:
                     return "milestoneSpriteAsset";
                 case DimensionPortalArtworkLayer.Center:
+                case DimensionPortalArtworkLayer.CenterInstant:
                     return "centerEffectSpriteAsset";
                 default:
                     return string.Empty;
@@ -5625,7 +5909,7 @@ namespace ExpandNullforge.EditorTools
                 current.Use();
                 if (contextReady &&
                     (layer == StudioLayer.InnerFlecks ||
-                     TryGetArtworkLayer(layer, out _)))
+                     TryGetArtworkLayer(layer, out _, instantPortalMode)))
                 {
                     QueueCreateArtworkVariant(
                         template,
@@ -5659,7 +5943,7 @@ namespace ExpandNullforge.EditorTools
                 result.Changed = true;
             }
             else if (referenceChanged &&
-                     TryGetArtworkLayer(layer, out DimensionPortalArtworkLayer artworkLayer))
+                     TryGetArtworkLayer(layer, out DimensionPortalArtworkLayer artworkLayer, instantPortalMode))
             {
                 CancelPendingTextureUpdate();
 
@@ -5738,7 +6022,8 @@ namespace ExpandNullforge.EditorTools
                         }
                         else if (TryGetArtworkLayer(
                                      layer,
-                                     out DimensionPortalArtworkLayer artworkLayer))
+                                     out DimensionPortalArtworkLayer artworkLayer,
+                                     instantPortalMode))
                         {
                             created =
                                 DimensionPortalArtworkEditorUtility.CreateEditableCopy(
@@ -5896,7 +6181,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             GUILayout.Space(5f);
-            EditorGUILayout.LabelField(role.Label, EditorStyles.boldLabel);
+            // No repeated title here — the swatch itself already names the role.
             Color authoredColor = property.colorValue;
             float intensity = role.IsHdr
                 ? Mathf.Max(1f, authoredColor.r, authoredColor.g, authoredColor.b)
@@ -6033,55 +6318,9 @@ namespace ExpandNullforge.EditorTools
                     DrawProperty(profile, "firstMilestone", "Bottom pair");
                     DrawProperty(profile, "secondMilestone", "Middle pair");
                     DrawProperty(profile, "thirdMilestone", "Upper pair");
-                    milestoneAdvancedSettings = EditorGUILayout.Foldout(
-                        milestoneAdvancedSettings,
-                        "Stage frame mapping",
-                        true);
-                    if (milestoneAdvancedSettings)
-                    {
-                        int milestoneFrameCount = GetPreviewFrameCount(
-                            StudioLayer.Milestones,
-                            8);
-                        int milestoneMaxFrame = milestoneFrameCount - 1;
-                        EditorGUILayout.HelpBox(
-                            "Selects zero-based frames from the milestone sheet (0 is the first frame). " +
-                            "These are milestone-stage images, not frames from the 42-frame charging sweep. " +
-                            "Changing the mapping selects existing sheet frames; it does not rewrite or reorder the PNG.",
-                            MessageType.None);
-                        EditorGUILayout.LabelField(
-                            "Valid frame range",
-                            "0-" + milestoneMaxFrame +
-                            " (" + milestoneFrameCount + " frames)");
-                        DrawNonNegativeIntProperty(
-                            profile,
-                            "milestoneEmptyFrame",
-                            "Before first threshold",
-                            milestoneMaxFrame);
-                        DrawNonNegativeIntProperty(
-                            profile,
-                            "milestoneFirstFrame",
-                            "Bottom stage",
-                            milestoneMaxFrame);
-                        DrawNonNegativeIntProperty(
-                            profile,
-                            "milestoneSecondFrame",
-                            "Middle stage",
-                            milestoneMaxFrame);
-                        DrawNonNegativeIntProperty(
-                            profile,
-                            "milestoneThirdFrame",
-                            "Upper stage",
-                            milestoneMaxFrame);
-                        DrawNonNegativeIntProperty(
-                            profile,
-                            "milestoneReadyFrame",
-                            "Ready stage",
-                            milestoneMaxFrame);
-                    }
-
                     break;
                 case StudioLayer.Center:
-                    DrawProperty(profile, "centerGlowIntensity", "Inner highlight brightness");
+                    DrawProperty(profile, "centerGlowIntensity", "Highlight brightness");
                     break;
                 case StudioLayer.InnerFlecks:
                     if (GetBool(profile, "centerSwirlOverrideVanilla", false))
@@ -6122,12 +6361,9 @@ namespace ExpandNullforge.EditorTools
                     DrawProperty(profile, "portalShadowEnabled", "Enabled");
                     DrawProperty(profile, "portalShadowSprite", "Floor shadow sprite");
                     DrawProperty(profile, "portalShadowCasterSprite", "Responsive caster sprite");
-                    DrawProperty(profile, "portalShadowOffsetPixels", "Offset (pixels)");
                     DrawProperty(profile, "portalShadowScale", "Scale");
-                    DrawProperty(profile, "portalShadowRotationDegrees", "Rotation");
                     EditorGUILayout.BeginHorizontal();
-                    DrawProperty(profile, "portalShadowFlipX", "Flip X");
-                    DrawProperty(profile, "portalShadowFlipY", "Flip Y");
+                    // Flip X/Y are intentionally not exposed for the shadow either.
                     EditorGUILayout.EndHorizontal();
                     break;
             }
@@ -6209,15 +6445,9 @@ namespace ExpandNullforge.EditorTools
                         "Include this visual layer in the generated portal."));
             }
 
-            if (offset != null)
-            {
-                EditorGUILayout.PropertyField(
-                    offset,
-                    new GUIContent(
-                        "Offset (pixels)",
-                        "Core Keeper screen pixels. Positive X moves right; positive Y moves up."));
-            }
-
+            // Offset X/Y number fields and Rotation are intentionally not exposed: positioning is
+            // done with the Nudge buttons / preview dragging below, and rotation is unused by this
+            // framework's portal art. Existing serialized values still bake as-is.
             if (scale != null)
             {
                 EditorGUILayout.PropertyField(
@@ -6232,36 +6462,8 @@ namespace ExpandNullforge.EditorTools
                 }
             }
 
-            if (rotation != null)
-            {
-                EditorGUILayout.PropertyField(
-                    rotation,
-                    new GUIContent(
-                        "Rotation",
-                        "Degrees around the SpriteAsset pivot. Positive values rotate counter-clockwise in game."));
-                float normalizedRotation = NormalizePreviewRotation(rotation.floatValue);
-                if (!Mathf.Approximately(rotation.floatValue, normalizedRotation))
-                {
-                    rotation.floatValue = normalizedRotation;
-                }
-            }
-
-            EditorGUILayout.BeginHorizontal();
-            if (flipX != null)
-            {
-                EditorGUILayout.PropertyField(
-                    flipX,
-                    new GUIContent("Flip X", "Mirror horizontally around the SpriteAsset pivot."));
-            }
-
-            if (flipY != null)
-            {
-                EditorGUILayout.PropertyField(
-                    flipY,
-                    new GUIContent("Flip Y", "Mirror vertically around the SpriteAsset pivot."));
-            }
-
-            EditorGUILayout.EndHorizontal();
+            // Flip X/Y are intentionally not exposed (unused by this framework's portal art);
+            // existing serialized flip values still bake as-is.
             if (EditorGUI.EndChangeCheck())
             {
                 MarkPreviewTransformChanged();
@@ -6277,9 +6479,6 @@ namespace ExpandNullforge.EditorTools
                 DrawOffsetNudgeButton(offset, Vector2.up, "↑");
                 GUILayout.FlexibleSpace();
                 EditorGUILayout.EndHorizontal();
-                EditorGUILayout.LabelField(
-                    "Drag this layer in the preview, or focus the canvas and use the arrow keys. Hold Shift to nudge 4 pixels.",
-                    EditorStyles.wordWrappedMiniLabel);
             }
 
             GUILayout.Space(4f);
@@ -6417,76 +6616,6 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static void DrawNonNegativeIntProperty(
-            SerializedObject serializedObject,
-            string propertyName,
-            string label,
-            int maximumValue)
-        {
-            SerializedProperty property = serializedObject.FindProperty(propertyName);
-            if (property == null)
-            {
-                return;
-            }
-
-            int safeMaximum = Mathf.Max(0, maximumValue);
-            int clampedCurrentValue = Mathf.Clamp(
-                property.intValue,
-                0,
-                safeMaximum);
-            if (property.intValue != clampedCurrentValue)
-            {
-                property.intValue = clampedCurrentValue;
-            }
-
-            GUIContent content = new GUIContent(label);
-            Rect rowRect = EditorGUILayout.GetControlRect(
-                true,
-                EditorGUIUtility.singleLineHeight);
-            string controlName =
-                "DimensionPortalAppearanceStudio." + propertyName;
-
-            EditorGUI.BeginProperty(rowRect, content, property);
-            Rect valueRect = EditorGUI.PrefixLabel(rowRect, content);
-            Event current = Event.current;
-            bool focusRequested =
-                current != null &&
-                current.type == EventType.MouseDown &&
-                current.button == 0 &&
-                valueRect.Contains(current.mousePosition);
-
-            GUI.SetNextControlName(controlName);
-            EditorGUI.BeginChangeCheck();
-            int value = EditorGUI.IntField(valueRect, property.intValue);
-            if (EditorGUI.EndChangeCheck())
-            {
-                property.intValue = Mathf.Clamp(value, 0, safeMaximum);
-            }
-
-            EditorGUI.EndProperty();
-            if (focusRequested)
-            {
-                EditorGUI.FocusTextInControl(controlName);
-            }
-        }
-
-        private int GetPreviewFrameCount(
-            StudioLayer layer,
-            int fallbackFrameCount)
-        {
-            for (int i = 0; i < visibleFrames.Count; i++)
-            {
-                VisibleFrame frame = visibleFrames[i];
-                if (frame.Layer == layer &&
-                    frame.HitSheet != null &&
-                    frame.HitSheet.FrameCount > 0)
-                {
-                    return frame.HitSheet.FrameCount;
-                }
-            }
-
-            return Mathf.Max(1, fallbackFrameCount);
-        }
 
         private PreviewSheet GetSourceSheet(string assetPath, int frameCount)
         {
@@ -7688,7 +7817,8 @@ namespace ExpandNullforge.EditorTools
 
         private static bool TryGetArtworkLayer(
             StudioLayer layer,
-            out DimensionPortalArtworkLayer artworkLayer)
+            out DimensionPortalArtworkLayer artworkLayer,
+            bool instantPortal = false)
         {
             switch (layer)
             {
@@ -7702,7 +7832,9 @@ namespace ExpandNullforge.EditorTools
                     artworkLayer = DimensionPortalArtworkLayer.Milestones;
                     return true;
                 case StudioLayer.Center:
-                    artworkLayer = DimensionPortalArtworkLayer.Center;
+                    artworkLayer = instantPortal
+                        ? DimensionPortalArtworkLayer.CenterInstant
+                        : DimensionPortalArtworkLayer.Center;
                     return true;
                 default:
                     artworkLayer = default(DimensionPortalArtworkLayer);
@@ -7756,33 +7888,11 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static string GetLayerDescription(StudioLayer layer)
-        {
-            switch (layer)
-            {
-                case StudioLayer.Frame:
-                    return "The always-visible 48 x 48 portal structure.";
-                case StudioLayer.ChargeSweep:
-                    return "The continuous bottom-to-top sweep behind the persistent milestone blobs.";
-                case StudioLayer.Milestones:
-                    return "The lit pillar pairs that remain visible as activation progress advances.";
-                case StudioLayer.Center:
-                    return "The ready-state center. Vanilla-native 16 x 25 frames, or any custom frame size that fits within the 48 x 48 canvas.";
-                case StudioLayer.InnerFlecks:
-                    return "Use Core Keeper's original inner particles, or place a looping custom SpriteAsset behind the activated ring.";
-                case StudioLayer.ReadyBurst:
-                    return "The one-shot effect played when the portal becomes ready. Leave Animation frames empty to use the exact vanilla burst.";
-                case StudioLayer.GroundLight:
-                    return "The world-space light that illuminates the ground and drives responsive object shadows.";
-                default:
-                    return string.Empty;
-            }
-        }
-
         internal static bool RestoreLayerToVanilla(
             SerializedObject profile,
             StudioLayer layer,
-            out string message)
+            out string message,
+            bool instantPortal = false)
         {
             message = string.Empty;
             if (profile == null ||
@@ -7795,7 +7905,8 @@ namespace ExpandNullforge.EditorTools
             RestoreLayerDefaults(profile, layer);
             if (TryGetArtworkLayer(
                     layer,
-                    out DimensionPortalArtworkLayer artworkLayer))
+                    out DimensionPortalArtworkLayer artworkLayer,
+                    instantPortal))
             {
                 if (!DimensionPortalArtworkEditorUtility.AssignFrameworkReference(
                         profile,
@@ -7852,11 +7963,6 @@ namespace ExpandNullforge.EditorTools
                     SetFloat(profile, "firstMilestone", 0.25f);
                     SetFloat(profile, "secondMilestone", 0.5f);
                     SetFloat(profile, "thirdMilestone", 0.75f);
-                    SetInt(profile, "milestoneEmptyFrame", 0);
-                    SetInt(profile, "milestoneFirstFrame", 1);
-                    SetInt(profile, "milestoneSecondFrame", 3);
-                    SetInt(profile, "milestoneThirdFrame", 4);
-                    SetInt(profile, "milestoneReadyFrame", 7);
                     SetBool(profile, "milestonesVisible", true);
                     SetVector2(profile, "milestoneOffsetPixels", Vector2.zero);
                     SetVector2(profile, "milestoneScale", Vector2.one);

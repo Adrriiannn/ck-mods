@@ -13,6 +13,8 @@ namespace ExpandNullforge.EditorTools
         private const float SidebarWidth = 220f;
         private const float CanvasMinHeight = 260f;
         private DimensionTemplateAsset selectedTemplate;
+        private readonly System.Collections.Generic.HashSet<int> portalIconsScannedTemplates =
+            new System.Collections.Generic.HashSet<int>();
         private DimensionTemplateAuthoringWorkspace workspace;
         private DimensionTemplateCustomizerViewModel viewModel;
         private string activeSectionId = "overview";
@@ -41,6 +43,11 @@ namespace ExpandNullforge.EditorTools
         private DimensionPortalAppearanceStudio portalAppearanceStudio;
         private DimensionTemplateAsset initializedPortalTemplate;
         private DimensionPortalVisualProfileAsset initializedPortalProfile;
+        private bool itemPortalVisualProfileSetupQueued;
+        private DimensionPortalAppearanceStudio itemPortalAppearanceStudio;
+        private DimensionTemplateAsset initializedItemPortalTemplate;
+        private DimensionPortalVisualProfileAsset initializedItemPortalProfile;
+        private int portalStudioTab;
         private Object serializedAssetBindingTarget;
         private SerializedObject serializedAssetBinding;
         private readonly Dictionary<string, SerializedProperty> serializedAssetBindingProperties =
@@ -81,15 +88,24 @@ namespace ExpandNullforge.EditorTools
                 portalAppearanceStudio.Dispose();
                 portalAppearanceStudio = null;
             }
+
+            if (itemPortalAppearanceStudio != null)
+            {
+                itemPortalAppearanceStudio.Dispose();
+                itemPortalAppearanceStudio = null;
+            }
         }
 
         private void Update()
         {
             bool portalSectionActive = activeSectionId == "portals";
+            DimensionPortalAppearanceStudio activeStudio = portalStudioTab == 1
+                ? itemPortalAppearanceStudio
+                : portalAppearanceStudio;
             bool previewRepaintsContinuously =
                 portalSectionActive &&
-                portalAppearanceStudio != null &&
-                portalAppearanceStudio.IsPlaying &&
+                activeStudio != null &&
+                activeStudio.IsPlaying &&
                 !EditorApplication.isCompiling &&
                 !EditorApplication.isUpdating;
             bool needsMouseMoveEvents = portalSectionActive && !previewRepaintsContinuously;
@@ -98,8 +114,20 @@ namespace ExpandNullforge.EditorTools
                 wantsMouseMove = needsMouseMoveEvents;
             }
 
+            bool repaint = false;
             if (portalAppearanceStudio != null &&
-                portalAppearanceStudio.Tick(portalSectionActive))
+                portalAppearanceStudio.Tick(portalSectionActive && portalStudioTab == 0))
+            {
+                repaint = true;
+            }
+
+            if (itemPortalAppearanceStudio != null &&
+                itemPortalAppearanceStudio.Tick(portalSectionActive && portalStudioTab == 1))
+            {
+                repaint = true;
+            }
+
+            if (repaint)
             {
                 Repaint();
             }
@@ -1256,10 +1284,11 @@ namespace ExpandNullforge.EditorTools
             Color previousColor = GUI.color;
             GUI.color = MaturityColor(capability.Maturity);
             EditorGUILayout.LabelField(
-                "● Maturity: " + DimensionCapabilityRegistry.Describe(capability.Maturity),
+                new GUIContent(
+                    "● " + DimensionCapabilityRegistry.Describe(capability.Maturity),
+                    capability.Note),
                 EditorStyles.miniBoldLabel);
             GUI.color = previousColor;
-            EditorGUILayout.LabelField(capability.Note, EditorStyles.wordWrappedMiniLabel);
             GUILayout.Space(4f);
         }
 
@@ -1493,8 +1522,192 @@ namespace ExpandNullforge.EditorTools
             DrawPortalAccessRuleEditors();
         }
 
+        /// <summary>
+        /// The active tab's portal-version Enabled toggle, living where portals are configured.
+        /// Both versions may be enabled together; the toggle locks on when it is the last enabled
+        /// entry so a dimension can never lose its only way in. Applies on the next
+        /// Generate Runtime Manifest.
+        /// </summary>
+        private void DrawPortalVersionEnabledToggle(bool instantTab)
+        {
+            DimensionPortalAccessRuleAsset[] rules = selectedTemplate == null
+                ? null
+                : selectedTemplate.PortalAccessRules;
+            if (rules == null)
+            {
+                return;
+            }
+
+            bool anyRuleForTab = false;
+            bool tabEnabled = false;
+            bool otherEnabled = false;
+            for (int i = 0; i < rules.Length; i++)
+            {
+                DimensionPortalAccessRuleAsset rule = rules[i];
+                if (rule == null)
+                {
+                    continue;
+                }
+
+                bool isInstant = DimensionPortalVersions.IsInstantaneousItem(rule.AccessKind);
+                bool isPlaced = DimensionPortalVersions.IsUserAccessible(rule.AccessKind);
+                if (instantTab ? isInstant : isPlaced)
+                {
+                    anyRuleForTab = true;
+                    tabEnabled |= rule.Enabled;
+                }
+                else if (instantTab ? isPlaced : isInstant)
+                {
+                    otherEnabled |= rule.Enabled;
+                }
+            }
+
+            if (!anyRuleForTab)
+            {
+                return;
+            }
+
+            bool lockedOn = tabEnabled && !otherEnabled;
+            using (new EditorGUI.DisabledScope(lockedOn))
+            {
+                bool next = GUILayout.Toggle(
+                    tabEnabled,
+                    new GUIContent(
+                        "Enabled",
+                        lockedOn
+                            ? "At least one portal version must stay enabled — turn on the other version first."
+                            : "Whether this portal version exists in-game. Both versions can be enabled together. Applies on the next Generate Runtime Manifest."),
+                    GUILayout.Width(70f));
+                if (next != tabEnabled)
+                {
+                    for (int i = 0; i < rules.Length; i++)
+                    {
+                        DimensionPortalAccessRuleAsset rule = rules[i];
+                        if (rule == null)
+                        {
+                            continue;
+                        }
+
+                        bool isTabRule = instantTab
+                            ? DimensionPortalVersions.IsInstantaneousItem(rule.AccessKind)
+                            : DimensionPortalVersions.IsUserAccessible(rule.AccessKind);
+                        if (isTabRule)
+                        {
+                            Undo.RecordObject(rule, "Portal Version Enabled");
+                            rule.SetEnabled(next);
+                            EditorUtility.SetDirty(rule);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The instant portal is spawned by an item — show which one, with a jump to its editor
+        /// in the Resources section.
+        /// </summary>
+        private void DrawInstantPortalLinkedItemRow()
+        {
+            DimensionPortalAccessRuleAsset[] rules = selectedTemplate == null
+                ? null
+                : selectedTemplate.PortalAccessRules;
+            if (rules == null)
+            {
+                return;
+            }
+
+            string itemId = null;
+            for (int i = 0; i < rules.Length; i++)
+            {
+                DimensionPortalAccessRuleAsset rule = rules[i];
+                if (rule != null &&
+                    DimensionPortalVersions.IsInstantaneousItem(rule.AccessKind) &&
+                    !string.IsNullOrEmpty(rule.PortalItemObjectId))
+                {
+                    itemId = rule.PortalItemObjectId;
+                    break;
+                }
+            }
+
+            if (itemId == null)
+            {
+                return;
+            }
+
+            DimensionItemAsset linkedItem = null;
+            DimensionItemAsset[] items = selectedTemplate.GlobalItems;
+            if (items != null)
+            {
+                for (int i = 0; i < items.Length; i++)
+                {
+                    if (items[i] != null &&
+                        string.Equals(items[i].ItemId, itemId, System.StringComparison.Ordinal))
+                    {
+                        linkedItem = items[i];
+                        break;
+                    }
+                }
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(
+                new GUIContent("Linked item", "The item that spawns this portal when used."),
+                GUILayout.Width(70f));
+            string displayText = linkedItem != null && !string.IsNullOrEmpty(linkedItem.DisplayName)
+                ? linkedItem.DisplayName + "  (" + itemId + ")"
+                : itemId;
+            EditorGUILayout.SelectableLabel(
+                displayText,
+                EditorStyles.textField,
+                GUILayout.Height(EditorGUIUtility.singleLineHeight));
+            using (new EditorGUI.DisabledScope(linkedItem == null))
+            {
+                if (GUILayout.Button(
+                    new GUIContent(
+                        "Go",
+                        linkedItem == null
+                            ? "The item asset does not exist yet — run Generate Item Prefab in Resources first."
+                            : "Open this item in the Resources section."),
+                    GUILayout.Width(36f)))
+                {
+                    Selection.activeObject = linkedItem;
+                    EditorGUIUtility.PingObject(linkedItem);
+                    RequestSectionChange("resources");
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(2f);
+        }
+
         private void DrawPortalEditor()
         {
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            portalStudioTab = GUILayout.Toolbar(
+                portalStudioTab,
+                new[]
+                {
+                    new GUIContent(
+                        "Placed Portal",
+                        "The static portal that you can place down, and its indestructible brother that generates on the other side."),
+                    new GUIContent(
+                        "Instant Portal",
+                        "Your friendly neighborhood pocket portal.")
+                },
+                EditorStyles.toolbarButton,
+                GUILayout.Width(280f));
+            GUILayout.FlexibleSpace();
+            DrawPortalVersionEnabledToggle(portalStudioTab == 1);
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(4f);
+
+            if (portalStudioTab == 1)
+            {
+                DrawInstantPortalLinkedItemRow();
+                DrawInstantPortalEditor();
+                return;
+            }
+
             DimensionPortalVisualProfileAsset profile = selectedTemplate.PortalVisualProfile;
             if (profile == null)
             {
@@ -1600,6 +1813,244 @@ namespace ExpandNullforge.EditorTools
         {
             initializedPortalTemplate = null;
             initializedPortalProfile = null;
+            initializedItemPortalTemplate = null;
+            initializedItemPortalProfile = null;
+        }
+
+        private void DrawInstantPortalEditor()
+        {
+            DimensionPortalVisualProfileAsset profile = selectedTemplate.ItemPortalVisualProfile;
+            if (profile == null)
+            {
+                QueueItemPortalVisualProfileSetup();
+            }
+            profile = selectedTemplate.ItemPortalVisualProfile;
+
+            if (profile == null)
+            {
+                EditorGUILayout.HelpBox(
+                    itemPortalVisualProfileSetupQueued
+                        ? "Preparing and assigning this dimension's frameless instant-portal visual profile."
+                        : "The dashboard could not create or assign this dimension's instant portal profile.",
+                    itemPortalVisualProfileSetupQueued
+                        ? MessageType.Info
+                        : MessageType.Warning);
+                if (GUILayout.Button("Retry Automatic Profile Setup", GUILayout.Width(260f)))
+                {
+                    CreateItemPortalVisualProfileAsset();
+                }
+
+                return;
+            }
+
+            EnsureItemPortalProfileInitializedOnce(profile);
+
+            if (itemPortalAppearanceStudio == null)
+            {
+                itemPortalAppearanceStudio = new DimensionPortalAppearanceStudio();
+                itemPortalAppearanceStudio.ConfigureInstantPortalMode();
+            }
+
+            DimensionPortalAppearanceStudio.DrawResult studioResult =
+                itemPortalAppearanceStudio.Draw(
+                    selectedTemplate,
+                    profile,
+                    Mathf.Max(360f, position.width - SidebarWidth - 40f),
+                    position.height);
+            if (!string.IsNullOrEmpty(studioResult.Message))
+            {
+                lastEditorActionMessage = studioResult.Message;
+                lastEditorActionType = studioResult.MessageType;
+            }
+
+            if (studioResult.TemplateChanged)
+            {
+                RebuildWorkspace();
+                Repaint();
+            }
+
+            if (studioResult.UseProfileRequested != null)
+            {
+                DimensionPortalVisualProfileAsset requestedProfile =
+                    studioResult.UseProfileRequested;
+                bool switched = studioResult.CanApply &&
+                    TryUseItemPortalVisualProfile(requestedProfile, out _);
+                itemPortalAppearanceStudio.NotifyRuntimeSyncResult(
+                    requestedProfile,
+                    switched);
+            }
+            else if (studioResult.RuntimeSyncRequested)
+            {
+                DimensionPortalVisualProfileAsset boundProfile =
+                    selectedTemplate.ItemPortalVisualProfile;
+                bool synchronized = studioResult.CanApply &&
+                    TryApplyPortalVisualChanges(out _);
+                itemPortalAppearanceStudio.NotifyRuntimeSyncResult(
+                    boundProfile,
+                    synchronized);
+            }
+
+            if (!studioResult.CanApply)
+            {
+                EditorGUILayout.HelpBox(
+                    "Resolve the Portal Studio errors before applying generated portal assets.",
+                    MessageType.Error);
+            }
+        }
+
+        private void EnsureItemPortalProfileInitializedOnce(
+            DimensionPortalVisualProfileAsset profile)
+        {
+            if (profile == null ||
+                (initializedItemPortalTemplate == selectedTemplate &&
+                 initializedItemPortalProfile == profile))
+            {
+                return;
+            }
+
+            initializedItemPortalTemplate = selectedTemplate;
+            initializedItemPortalProfile = profile;
+            if (DimensionPortalArtworkEditorUtility.EnsureProfileInitialized(
+                    selectedTemplate,
+                    profile,
+                    out string artworkInitializationMessage) &&
+                !string.IsNullOrEmpty(artworkInitializationMessage))
+            {
+                lastEditorActionMessage = artworkInitializationMessage;
+                lastEditorActionType = MessageType.Info;
+            }
+        }
+
+        private void CreateItemPortalVisualProfileAsset()
+        {
+            if (selectedTemplate == null)
+            {
+                return;
+            }
+
+            bool created;
+            string message;
+            DimensionPortalVisualProfileAsset profile =
+                DimensionPortalVisualProfileEditorUtility.EnsureItemAssigned(
+                    selectedTemplate,
+                    true,
+                    true,
+                    out created,
+                    out message);
+            lastEditorActionMessage = message;
+            lastEditorActionType = profile == null
+                ? MessageType.Warning
+                : MessageType.Info;
+            if (profile != null)
+            {
+                Selection.activeObject = profile;
+                EditorGUIUtility.PingObject(profile);
+                RebuildWorkspace();
+            }
+
+            Repaint();
+        }
+
+        private void QueueItemPortalVisualProfileSetup()
+        {
+            if (selectedTemplate == null || itemPortalVisualProfileSetupQueued)
+            {
+                return;
+            }
+
+            itemPortalVisualProfileSetupQueued = true;
+            DimensionTemplateAsset template = selectedTemplate;
+            EditorApplication.delayCall += () =>
+            {
+                itemPortalVisualProfileSetupQueued = false;
+                if (this == null || template == null || selectedTemplate != template)
+                {
+                    return;
+                }
+
+                bool created;
+                string message;
+                DimensionPortalVisualProfileAsset profile =
+                    DimensionPortalVisualProfileEditorUtility.EnsureItemAssigned(
+                        template,
+                        true,
+                        true,
+                        out created,
+                        out message);
+                if (this == null)
+                {
+                    return;
+                }
+
+                lastEditorActionMessage = message;
+                lastEditorActionType = profile == null
+                    ? MessageType.Warning
+                    : MessageType.Info;
+                if (profile != null && selectedTemplate == template)
+                {
+                    RebuildWorkspace();
+                }
+
+                Repaint();
+            };
+        }
+
+        private bool TryUseItemPortalVisualProfile(
+            DimensionPortalVisualProfileAsset requestedProfile,
+            out string message)
+        {
+            message = string.Empty;
+            if (selectedTemplate == null || requestedProfile == null)
+            {
+                message = "Select a Dimension Asset and portal profile before using it.";
+                SetLastEditorAction(message, MessageType.Warning);
+                return false;
+            }
+
+            DimensionTemplateAsset template = selectedTemplate;
+            if (!DimensionPortalPresetEditorUtility.IsPresetOwnedByTemplate(
+                    template,
+                    requestedProfile))
+            {
+                message =
+                    "The selected portal profile does not belong to this Dimension Asset.";
+                SetLastEditorAction(message, MessageType.Error);
+                return false;
+            }
+
+            DimensionPortalVisualProfileAsset previousProfile =
+                template.ItemPortalVisualProfile;
+            if (previousProfile == requestedProfile)
+            {
+                message = "This portal profile is already in use.";
+                SetLastEditorAction(message, MessageType.Info);
+                return true;
+            }
+
+            Undo.RecordObject(template, "Use Instant Portal Profile");
+            template.SetItemPortalVisualProfile(requestedProfile);
+            EditorUtility.SetDirty(template);
+            AssetDatabase.SaveAssets();
+            ResetPortalProfileInitializationCache();
+
+            if (TryApplyPortalVisualChanges(out message))
+            {
+                RebuildWorkspace();
+                Repaint();
+                return true;
+            }
+
+            template.SetItemPortalVisualProfile(previousProfile);
+            EditorUtility.SetDirty(template);
+            AssetDatabase.SaveAssets();
+            ResetPortalProfileInitializationCache();
+            RebuildWorkspace();
+            message = string.IsNullOrEmpty(message)
+                ? "The instant portal profile could not be applied. The previous profile remains in use."
+                : message + " The previous instant portal profile remains in use.";
+            SetLastEditorAction(message, MessageType.Error);
+            Repaint();
+            return false;
         }
 
         private void CreatePortalVisualProfileAsset()
@@ -1754,11 +2205,30 @@ namespace ExpandNullforge.EditorTools
                 return false;
             }
 
+            if (itemPortalAppearanceStudio != null &&
+                !itemPortalAppearanceStudio.FlushPendingFrameTextureUpdate(
+                    out string itemFrameTextureError))
+            {
+                message = itemFrameTextureError;
+                SetLastEditorAction(message, MessageType.Error);
+                return false;
+            }
+
             if (!DimensionPortalArtworkEditorUtility.FlushPending(
                     selectedTemplate.PortalVisualProfile,
                     out string artworkError))
             {
                 message = artworkError;
+                SetLastEditorAction(message, MessageType.Error);
+                return false;
+            }
+
+            if (selectedTemplate.ItemPortalVisualProfile != null &&
+                !DimensionPortalArtworkEditorUtility.FlushPending(
+                    selectedTemplate.ItemPortalVisualProfile,
+                    out string itemArtworkError))
+            {
+                message = itemArtworkError;
                 SetLastEditorAction(message, MessageType.Error);
                 return false;
             }
@@ -1829,10 +2299,23 @@ namespace ExpandNullforge.EditorTools
                     Field("visualEffectId", "Visual effect ID"),
                     Field("audioCueId", "Audio cue ID"),
                     Field("priority", "Priority"),
-                    Field("enabled", "Enabled"),
                     Field("interactable", "Interactable"),
-                    Field("requiredItems", "Required activation items"));
+                    Field("requiredItems", "Required activation items"),
+                    Field("craftable", "Craftable"),
+                    Field("craftingStationObjectId", "Crafting station object id (blank = Wooden Workbench)"),
+                    Field("generatedInWorld", "Generated in world (placed portal only)"),
+                    Field("droppable", "Droppable from mobs/bosses"),
+                    Field("dropTargets", "Drop targets"),
+                    Field("portalItemObjectId", "Portal item object id (item portal only)"),
+                    Field("itemPortalDurationSeconds", "Item portal open duration seconds (item portal only)"));
             }
+
+            EditorGUILayout.HelpBox(
+                "Portal versions: the placed portal (V1) and the instantaneous item portal (V2) can " +
+                "both be enabled and co-exist in the same world — players then choose freely. Each is " +
+                "optional, but at least one must stay enabled — the generator re-enables the placed " +
+                "portal if you turn both off. The generated return portal (V3) is always present.",
+                MessageType.Info);
         }
 
         private void DrawLayoutEditor()
@@ -2179,6 +2662,16 @@ namespace ExpandNullforge.EditorTools
                 RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateItem(selectedTemplate, DimensionItemKind.BaseItem));
             }
 
+            int missingPortalItems =
+                DimensionFrameworkAuthoringAssetUtility.CountMissingPortalItems(selectedTemplate);
+            if (missingPortalItems > 0 &&
+                GUILayout.Button(
+                    "Create Portal Item" + (missingPortalItems == 1 ? string.Empty : "s"),
+                    GUILayout.Width(150f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.EnsurePortalItems(selectedTemplate));
+            }
+
             if (GUILayout.Button("Add Recipe", GUILayout.Width(100f)))
             {
                 RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateRecipe(selectedTemplate));
@@ -2486,11 +2979,38 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>
+        /// Fills empty portal-item icon slots with the framework default icons once, per template, so a
+        /// creator sees them applied on view without dragging. Keeps retrying until the default sprites
+        /// have imported (so it self-heals right after the PNGs are dropped in), then stops.
+        /// </summary>
+        private void TryApplyDefaultPortalIcons()
+        {
+            if (selectedTemplate == null)
+            {
+                return;
+            }
+
+            int id = selectedTemplate.GetInstanceID();
+            if (portalIconsScannedTemplates.Contains(id))
+            {
+                return;
+            }
+
+            DimensionFrameworkAuthoringAssetUtility.ApplyDefaultPortalIcons(selectedTemplate);
+            if (DimensionFrameworkAuthoringAssetUtility.DefaultPortalIconsExist())
+            {
+                portalIconsScannedTemplates.Add(id);
+            }
+        }
+
+        /// <summary>
         /// Generation bar for items: reports how many are ready and how many are blocked, and
         /// only offers the action when there is something valid to build.
         /// </summary>
         private void DrawItemGenerationBar()
         {
+            TryApplyDefaultPortalIcons();
+
             DimensionItemAsset[] items = selectedTemplate == null
                 ? null
                 : selectedTemplate.GlobalItems;
@@ -2517,6 +3037,11 @@ namespace ExpandNullforge.EditorTools
                     }
                 }
             }
+
+            // Default items for enabled item portals (V2) are created on generate and are valid by
+            // construction, so count them as ready — this also enables the button when the only item to
+            // build is an item portal the creator has not hand-authored yet.
+            ready += DimensionFrameworkAuthoringAssetUtility.CountMissingPortalItems(selectedTemplate);
 
             GUILayout.Space(4f);
             EditorGUILayout.BeginHorizontal();
@@ -2565,8 +3090,21 @@ namespace ExpandNullforge.EditorTools
             }
 
             string outputFolder = modRoot + "/Items";
+
+            // Make sure every enabled item portal (V2) has a real, editable item asset before we build,
+            // creating a default for any that is missing. Persisting it (rather than synthesizing a
+            // throwaway) is what lets the creator open it in the item list and assign an icon/recipe.
+            DimensionFrameworkAuthoringAssetActionResult portalItemResult =
+                DimensionFrameworkAuthoringAssetUtility.EnsurePortalItems(selectedTemplate);
+            DimensionFrameworkAuthoringAssetUtility.ApplyDefaultPortalIcons(selectedTemplate);
+            int portalItemsCreated =
+                portalItemResult != null && portalItemResult.CreatedObject != null ? 1 : 0;
+
+            // Re-read after the ensure step so any freshly created portal items are included.
+            DimensionItemAsset[] itemsToGenerate = selectedTemplate.GlobalItems;
+
             DimensionItemGenerationReport report = DimensionItemGenerator.Generate(
-                items, outputFolder, selectedTemplate.GlobalRecipes);
+                itemsToGenerate, outputFolder, selectedTemplate.GlobalRecipes);
 
             for (int i = 0; i < report.Errors.Count; i++)
             {
@@ -2578,9 +3116,14 @@ namespace ExpandNullforge.EditorTools
                 Debug.LogWarning("[Dimensions API] " + report.Warnings[i]);
             }
 
+            string portalItemSummary = portalItemsCreated > 0
+                ? "\n\n" + portalItemResult.Message +
+                  " Open it under Resources ▸ Items to set its Icon sprite, then generate again."
+                : string.Empty;
+
             EditorUtility.DisplayDialog(
                 "Generate Items",
-                report.Summarize() + "\n\nOutput: " + outputFolder +
+                report.Summarize() + portalItemSummary + "\n\nOutput: " + outputFolder +
                 (report.HasProblems
                     ? "\n\nDetails were written to the Console."
                     : string.Empty),
@@ -2604,7 +3147,8 @@ namespace ExpandNullforge.EditorTools
                 Field("archetype", "Archetype"),
                 Field("kind", "Kind"),
                 Field("description", "Description"),
-                Field("iconSprite", "Icon sprite"),
+                Field("iconSprite", "Icon sprite (16x16)"),
+                Field("smallIconSprite", "Small icon (in-hand, 10x10)"),
                 Field("iconId", "Icon ID (fallback)"),
                 Field("objectId", "Object ID")
             };
@@ -4247,8 +4791,10 @@ namespace ExpandNullforge.EditorTools
 
             bool requiresGuard =
                 activeSectionId == "portals" &&
-                portalAppearanceStudio != null &&
-                portalAppearanceStudio.HasPendingChanges;
+                ((portalAppearanceStudio != null &&
+                  portalAppearanceStudio.HasPendingChanges) ||
+                 (itemPortalAppearanceStudio != null &&
+                  itemPortalAppearanceStudio.HasPendingChanges));
             if (!requiresGuard)
             {
                 transition();
@@ -4276,55 +4822,70 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
-            if (portalAppearanceStudio == null ||
-                !portalAppearanceStudio.HasPendingChanges)
+            if (!TryResolvePendingStudioChangesForTransition(
+                    portalAppearanceStudio,
+                    selectedTemplate == null
+                        ? null
+                        : selectedTemplate.PortalVisualProfile) ||
+                !TryResolvePendingStudioChangesForTransition(
+                    itemPortalAppearanceStudio,
+                    selectedTemplate == null
+                        ? null
+                        : selectedTemplate.ItemPortalVisualProfile))
             {
-                transition();
                 return;
+            }
+
+            transition();
+        }
+
+        private bool TryResolvePendingStudioChangesForTransition(
+            DimensionPortalAppearanceStudio studio,
+            DimensionPortalVisualProfileAsset boundProfile)
+        {
+            if (studio == null || !studio.HasPendingChanges)
+            {
+                return true;
             }
 
             bool applyAndLeave = EditorUtility.DisplayDialog(
                 "Unsaved Portal Studio changes",
-                "Leaving '" + portalAppearanceStudio.EditingProfileDisplayName +
+                "Leaving '" + studio.EditingProfileDisplayName +
                 "' now will revert its unsaved changes.",
                 "Apply and leave",
                 "Leave without applying");
             if (applyAndLeave)
             {
-                if (!portalAppearanceStudio.SavePendingChanges(
+                if (!studio.SavePendingChanges(
                         out bool runtimeUpdateRequired,
                         out string saveMessage))
                 {
                     SetLastEditorAction(saveMessage, MessageType.Error);
                     Repaint();
-                    return;
+                    return false;
                 }
 
                 SetLastEditorAction(saveMessage, MessageType.Info);
                 if (runtimeUpdateRequired)
                 {
-                    DimensionPortalVisualProfileAsset boundProfile =
-                        selectedTemplate == null
-                            ? null
-                            : selectedTemplate.PortalVisualProfile;
                     bool synchronized = TryApplyPortalVisualChanges(out _);
-                    portalAppearanceStudio.NotifyRuntimeSyncResult(
+                    studio.NotifyRuntimeSyncResult(
                         boundProfile,
                         synchronized);
                     if (!synchronized)
                     {
-                        return;
+                        return false;
                     }
                 }
             }
             else
             {
-                if (!portalAppearanceStudio.DiscardPendingChanges(
+                if (!studio.DiscardPendingChanges(
                         out string discardMessage))
                 {
                     SetLastEditorAction(discardMessage, MessageType.Error);
                     Repaint();
-                    return;
+                    return false;
                 }
 
                 if (!string.IsNullOrEmpty(discardMessage))
@@ -4333,7 +4894,7 @@ namespace ExpandNullforge.EditorTools
                 }
             }
 
-            transition();
+            return true;
         }
 
         private void SetLastEditorAction(string message, MessageType type)
