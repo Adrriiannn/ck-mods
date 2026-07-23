@@ -6,8 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 0
-    path: 
-    guid: 00000000000000000000000000000000
+    path: Assets/SmartSplitterMod/SmartSplitterBootstrap.unity
+    guid: 446b31cf369476e4eb388e4f9fa68609
   m_configObjects:
-    com.unity.addressableassets: {fileID: 11400000, guid: 62ffbfedd75f9de478b526bb3275f780,
+    com.unity.addressableassets: {fileID: 11400000, guid: 5c7edc00be4cbb84c8a8b83b1cf3e855,
       type: 2}
+  m_UseUCBPForAssetBundles: 0

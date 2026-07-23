@@ -13,6 +13,8 @@ MonoBehaviour:
   m_Name: ModPaths
   m_EditorClassIdentifier: 
   latestBuildOrInstallPaths:
-  - E:\SteamLibrary\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\SmartSplitterMod
-  - C:\Users\MARIUS~1\AppData\Local\Temp\BuiltMods\SmartSplitterMod
-  - E:\SteamLibrary\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\ConveyorTunnelMod
+  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\nullforgetest
+  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\NullforgeTest
+  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\Nullforge
+  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\Nullforge3
+  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\ExpandNullforge
