@@ -57,6 +57,17 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private DimensionPortalAccessRuleAsset[] portalAccessRules = new DimensionPortalAccessRuleAsset[0];
         [SerializeField] private float portalActivationChargeSeconds = 30.0f;
         [SerializeField] private DimensionPortalVisualProfileAsset portalVisualProfile;
+        [SerializeField] private DimensionPortalVisualProfileAsset itemPortalVisualProfile;
+
+        // Portal sounds. Keys are either a game SfxID name or a Sound Library (Addressables)
+        // clip key. The placed portal only ever plays an activation sound (it never despawns
+        // and a permanent loop would wear players down); the instant portal chooses ONE mode:
+        // Peak (activation + deactivation one-shots) or Loop (a bed while it stands open).
+        [SerializeField] private string placedPortalActivationSound = string.Empty;
+        [SerializeField] private int instantPortalSoundMode; // 0 = Peak, 1 = Loop
+        [SerializeField] private string instantPortalActivationSound = "AF_portal_appear";
+        [SerializeField] private string instantPortalDeactivationSound = "AF_portal_collapse";
+        [SerializeField] private string instantPortalLoopSound = string.Empty;
 
         public string DimensionId
         {
@@ -196,6 +207,56 @@ namespace ExpandNullforge.Authoring
         public DimensionPortalVisualProfileAsset PortalVisualProfile
         {
             get { return portalVisualProfile; }
+        }
+
+        /// <summary>
+        /// Optional dedicated look for the instant item portal (V2). When unassigned, the
+        /// generator falls back to <see cref="PortalVisualProfile"/> with the frameless
+        /// layers forced off.
+        /// </summary>
+        public DimensionPortalVisualProfileAsset ItemPortalVisualProfile
+        {
+            get { return itemPortalVisualProfile; }
+        }
+
+        public string PlacedPortalActivationSound
+        {
+            get { return placedPortalActivationSound ?? string.Empty; }
+        }
+
+        /// <summary>0 = Peak (activation/deactivation one-shots), 1 = Loop (open-portal bed).</summary>
+        public int InstantPortalSoundMode
+        {
+            get { return Mathf.Clamp(instantPortalSoundMode, 0, 1); }
+        }
+
+        public string InstantPortalActivationSound
+        {
+            get { return instantPortalActivationSound ?? string.Empty; }
+        }
+
+        public string InstantPortalDeactivationSound
+        {
+            get { return instantPortalDeactivationSound ?? string.Empty; }
+        }
+
+        public string InstantPortalLoopSound
+        {
+            get { return instantPortalLoopSound ?? string.Empty; }
+        }
+
+        public void SetPortalSoundSettings(
+            string newPlacedActivationSound,
+            int newInstantSoundMode,
+            string newInstantActivationSound,
+            string newInstantDeactivationSound,
+            string newInstantLoopSound)
+        {
+            placedPortalActivationSound = newPlacedActivationSound ?? string.Empty;
+            instantPortalSoundMode = Mathf.Clamp(newInstantSoundMode, 0, 1);
+            instantPortalActivationSound = newInstantActivationSound ?? string.Empty;
+            instantPortalDeactivationSound = newInstantDeactivationSound ?? string.Empty;
+            instantPortalLoopSound = newInstantLoopSound ?? string.Empty;
         }
 
         public DimensionBounds ReservedLocalBounds
@@ -367,6 +428,11 @@ namespace ExpandNullforge.Authoring
         public void SetPortalVisualProfile(DimensionPortalVisualProfileAsset visualProfile)
         {
             portalVisualProfile = visualProfile;
+        }
+
+        public void SetItemPortalVisualProfile(DimensionPortalVisualProfileAsset visualProfile)
+        {
+            itemPortalVisualProfile = visualProfile;
         }
 
         public DimensionDefinition ToDimensionDefinition()

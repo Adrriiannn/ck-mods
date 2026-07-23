@@ -4,6 +4,7 @@
     "references": [
         "ExpandNullforge.API",
         "UnityEngine.UIElementsModule",
+        "Unity.Addressables",
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Entities",
@@ -16,6 +17,7 @@
         "Unity.Physics",
         "Unity.Physics.Hybrid",
         "Unity.Properties",
+        "Unity.ResourceManager",
         "Unity.Transforms",
         "PugMod.SDK"
     ],
@@ -78,6 +80,7 @@
         "MotionSmoothing.Converters.dll",
         "MotionSmoothing.dll",
         "Newtonsoft.Json.dll",
+        "0Harmony.dll",
         "ObjectLookup.Components.dll",
         "ObjectLookup.Converters.dll",
         "ObjectLookup.dll",
