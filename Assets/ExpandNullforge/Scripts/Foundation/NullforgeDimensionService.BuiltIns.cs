@@ -14,7 +14,14 @@ namespace ExpandNullforge.Foundation
     private const int MaximumRuntimeLoadTickets = 256;
     private const int MaximumRuntimeLoadCells = 256;
     private const float MinimumLoadRadius = 12.0f;
-    private const float LoadedStabilizationSeconds = 1.0f;
+    // Settle window after a load area's parent submaps are first observed before the area is
+    // reported resident/simulating. This is only a streaming-stability cushion — tile generation
+    // is gated separately (the generation provider reaches Ready before a load ticket stabilizes),
+    // so it does not need to guard against unwritten terrain. It was 1.0s, which put a flat ~1s tax
+    // on every dimension entry (the return trip skips this pipeline entirely, which is why entry
+    // felt sluggish next to the near-instant return); 0.25s keeps a small cushion — about one extra
+    // reconcile tick (RuntimeLoadReconcileIntervalSeconds = 0.20s) — while making entry vanilla-quick.
+    private const float LoadedStabilizationSeconds = 0.25f;
     private const float DefaultLoadTimeoutSeconds = 30.0f;
     private const float GenerationLoadTimeoutSeconds = 60.0f;
     private const float RuntimeLoadReconcileIntervalSeconds = 0.20f;

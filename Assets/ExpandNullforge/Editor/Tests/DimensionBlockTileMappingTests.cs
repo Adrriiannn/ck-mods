@@ -26,6 +26,10 @@ namespace ExpandNullforge.EditorTools
                 Is.EqualTo(TileType.water));
             Assert.That(DimensionBlockTileMapping.ToTileType(DimensionTileRole.Vein),
                 Is.EqualTo(TileType.ore));
+            // The engine's solid roof is implicit; the ceiling layer's paintable tile is the
+            // skylight opening. TileType.roof is obsolete and must stay out of the mapping.
+            Assert.That(DimensionBlockTileMapping.ToTileType(DimensionTileRole.Ceiling),
+                Is.EqualTo(TileType.roofHole));
         }
 
         [Test]

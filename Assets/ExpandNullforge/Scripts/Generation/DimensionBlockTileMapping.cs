@@ -30,7 +30,11 @@ namespace ExpandNullforge.Generation
                 case DimensionTileRole.Liquid:
                     return TileType.water;
                 case DimensionTileRole.Ceiling:
-                    return TileType.roof;
+                    // Core Keeper draws the solid cave roof implicitly everywhere; the only
+                    // paintable roof-family tile is the opening cut into it (TileType.roof is
+                    // obsolete and unused by the engine). A Ceiling-role block therefore paints
+                    // a skylight, not a solid overhead tile.
+                    return TileType.roofHole;
                 case DimensionTileRole.Vein:
                     return TileType.ore;
                 case DimensionTileRole.Decoration:

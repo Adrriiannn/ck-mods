@@ -2,23 +2,35 @@ using System.Collections.Generic;
 using ExpandNullforge.Api;
 using ExpandNullforge.Authoring;
 using ExpandNullforge.Foundation;
+using PugTilemap;
+using Unity.Collections;
 using Unity.Entities;
+using UnityEngine;
 
 namespace ExpandNullforge.Generation
 {
     /// <summary>
-    /// Generates a dimension from its painted tile map. Plugs into the same orchestration as the
-    /// safe-platform provider: it is ticked on the main thread, but the actual tile writing is
-    /// handed to <see cref="DimensionTileMapGenerationSystem"/>, which runs a Burst job on Core
-    /// Keeper's own <c>TileAccessor.Set</c> path. The provider only computes the writes (cheap,
-    /// pure) and polls the system for completion.
+    /// Generates a dimension from its painted tile map. It paints through Core Keeper's
+    /// <see cref="EntityUtility.AddTile"/> + <see cref="TileUpdateBuffer"/> path — the same one the
+    /// safe-platform provider uses — because that path <em>requests the target chunk</em> when it is
+    /// not loaded yet, which a fresh dimension area always is. (An earlier Burst
+    /// <c>TileAccessor.Set</c> fast-path could only write into already-loaded chunks, so every tile
+    /// of a just-created area deferred forever and generation never completed.) Writes are throttled
+    /// per tick so a full-scale biome does not spike the frame, then a short settle delay lets the
+    /// tile-update commands flush before the area is reported Ready.
     ///
     /// The map comes from <see cref="DimensionTileMapRegistry"/>, populated when the dimension's
     /// content loads. A dimension with no registered map is not this provider's job.
     /// </summary>
     public sealed class DimensionTileMapGenerationProvider : IDimensionGenerationProvider
     {
-        private readonly HashSet<string> submitted = new HashSet<string>();
+        private const int MaxTilesPerTick = 384;
+        private const int ReadyDelayFrames = 2;
+
+        private readonly Dictionary<string, PaintJob> jobs = new Dictionary<string, PaintJob>();
+
+        private World cachedTileUpdateWorld;
+        private Entity cachedTileUpdateEntity;
 
         public string ProviderId => DimensionGenerationProviderIds.TileMap;
 
@@ -50,17 +62,9 @@ namespace ExpandNullforge.Generation
                     "No tile map is registered for dimension '" + context.Dimension.Id + "'.");
             }
 
-            DimensionTileMapGenerationSystem system =
-                context.ServerWorld.GetOrCreateSystemManaged<DimensionTileMapGenerationSystem>();
-            if (system == null)
-            {
-                return DimensionGenerationProviderResult.Failed(
-                    "The tile-map generation system could not be created.");
-            }
-
             string key = BuildKey(context.Dimension.Id, context.Area.LocalBounds);
 
-            if (!submitted.Contains(key))
+            if (!jobs.TryGetValue(key, out PaintJob job))
             {
                 DimensionTileMapCompileResult compiled = DimensionTileMapCompiler.Compile(
                     map.EnumeratePlacements(),
@@ -79,44 +83,111 @@ namespace ExpandNullforge.Generation
                         "No tiles to generate for this area.");
                 }
 
-                DimensionFrameworkLog.Warning(
-                    "[ExpandNullforge][tilemap] provider generating '" + context.Dimension.Id +
-                    "': " + compiled.WriteCount + " writes, " + compiled.Skipped.Count + " skipped.");
-                system.Submit(key, compiled.Writes);
-                submitted.Add(key);
-                return DimensionGenerationProviderResult.Progress(
-                    DimensionGenerationState.GeneratingTerrain,
-                    0.1f,
-                    "Writing " + compiled.WriteCount + " tiles.");
+                job = new PaintJob(compiled.Writes);
+                jobs[key] = job;
             }
 
-            if (!system.TryGetStatus(key, out bool done, out int deferred))
+            if (job.WaitingForTileUpdate)
             {
-                // The batch is gone but we still think it is pending — treat as complete rather
-                // than looping forever.
-                submitted.Remove(key);
-                return DimensionGenerationProviderResult.Ready("Tile-map generation complete.");
-            }
+                if (Time.frameCount < job.ReadyAfterFrame)
+                {
+                    return DimensionGenerationProviderResult.Progress(
+                        DimensionGenerationState.GeneratingTerrain, 0.99f, "Tile-map tiles queued.");
+                }
 
-            if (done)
-            {
-                system.Release(key);
-                submitted.Remove(key);
+                jobs.Remove(key);
                 return DimensionGenerationProviderResult.Ready("Tile-map terrain generated.");
             }
 
+            if (!TryGetTileUpdateBuffer(context.ServerWorld, out DynamicBuffer<TileUpdateBuffer> tileUpdates))
+            {
+                return DimensionGenerationProviderResult.Progress(
+                    DimensionGenerationState.GeneratingTerrain, job.Progress01,
+                    "Waiting for the tile update buffer.");
+            }
+
+            int painted = 0;
+            while (job.NextIndex < job.Writes.Count && painted < MaxTilesPerTick)
+            {
+                DimensionResolvedTileWrite write = job.Writes[job.NextIndex];
+                EntityUtility.AddTile(
+                    write.Tileset,
+                    write.TileType,
+                    write.AbsolutePosition,
+                    true,
+                    tileUpdates);
+                job.NextIndex++;
+                painted++;
+            }
+
+            if (job.NextIndex >= job.Writes.Count)
+            {
+                // All tiles queued; give the tile-update commands a couple of frames to flush before
+                // the area is reported Ready so travel does not land on half-written terrain.
+                job.WaitingForTileUpdate = true;
+                job.ReadyAfterFrame = Time.frameCount + ReadyDelayFrames;
+                return DimensionGenerationProviderResult.Progress(
+                    DimensionGenerationState.GeneratingTerrain, 0.99f, "Tile-map tiles queued.");
+            }
+
             return DimensionGenerationProviderResult.Progress(
-                DimensionGenerationState.GeneratingTerrain,
-                0.6f,
-                deferred > 0
-                    ? "Waiting for " + deferred + " tiles' chunks to load."
-                    : "Writing tiles.");
+                DimensionGenerationState.GeneratingTerrain, job.Progress01, "Writing tile-map terrain.");
         }
 
-        /// <summary>Drops any tracked keys, e.g. when the framework tears down generation state.</summary>
+        /// <summary>Drops any tracked jobs, e.g. when the framework tears down generation state.</summary>
         public void ClearJobs()
         {
-            submitted.Clear();
+            jobs.Clear();
+            cachedTileUpdateWorld = null;
+            cachedTileUpdateEntity = Entity.Null;
+        }
+
+        private bool TryGetTileUpdateBuffer(
+            World serverWorld,
+            out DynamicBuffer<TileUpdateBuffer> tileUpdates)
+        {
+            if (serverWorld == null || !serverWorld.IsCreated)
+            {
+                tileUpdates = default(DynamicBuffer<TileUpdateBuffer>);
+                return false;
+            }
+
+            EntityManager entityManager = serverWorld.EntityManager;
+            if (cachedTileUpdateWorld == serverWorld &&
+                cachedTileUpdateEntity != Entity.Null &&
+                entityManager.Exists(cachedTileUpdateEntity) &&
+                entityManager.HasBuffer<TileUpdateBuffer>(cachedTileUpdateEntity))
+            {
+                tileUpdates = entityManager.GetBuffer<TileUpdateBuffer>(cachedTileUpdateEntity);
+                return true;
+            }
+
+            cachedTileUpdateWorld = serverWorld;
+            cachedTileUpdateEntity = Entity.Null;
+            using (EntityQuery query =
+                entityManager.CreateEntityQuery(ComponentType.ReadWrite<TileUpdateBuffer>()))
+            {
+                if (query.IsEmpty)
+                {
+                    Entity entity = entityManager.CreateEntity();
+                    cachedTileUpdateEntity = entity;
+                    tileUpdates = entityManager.AddBuffer<TileUpdateBuffer>(entity);
+                    return true;
+                }
+
+                using (NativeArray<Entity> entities = query.ToEntityArray(Allocator.Temp))
+                {
+                    if (entities.Length == 0)
+                    {
+                        tileUpdates = default(DynamicBuffer<TileUpdateBuffer>);
+                        return false;
+                    }
+
+                    cachedTileUpdateEntity = entities[0];
+                    tileUpdates = entityManager.GetBuffer<TileUpdateBuffer>(cachedTileUpdateEntity);
+                    return true;
+                }
+            }
         }
 
         private static string BuildKey(string dimensionId, DimensionBounds bounds)
@@ -124,6 +195,29 @@ namespace ExpandNullforge.Generation
             return (dimensionId ?? string.Empty) +
                    "|" + bounds.Min.x + "," + bounds.Min.y +
                    "|" + bounds.MaxExclusive.x + "," + bounds.MaxExclusive.y;
+        }
+
+        private sealed class PaintJob
+        {
+            public readonly List<DimensionResolvedTileWrite> Writes;
+            public int NextIndex;
+            public bool WaitingForTileUpdate;
+            public int ReadyAfterFrame;
+
+            public PaintJob(List<DimensionResolvedTileWrite> writes)
+            {
+                Writes = writes ?? new List<DimensionResolvedTileWrite>();
+            }
+
+            public float Progress01
+            {
+                get
+                {
+                    return Writes.Count <= 0
+                        ? 0f
+                        : Mathf.Clamp((float)NextIndex / Writes.Count, 0f, 0.98f);
+                }
+            }
         }
     }
 }

@@ -372,6 +372,53 @@ namespace ExpandNullforge.Authoring
                 0,
                 true,
                 new DimensionPortalRequiredItemTemplate[0]);
+            // V1 (user-accessible) defaults: craftable at the workbench, not world-generated or
+            // droppable unless the modder opts in.
+            entryRule.ConfigureVersionSettings(
+                true,
+                string.Empty,
+                false,
+                false,
+                new DimensionPortalDropTarget[0],
+                string.Empty,
+                10f);
+
+            // V2 (instantaneous item portal): disabled by default so V1 is the out-of-the-box way
+            // in, but fully seeded so the modder can enable it with one toggle. Its custom item id
+            // is auto-created by the generator.
+            DimensionPortalAccessRuleAsset itemRule =
+                ScriptableObject.CreateInstance<DimensionPortalAccessRuleAsset>();
+            itemRule.name = safeDimensionId + ".portal.item";
+            itemRule.Configure(
+                safeDimensionId + ".portal.item.rule",
+                safeDimensionId + ".portal.item",
+                safeDimensionId + ".portal.item.presentation",
+                safeDisplayName + " Portal (Item)",
+                DimensionIds.Overworld,
+                Vector2.zero,
+                safeDimensionId,
+                Vector2.zero,
+                DimensionPortalAccessKind.InventoryItem,
+                DimensionPortalActivationMode.VanillaCooldown,
+                2.0f,
+                true,
+                true,
+                "Enter " + safeDisplayName,
+                "The portal is still activating.",
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                0,
+                false,
+                new DimensionPortalRequiredItemTemplate[0]);
+            itemRule.ConfigureVersionSettings(
+                true,
+                string.Empty,
+                false,
+                false,
+                new DimensionPortalDropTarget[0],
+                safeDimensionId + ".portal.item.object",
+                10f);
 
             DimensionPortalAccessRuleAsset returnRule =
                 ScriptableObject.CreateInstance<DimensionPortalAccessRuleAsset>();
@@ -398,8 +445,16 @@ namespace ExpandNullforge.Authoring
                 0,
                 true,
                 new DimensionPortalRequiredItemTemplate[0]);
+            returnRule.ConfigureVersionSettings(
+                false,
+                string.Empty,
+                false,
+                false,
+                new DimensionPortalDropTarget[0],
+                string.Empty,
+                10f);
 
-            return new[] { entryRule, returnRule };
+            return new[] { entryRule, itemRule, returnRule };
         }
 
         private static GenerationPassTemplateAsset CreateTerrainPass(

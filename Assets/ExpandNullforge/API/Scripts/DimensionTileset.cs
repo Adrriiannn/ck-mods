@@ -21,7 +21,11 @@ namespace ExpandNullforge.Api
         /// <summary>Liquid surface such as water or lava.</summary>
         Liquid = 3,
 
-        /// <summary>Overhead layer drawn above the play space.</summary>
+        /// <summary>
+        /// Opening in the overhead cave roof (a skylight). Core Keeper draws a solid roof over
+        /// the play space implicitly, so the paintable ceiling-layer tile is the hole that lets
+        /// light through, not a solid overhead block.
+        /// </summary>
         Ceiling = 4,
 
         /// <summary>Non-colliding visual overlay (grass tufts, cracks).</summary>

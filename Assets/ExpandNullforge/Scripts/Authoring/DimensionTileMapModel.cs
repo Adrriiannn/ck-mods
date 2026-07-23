@@ -49,6 +49,19 @@ namespace ExpandNullforge.Authoring
             this.customTilesetId = customTilesetId ?? string.Empty;
         }
 
+        public DimensionMapBlock(
+            string blockId,
+            string displayName,
+            DimensionTileRole role,
+            DimensionBlockTilesetSource tilesetSource,
+            int vanillaTilesetIndex,
+            string customTilesetId,
+            Color previewColor)
+            : this(blockId, displayName, role, tilesetSource, vanillaTilesetIndex, customTilesetId)
+        {
+            this.previewColor = previewColor;
+        }
+
         public string BlockId => blockId ?? string.Empty;
 
         public string DisplayName =>
@@ -346,6 +359,126 @@ namespace ExpandNullforge.Authoring
                     yield return new DimensionTilePlacement(local, block.ToCompiled());
                 }
             }
+        }
+
+        /// <summary>
+        /// Converts this model to its flat, JsonUtility-safe snapshot. Used when writing the map
+        /// into a runtime manifest so it survives Core Keeper's load-time recompile — a private
+        /// nested class or byte[] does not (see <see cref="DimensionTileMapSnapshot"/>).
+        /// </summary>
+        public DimensionTileMapSnapshot ToSnapshot()
+        {
+            DimensionTileMapSnapshot snapshot = new DimensionTileMapSnapshot
+            {
+                originX = originX,
+                originY = originY,
+                width = width,
+                height = height
+            };
+
+            List<DimensionMapBlock> pal = palette ?? new List<DimensionMapBlock>();
+            snapshot.palette = new DimensionMapBlockSnapshot[pal.Count];
+            for (int i = 0; i < pal.Count; i++)
+            {
+                DimensionMapBlock block = pal[i];
+                Color color = block.PreviewColor;
+                snapshot.palette[i] = new DimensionMapBlockSnapshot
+                {
+                    blockId = block.BlockId,
+                    displayName = block.DisplayName,
+                    role = (int)block.Role,
+                    tilesetSource = (int)block.TilesetSource,
+                    vanillaTilesetIndex = block.VanillaTilesetIndex,
+                    customTilesetId = block.CustomTilesetId,
+                    previewR = color.r,
+                    previewG = color.g,
+                    previewB = color.b,
+                    previewA = color.a
+                };
+            }
+
+            List<LayerGrid> lay = layers ?? new List<LayerGrid>();
+            snapshot.layers = new DimensionTileMapLayerSnapshot[lay.Count];
+            for (int i = 0; i < lay.Count; i++)
+            {
+                byte[] cells = lay[i].Cells;
+                int[] intCells = new int[cells.Length];
+                for (int c = 0; c < cells.Length; c++)
+                {
+                    intCells[c] = cells[c];
+                }
+
+                snapshot.layers[i] = new DimensionTileMapLayerSnapshot
+                {
+                    layer = (int)lay[i].Layer,
+                    cells = intCells
+                };
+            }
+
+            return snapshot;
+        }
+
+        /// <summary>Rebuilds a model from its flat snapshot, or null if the snapshot is null.</summary>
+        public static DimensionTileMapModel FromSnapshot(DimensionTileMapSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return null;
+            }
+
+            DimensionTileMapModel model = new DimensionTileMapModel();
+            model.originX = snapshot.originX;
+            model.originY = snapshot.originY;
+            model.width = Mathf.Max(0, snapshot.width);
+            model.height = Mathf.Max(0, snapshot.height);
+
+            model.palette = new List<DimensionMapBlock>();
+            if (snapshot.palette != null)
+            {
+                for (int i = 0; i < snapshot.palette.Length; i++)
+                {
+                    DimensionMapBlockSnapshot s = snapshot.palette[i];
+                    if (s == null)
+                    {
+                        continue;
+                    }
+
+                    model.palette.Add(new DimensionMapBlock(
+                        s.blockId,
+                        s.displayName,
+                        (DimensionTileRole)s.role,
+                        (DimensionBlockTilesetSource)s.tilesetSource,
+                        s.vanillaTilesetIndex,
+                        s.customTilesetId,
+                        new Color(s.previewR, s.previewG, s.previewB, s.previewA)));
+                }
+            }
+
+            model.layers = new List<LayerGrid>();
+            if (snapshot.layers != null)
+            {
+                for (int i = 0; i < snapshot.layers.Length; i++)
+                {
+                    DimensionTileMapLayerSnapshot s = snapshot.layers[i];
+                    if (s == null)
+                    {
+                        continue;
+                    }
+
+                    int[] source = s.cells ?? Array.Empty<int>();
+                    LayerGrid grid = new LayerGrid((DimensionMapLayer)s.layer, source.Length);
+                    byte[] cells = grid.Cells;
+                    int count = Mathf.Min(source.Length, cells.Length);
+                    for (int c = 0; c < count; c++)
+                    {
+                        cells[c] = (byte)source[c];
+                    }
+
+                    model.layers.Add(grid);
+                }
+            }
+
+            return model;
         }
 
         private void SetRaw(int2 localPosition, DimensionMapLayer layer, byte value)

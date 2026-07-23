@@ -32,8 +32,16 @@ namespace ExpandNullforge.Authoring
         [Tooltip("Item ids whose prefabs were generated for this dimension. The runtime declares these so it can report any that never registered with the game.")]
         [SerializeField] private string[] generatedItemIds = new string[0];
 
-        [Tooltip("The dimension's painted tile map. The runtime registers it so the tile-map generation provider can write it into the world.")]
-        [SerializeField] private DimensionTileMapModel tileMap;
+        // Stored as a Newtonsoft.Json string of the flat DimensionTileMapSnapshot. Unity's
+        // JsonUtility cannot be used here: in Core Keeper's recompiled-mod runtime it returns an
+        // object with empty arrays whenever an element is a mod-defined type, so the palette and
+        // layers come back empty. Newtonsoft reflects independently of Unity's serialization
+        // backend, so arrays of mod types round-trip correctly at runtime.
+        [Tooltip("The dimension's painted tile map, as a Newtonsoft-serialized snapshot. The runtime registers it so the tile-map generation provider can write it into the world.")]
+        [SerializeField] private string tileMapJson = string.Empty;
+
+        [System.NonSerialized] private DimensionTileMapModel cachedTileMap;
+        [System.NonSerialized] private bool tileMapCacheValid;
 
         public string ManifestId
         {
@@ -58,7 +66,19 @@ namespace ExpandNullforge.Authoring
         /// </summary>
         public DimensionTileMapModel TileMap
         {
-            get { return tileMap; }
+            get
+            {
+                if (!tileMapCacheValid)
+                {
+                    cachedTileMap = string.IsNullOrEmpty(tileMapJson)
+                        ? null
+                        : DimensionTileMapModel.FromSnapshot(
+                            Newtonsoft.Json.JsonConvert.DeserializeObject<DimensionTileMapSnapshot>(tileMapJson));
+                    tileMapCacheValid = true;
+                }
+
+                return cachedTileMap;
+            }
         }
 
         /// <summary>True when a non-empty painted map is present.</summary>
@@ -66,20 +86,19 @@ namespace ExpandNullforge.Authoring
         {
             get
             {
-                int painted = tileMap == null ? -1 : tileMap.PaintedTileCount();
-                bool has = painted > 0;
-                ExpandNullforge.Foundation.DimensionFrameworkLog.Warning(
-                    "[ExpandNullforge][tilemap] HasTileMap on '" + GeneratedFromDimensionId +
-                    "': tileMap=" + (tileMap == null ? "NULL" : "present") +
-                    ", painted=" + painted + " -> " + has);
-                return has;
+                DimensionTileMapModel map = TileMap;
+                return map != null && map.PaintedTileCount() > 0;
             }
         }
 
         /// <summary>Records the dimension's painted map. Called by the editor authoring flow.</summary>
         public void SetTileMap(DimensionTileMapModel map)
         {
-            tileMap = map;
+            tileMapJson = map == null
+                ? string.Empty
+                : Newtonsoft.Json.JsonConvert.SerializeObject(map.ToSnapshot());
+            cachedTileMap = map;
+            tileMapCacheValid = true;
         }
 
         /// <summary>
