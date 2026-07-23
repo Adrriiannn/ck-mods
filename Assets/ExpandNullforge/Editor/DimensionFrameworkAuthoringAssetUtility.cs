@@ -435,6 +435,251 @@ namespace ExpandNullforge.EditorTools
             return Success(asset, "Created a " + label.ToLowerInvariant() + " definition.");
         }
 
+        /// <summary>
+        /// Counts enabled instantaneous item portals (V2) that do not yet have an item asset, without
+        /// creating anything (safe to call from OnGUI).
+        /// </summary>
+        public static int CountMissingPortalItems(DimensionTemplateAsset template)
+        {
+            int count = 0;
+            ForEachMissingPortalItem(template, (rule, itemId, label) => count++);
+            return count;
+        }
+
+        /// <summary>
+        /// Ensures every enabled item portal (V2) has a real, editable item asset in the template's
+        /// items, creating a default for any that is missing. The item id is locked to the rule's
+        /// <c>PortalItemObjectId</c> because the runtime portal registry matches on it; everything else
+        /// (icon, name, recipe) is left for the creator to customize in the item editor.
+        /// </summary>
+        public static DimensionFrameworkAuthoringAssetActionResult EnsurePortalItems(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before creating portal items.");
+            }
+
+            // Broken or deleted entries (missing asset files, or assets whose script binding was
+            // severed) read back as null, hide the real item from the duplicate check, and every
+            // generate would then create "PortalItem 1", "PortalItem 2", ... — compact them away
+            // before deciding anything is missing.
+            CompactGlobalItems(template);
+
+            int created = 0;
+            DimensionItemAsset lastCreated = null;
+            ForEachMissingPortalItem(template, (rule, itemId, label) =>
+            {
+                DimensionItemAsset item = CreateAsset<DimensionItemAsset>(template, "Resources", "PortalItem");
+                SetSerializedString(item, "itemId", itemId);
+                SetSerializedString(item, "displayName", label + " Portal");
+                SetSerializedString(item, "description",
+                    "Right-click to open a temporary portal to " + label + ".");
+                SetSerializedEnum(item, "archetype", (int)DimensionItemArchetype.Material);
+                SetSerializedEnum(item, "kind", (int)DimensionItemKind.PortalItem);
+                // objectId only satisfies the generator's "has a visual" gate so the first generate is
+                // valid; a real icon comes from the creator dragging a sprite into the Icon sprite field.
+                SetSerializedString(item, "objectId", itemId);
+                SetSerializedInt(item, "maxStack", 1);
+                SetSerializedBool(item, "enabled", true);
+                AssignDefaultPortalIcons(item);
+                AppendObjectReference(template, "globalItems", item);
+                lastCreated = item;
+                created++;
+            });
+
+            if (created == 0)
+            {
+                return Success(null, "Every enabled item portal already has an item.");
+            }
+
+            AssetDatabase.SaveAssets();
+            return Success(
+                lastCreated,
+                "Created " + created + " portal item" + (created == 1 ? string.Empty : "s") + ".");
+        }
+
+        // Optional framework-shipped default icons for auto-created portal items. Drop a 16x16
+        // PortalItemIcon.png and a 10x10 PortalItemIcon_inHand.png here (Sprite, PPU 16, Point filter)
+        // and every new portal item starts with them; absent, the item is created iconless.
+        private const string DefaultPortalIconPath =
+            "Assets/ExpandNullforge/DefaultArt/PortalItemIcon.png";
+        private const string DefaultPortalSmallIconPath =
+            "Assets/ExpandNullforge/DefaultArt/PortalItemIcon_inHand.png";
+
+        /// <summary>
+        /// Fills any empty portal-item icon slot across the template with the framework default icons,
+        /// so a creator sees them applied without dragging. Never overwrites an icon the creator has
+        /// already set. Returns the number of items changed.
+        /// </summary>
+        public static int ApplyDefaultPortalIcons(DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return 0;
+            }
+
+            DimensionItemAsset[] items = template.GlobalItems;
+            if (items == null)
+            {
+                return 0;
+            }
+
+            int changed = 0;
+            for (int i = 0; i < items.Length; i++)
+            {
+                DimensionItemAsset item = items[i];
+                if (item != null &&
+                    item.Kind == DimensionItemKind.PortalItem &&
+                    AssignDefaultPortalIcons(item))
+                {
+                    changed++;
+                }
+            }
+
+            return changed;
+        }
+
+        /// <summary>
+        /// Assigns the framework default icons to a single item, filling only slots that are still
+        /// empty. Returns true if anything changed. The default sprites are loaded by path, so the
+        /// import post-processor must have turned the PNGs into Sprites first.
+        /// </summary>
+        /// <summary>True once at least one framework default portal icon has imported as a Sprite.</summary>
+        public static bool DefaultPortalIconsExist()
+        {
+            return AssetDatabase.LoadAssetAtPath<Sprite>(DefaultPortalIconPath) != null ||
+                   AssetDatabase.LoadAssetAtPath<Sprite>(DefaultPortalSmallIconPath) != null;
+        }
+
+        private static bool AssignDefaultPortalIcons(DimensionItemAsset item)
+        {
+            Sprite icon = AssetDatabase.LoadAssetAtPath<Sprite>(DefaultPortalIconPath);
+            Sprite smallIcon = AssetDatabase.LoadAssetAtPath<Sprite>(DefaultPortalSmallIconPath);
+            if (icon == null && smallIcon == null)
+            {
+                return false;
+            }
+
+            SerializedObject serialized = new SerializedObject(item);
+            bool changed = false;
+
+            if (icon != null)
+            {
+                SerializedProperty iconProperty = serialized.FindProperty("iconSprite");
+                if (iconProperty != null && iconProperty.objectReferenceValue == null)
+                {
+                    iconProperty.objectReferenceValue = icon;
+                    changed = true;
+                }
+            }
+
+            if (smallIcon != null)
+            {
+                SerializedProperty smallIconProperty = serialized.FindProperty("smallIconSprite");
+                if (smallIconProperty != null && smallIconProperty.objectReferenceValue == null)
+                {
+                    smallIconProperty.objectReferenceValue = smallIcon;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(item);
+            }
+
+            return changed;
+        }
+
+        /// <summary>
+        /// Removes null and wrong-typed entries from the template's global item list (dead
+        /// references left by deleted files or script-binding loss). Keeps healthy entries in
+        /// order; saves only when something was actually dropped.
+        /// </summary>
+        private static void CompactGlobalItems(DimensionTemplateAsset template)
+        {
+            SerializedObject serialized = new SerializedObject(template);
+            SerializedProperty items = serialized.FindProperty("globalItems");
+            if (items == null || !items.isArray)
+            {
+                return;
+            }
+
+            bool changed = false;
+            for (int i = items.arraySize - 1; i >= 0; i--)
+            {
+                Object reference = items.GetArrayElementAtIndex(i).objectReferenceValue;
+                if (reference == null || !(reference is DimensionItemAsset))
+                {
+                    items.DeleteArrayElementAtIndex(i);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(template);
+            }
+        }
+
+        private static void ForEachMissingPortalItem(
+            DimensionTemplateAsset template,
+            System.Action<DimensionPortalAccessRuleAsset, string, string> onMissing)
+        {
+            if (template == null)
+            {
+                return;
+            }
+
+            DimensionPortalAccessRuleAsset[] rules = template.PortalAccessRules;
+            if (rules == null)
+            {
+                return;
+            }
+
+            System.Collections.Generic.HashSet<string> seen =
+                new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+            DimensionItemAsset[] items = template.GlobalItems;
+            if (items != null)
+            {
+                foreach (DimensionItemAsset existing in items)
+                {
+                    if (existing != null && !string.IsNullOrEmpty(existing.ItemId))
+                    {
+                        seen.Add(existing.ItemId);
+                    }
+                }
+            }
+
+            string label = string.IsNullOrEmpty(template.DisplayName)
+                ? template.DimensionId
+                : template.DisplayName;
+            if (string.IsNullOrEmpty(label))
+            {
+                label = "Dimension";
+            }
+
+            foreach (DimensionPortalAccessRuleAsset rule in rules)
+            {
+                if (rule == null || !rule.IsItemPortal || !rule.Enabled)
+                {
+                    continue;
+                }
+
+                string itemId = rule.PortalItemObjectId;
+                // seen.Add is false when the id already exists (a creator item or a duplicate rule).
+                if (string.IsNullOrEmpty(itemId) || !seen.Add(itemId))
+                {
+                    continue;
+                }
+
+                onMissing(rule, itemId, label);
+            }
+        }
+
         private static T CreateAsset<T>(
             DimensionTemplateAsset template,
             string sectionFolder,
