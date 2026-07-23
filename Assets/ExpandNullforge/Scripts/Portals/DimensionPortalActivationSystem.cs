@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ExpandNullforge.Api;
 using ExpandNullforge.Foundation;
@@ -206,6 +207,7 @@ namespace ExpandNullforge.Portals
         if (result.Accepted)
         {
           lastActivationAtByPortal[portalEntity] = now;
+          TrackInstantPortalTravel(activation.Player, portalEntity, portal, now);
         }
 
         SendResult(
@@ -215,6 +217,56 @@ namespace ExpandNullforge.Portals
             !result.Accepted);
         travelResultRelay.Track(result, activation.SourceConnection, activation.RequestId, now);
       }
+    }
+
+    /// <summary>
+    /// Immersion bookkeeping for instant item portals. Travelling INTO a dimension through one
+    /// records the portal's exact tile for the travelling player; any accepted travel whose
+    /// target is the overworld consumes that record and queues a fresh instant portal on the
+    /// same tile, so the player lands back beside "the same" temporary portal they left by
+    /// (which then closes on its usual timer).
+    /// </summary>
+    private void TrackInstantPortalTravel(
+        Entity player,
+        Entity portalEntity,
+        DimensionPortalCD portal,
+        double now)
+    {
+      string targetDimensionId = portal.TargetDimensionId.ToString();
+      if (string.Equals(targetDimensionId, DimensionIds.Overworld, StringComparison.Ordinal))
+      {
+        int2 reopenTile;
+        string reopenItemName;
+        if (DimensionItemPortalRegistry.TryConsumePendingReopen(
+            player, now, out reopenTile, out reopenItemName))
+        {
+          DimensionItemPortalRegistry.EnqueueReopenSpawn(reopenTile, reopenItemName, now);
+        }
+
+        return;
+      }
+
+      DimensionItemPortalConfig config;
+      bool backward;
+      if (!DimensionItemPortalRegistry.TryGetConfigByPortalId(
+          portal.PortalId.ToString(), out config, out backward) ||
+          backward)
+      {
+        return;
+      }
+
+      if (!EntityManager.HasComponent<LocalTransform>(portalEntity))
+      {
+        return;
+      }
+
+      float3 portalPosition =
+          EntityManager.GetComponentData<LocalTransform>(portalEntity).Position;
+      int2 portalTile = new int2(
+          (int)math.round(portalPosition.x),
+          (int)math.round(portalPosition.z));
+      DimensionItemPortalRegistry.RecordPendingReopen(
+          player, portalTile, config.ItemObjectName, now);
     }
 
     private static bool IsPortalCharged(DimensionPortalCD portal)

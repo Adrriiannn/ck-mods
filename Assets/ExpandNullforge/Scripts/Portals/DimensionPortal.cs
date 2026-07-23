@@ -5,8 +5,10 @@ using UnityEngine;
 
 namespace ExpandNullforge.Portals
 {
+  // Not sealed: the instant item portal's visual carries the DimensionInstantPortal subclass so
+  // the pooled graphical-object system can tell the two portal visuals apart.
   [AddComponentMenu("Dimension Framework/Dimension Portal")]
-  public sealed class DimensionPortal : EntityMonoBehaviour
+  public class DimensionPortal : EntityMonoBehaviour
   {
     [Header("Portal")]
     [SerializeField]
@@ -40,12 +42,19 @@ namespace ExpandNullforge.Portals
     private int lastVisualAmount = int.MinValue;
     private float localVisualChargeStartedAt = -1.0f;
 
+    // Looping ambience bed while an instant portal stands open. The clip loads async via
+    // Addressables, so the view polls until it lands; the source lives on the pooled view
+    // GameObject and is stopped whenever the view is freed or rebound as a placed portal.
+    private AudioSource instantAmbienceSource;
+    private bool instantAmbienceWanted;
+
     public override void OnOccupied()
     {
       base.OnOccupied();
       EnsureVanillaPortalAnimatorController();
 
       ResetVisualTracking();
+
       bool activated = IsPortalActivatedForVisuals();
       wasActivePreviousFrame = activated;
       UpdateVisuals(true);
@@ -54,10 +63,39 @@ namespace ExpandNullforge.Portals
         animator.SetTrigger(OccupiedReadyTrigger);
       }
 
+      // Pooled portal visuals are shared across portal prefabs, so the instant item-portal
+      // (V2) look is resolved per entity from its own ObjectDataCD — present at view creation,
+      // no replication wait — instead of trusting whichever prefab instance the pool handed
+      // over.
+      bool instantPortal = entityExist &&
+          DimensionItemPortalRegistry.IsInstantPortalObjectId(base.objectData.objectID);
+
       DimensionPortalVisual resolvedVisual = ResolveVisual();
       if (resolvedVisual != null)
       {
+        resolvedVisual.SetItemPortalMode(instantPortal);
         resolvedVisual.RefreshProjectedShadow();
+
+        // An instant portal spawns already active, so the "just became active" opening trigger
+        // never fires — play the opening explicitly the moment its view appears. Gated on the
+        // portal actually being active: when the view appears later (portal not yet replicated
+        // or already closing), the regular became-activated path plays the opening instead.
+        if (activated && instantPortal)
+        {
+          resolvedVisual.PlayItemPortalOpening();
+
+          // Configured sound feedback, synced with the opening animation. Client-side, so
+          // every player near the spawn hears it. Re-binding a still-open portal replays the
+          // opening animation, and the sound follows it — same behavior.
+          PlayActivationSound(true);
+        }
+      }
+
+      if (!instantPortal || !activated)
+      {
+        // A pooled view can be rebound as a placed portal (or as a not-yet-open instant one);
+        // never let a previous binding's ambience keep humming.
+        StopInstantAmbience();
       }
     }
 
@@ -65,6 +103,126 @@ namespace ExpandNullforge.Portals
     {
       base.ManagedLateUpdate();
       UpdateVisuals(false);
+      UpdateInstantAmbience();
+    }
+
+    public override void OnFree()
+    {
+      StopInstantAmbience();
+      base.OnFree();
+    }
+
+    private bool IsInstantPortalObject()
+    {
+      return entityExist &&
+          DimensionItemPortalRegistry.IsInstantPortalObjectId(base.objectData.objectID);
+    }
+
+    private bool TryGetSoundProfile(out DimensionPortalSoundProfile profile)
+    {
+      profile = default(DimensionPortalSoundProfile);
+      return entityExist &&
+          DimensionPortalSoundRegistry.TryGetForObjectId(base.objectData.objectID, out profile);
+    }
+
+    /// <summary>
+    /// Activation feedback per the configured sound profile: Peak mode plays the activation
+    /// one-shot; Loop mode (instant portals only) arms the looping bed instead. The two modes
+    /// are exclusive by design. Placed portals only ever use their activation sound.
+    /// </summary>
+    private void PlayActivationSound(bool instantPortal)
+    {
+      if (!Application.isPlaying || !TryGetSoundProfile(out DimensionPortalSoundProfile profile))
+      {
+        return;
+      }
+
+      if (instantPortal && profile.Mode == DimensionPortalSoundMode.Loop)
+      {
+        instantAmbienceWanted = true;
+        return;
+      }
+
+      DimensionPortalSoundRegistry.PlayOneShot(profile.ActivationSound, transform.position);
+    }
+
+    private void PlayDeactivationSound()
+    {
+      if (!Application.isPlaying || !TryGetSoundProfile(out DimensionPortalSoundProfile profile))
+      {
+        StopInstantAmbience();
+        return;
+      }
+
+      if (profile.Mode == DimensionPortalSoundMode.Loop)
+      {
+        StopInstantAmbience();
+        return;
+      }
+
+      DimensionPortalSoundRegistry.PlayOneShot(profile.DeactivationSound, transform.position);
+    }
+
+    /// <summary>
+    /// Keeps the instant portal's looping bed in step with its life: starts it once the
+    /// async-loaded clip is available (polled — the first portal after game start may open
+    /// before the clip has landed) and stops it the moment the portal deactivates to close.
+    /// </summary>
+    private void UpdateInstantAmbience()
+    {
+      if (!instantAmbienceWanted)
+      {
+        return;
+      }
+
+      if (!IsPortalActivatedForVisuals())
+      {
+        StopInstantAmbience();
+        return;
+      }
+
+      if (instantAmbienceSource != null && instantAmbienceSource.isPlaying)
+      {
+        return;
+      }
+
+      if (!TryGetSoundProfile(out DimensionPortalSoundProfile profile) ||
+          profile.Mode != DimensionPortalSoundMode.Loop)
+      {
+        return;
+      }
+
+      AudioClip clip = DimensionPortalSoundRegistry.TryGetLoopClip(profile.LoopSound);
+      if (clip == null)
+      {
+        return;
+      }
+
+      StartInstantAmbience(clip);
+    }
+
+    private void StartInstantAmbience(AudioClip clip)
+    {
+      if (instantAmbienceSource == null)
+      {
+        instantAmbienceSource = GetComponent<AudioSource>();
+        if (instantAmbienceSource == null)
+        {
+          instantAmbienceSource = gameObject.AddComponent<AudioSource>();
+        }
+      }
+
+      DimensionPortalSoundRegistry.ConfigureSpatialSource(instantAmbienceSource, clip, true);
+      instantAmbienceSource.Play();
+    }
+
+    private void StopInstantAmbience()
+    {
+      instantAmbienceWanted = false;
+      if (instantAmbienceSource != null && instantAmbienceSource.isPlaying)
+      {
+        instantAmbienceSource.Stop();
+      }
     }
 
     public void Use()
@@ -108,6 +266,14 @@ namespace ExpandNullforge.Portals
           requestId +
           " portalId=" +
           portalId);
+
+      // Vanilla teleport feedback on the interacting client: the portal's squash (Animator
+      // TeleportTrigger) and the PortalTeleport effect (sound + particles). Vanilla fires these
+      // through the effect's animationEventEffects wiring, which the generated prefab does not set
+      // up, so they must be invoked directly the moment travel is queued — this is what makes the
+      // portal squeeze vertically when a player steps through it.
+      PlayLocalTeleportEffects();
+      TeleportEffects();
     }
 
     public void OnLeavePortal()
@@ -149,6 +315,7 @@ namespace ExpandNullforge.Portals
       int amount = GetVisualChargeAmount(out portalActive);
       bool activated = amount >= ReadyObjectDataAmount;
       bool becameActivated = visualStateInitialized && !lastVisualActivated && activated;
+      bool becameDeactivated = visualStateInitialized && lastVisualActivated && !activated;
       if (!force &&
           visualStateInitialized &&
           lastVisualAmount == amount &&
@@ -166,6 +333,16 @@ namespace ExpandNullforge.Portals
       if (becameActivated)
       {
         EnsureVanillaPortalAnimatorController();
+
+        // A placed portal "lights up" here (charge completed); an instant portal only reaches
+        // this transition when its view appeared before its portal data replicated — the
+        // OnOccupied path and this one are mutually exclusive, so the sound plays exactly once.
+        PlayActivationSound(IsInstantPortalObject());
+      }
+
+      if (becameDeactivated && IsInstantPortalObject())
+      {
+        PlayDeactivationSound();
       }
 
       DimensionPortalVisual resolvedVisual = ResolveVisual();

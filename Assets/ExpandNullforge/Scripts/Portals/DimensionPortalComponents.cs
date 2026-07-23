@@ -1,24 +1,30 @@
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.NetCode;
 
 namespace ExpandNullforge.Portals
 {
+  // Replicated so the client mirrors the server's authoritative portal state. This is essential for
+  // runtime-spawned portals (the instantaneous item portal): those are not baked per-dimension, so the
+  // client would otherwise only see the shared prefab's placeholder PortalId and could not tell an item
+  // portal apart from a placed one — which also matters once several dimension mods are installed.
+  [GhostComponent(PrefabType = GhostPrefabType.All)]
   public struct DimensionPortalCD : IComponentData
   {
-    public FixedString64Bytes PortalId;
-    public FixedString64Bytes TargetDimensionId;
-    public float TargetLocalX;
-    public float TargetLocalY;
-    public float ActivationCooldownSeconds;
-    public float ActivationChargeSeconds;
-    public float ActivationProgress;
-    public double ActivationStartedAt;
-    public byte RequireGeneratedArea;
-    public byte AllowFallbackPosition;
-    public byte Active;
-    public byte Charged;
-    public byte Interactable;
+    [GhostField] public FixedString64Bytes PortalId;
+    [GhostField] public FixedString64Bytes TargetDimensionId;
+    [GhostField] public float TargetLocalX;
+    [GhostField] public float TargetLocalY;
+    [GhostField] public float ActivationCooldownSeconds;
+    [GhostField] public float ActivationChargeSeconds;
+    [GhostField] public float ActivationProgress;
+    [GhostField] public double ActivationStartedAt;
+    [GhostField] public byte RequireGeneratedArea;
+    [GhostField] public byte AllowFallbackPosition;
+    [GhostField] public byte Active;
+    [GhostField] public byte Charged;
+    [GhostField] public byte Interactable;
   }
 
   public struct DimensionPortalActivationBuffer : IBufferElementData

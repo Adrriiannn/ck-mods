@@ -5,6 +5,7 @@ using ExpandNullforge.Networking;
 using ExpandNullforge.Persistence;
 using ExpandNullforge.Portals;
 using ExpandNullforge.UI;
+using PlayerEquipment;
 using PugMod;
 using Unity.Entities;
 using UnityEngine;
@@ -41,6 +42,12 @@ public sealed class ExpandNullforgeModEntry : IMod
 
   public void Init()
   {
+    // The instantaneous item portal (V2) is triggered by a Harmony patch on the base
+    // EquipmentSlot.UpdateEquipment, which runs inside a Burst-compiled equipment-update job. Disable
+    // Burst for that system so the managed patch actually fires (see DimensionItemPortalUseHook and
+    // DimensionEquipmentUpdateForceJobCompletePatch). Same workaround as the TeleportAfterEating example.
+    BurstDisabler.DisableBurstForSystem<EquipmentUpdateSystem>();
+
     if (API.Server != null)
     {
       API.Server.OnWorldCreated -= RegisterServerWorld;
@@ -169,7 +176,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     world.GetOrCreateSystemManaged<DimensionPortalHydrationSystem>();
     world.GetOrCreateSystemManaged<DimensionPortalChargeSystem>();
     world.GetOrCreateSystemManaged<DimensionPortalActivationSystem>();
-    world.GetOrCreateSystemManaged<DimensionTileMapGenerationSystem>();
+    world.GetOrCreateSystemManaged<DimensionItemPortalSpawnSystem>();
     DimensionService.SetServerWorld(world);
     RegisterFrameworkGenerationProviders();
     TryInitializeServerWorldPersistence();

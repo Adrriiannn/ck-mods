@@ -63,6 +63,52 @@ namespace ExpandNullforge.Authoring
         }
     }
 
+    /// <summary>
+    /// One enemy the portal (object or item) can be made to drop from. Targets are resolved by
+    /// Core Keeper object id/name (a curated vanilla list plus modder-supplied custom ids so a boss
+    /// from another mod can be targeted). Weight is the loot-table roll weight; a chance percent of
+    /// 100 with a dedicated single-entry table makes it a guaranteed drop.
+    /// </summary>
+    [Serializable]
+    public struct DimensionPortalDropTarget
+    {
+        [SerializeField] private string targetObjectId;
+        [SerializeField] private string displayName;
+        [SerializeField] private bool isBoss;
+        [Tooltip("Loot roll weight (higher = more likely relative to the table's other entries).")]
+        [SerializeField] private int weight;
+        [Tooltip("Independent chance (0-100) that the drop is rolled at all.")]
+        [SerializeField] private float chancePercent;
+        [SerializeField] private int minAmount;
+        [SerializeField] private int maxAmount;
+
+        public DimensionPortalDropTarget(
+            string targetObjectId,
+            string displayName,
+            bool isBoss,
+            int weight,
+            float chancePercent,
+            int minAmount,
+            int maxAmount)
+        {
+            this.targetObjectId = targetObjectId ?? string.Empty;
+            this.displayName = displayName ?? string.Empty;
+            this.isBoss = isBoss;
+            this.weight = Mathf.Max(1, weight);
+            this.chancePercent = Mathf.Clamp(chancePercent, 0f, 100f);
+            this.minAmount = Mathf.Max(1, minAmount);
+            this.maxAmount = Mathf.Max(this.minAmount, maxAmount);
+        }
+
+        public string TargetObjectId => targetObjectId ?? string.Empty;
+        public string DisplayName => string.IsNullOrEmpty(displayName) ? TargetObjectId : displayName;
+        public bool IsBoss => isBoss;
+        public int Weight => Mathf.Max(1, weight);
+        public float ChancePercent => Mathf.Clamp(chancePercent, 0f, 100f);
+        public int MinAmount => Mathf.Max(1, minAmount);
+        public int MaxAmount => Mathf.Max(MinAmount, maxAmount);
+    }
+
     [CreateAssetMenu(menuName = "Dimensions API/Portal Access Rule")]
     public sealed class DimensionPortalAccessRuleAsset : ScriptableObject
     {
@@ -90,9 +136,79 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private DimensionPortalRequiredItemTemplate[] requiredItems =
             new DimensionPortalRequiredItemTemplate[0];
 
+        // --- Per-version settings (V1 placed portal, V2 instantaneous item portal) ---
+        [Header("Availability")]
+        [Tooltip("Can be crafted at a workbench (V1 object or V2 item).")]
+        [SerializeField] private bool craftable = true;
+        [Tooltip("Object id/name of the crafting station (e.g. WoodenWorkBench). Empty = Wooden Workbench.")]
+        [SerializeField] private string craftingStationObjectId = string.Empty;
+        [Tooltip("V1 only: the placed portal can be found/spawned in the vanilla world.")]
+        [SerializeField] private bool generatedInWorld;
+        [Tooltip("Can be dropped by mobs/bosses (writes into their loot table).")]
+        [SerializeField] private bool droppable;
+        [SerializeField] private DimensionPortalDropTarget[] dropTargets = new DimensionPortalDropTarget[0];
+
+        [Header("Instantaneous item portal (V2)")]
+        [Tooltip("V2 only: the custom item that, when used, spawns this portal. Auto-created; must be a mod item, never a vanilla item.")]
+        [SerializeField] private string portalItemObjectId = string.Empty;
+        [Tooltip("V2 only: seconds the spawned portal stays open before it closes (also the item's own use cooldown).")]
+        [SerializeField] private float itemPortalDurationSeconds = 10f;
+
         public string RuleId
         {
             get { return ruleId ?? string.Empty; }
+        }
+
+        public bool Craftable => craftable;
+
+        public string CraftingStationObjectId => craftingStationObjectId ?? string.Empty;
+
+        public bool GeneratedInWorld => generatedInWorld;
+
+        public bool Droppable => droppable;
+
+        public DimensionPortalDropTarget[] DropTargets => dropTargets ?? new DimensionPortalDropTarget[0];
+
+        public string PortalItemObjectId => portalItemObjectId ?? string.Empty;
+
+        public float ItemPortalDurationSeconds => Mathf.Max(1f, itemPortalDurationSeconds);
+
+        /// <summary>True when this rule is the instantaneous-item version.</summary>
+        public bool IsItemPortal => accessKind == DimensionPortalAccessKind.InventoryItem;
+
+        /// <summary>True when this rule is a placed/generated object the player interacts with.</summary>
+        public bool IsPlacedObject =>
+            accessKind == DimensionPortalAccessKind.PlacedPortal ||
+            accessKind == DimensionPortalAccessKind.GeneratedReturnPortal ||
+            accessKind == DimensionPortalAccessKind.GeneratedEntrance;
+
+        /// <summary>
+        /// Sets the per-version availability + item settings. Kept separate from
+        /// <see cref="Configure"/> (which handles the link/presentation) so the authoring UI can
+        /// update version settings without restating the whole link.
+        /// </summary>
+        public void ConfigureVersionSettings(
+            bool newCraftable,
+            string newCraftingStationObjectId,
+            bool newGeneratedInWorld,
+            bool newDroppable,
+            IReadOnlyList<DimensionPortalDropTarget> newDropTargets,
+            string newPortalItemObjectId,
+            float newItemPortalDurationSeconds)
+        {
+            craftable = newCraftable;
+            craftingStationObjectId = newCraftingStationObjectId ?? string.Empty;
+            generatedInWorld = newGeneratedInWorld;
+            droppable = newDroppable;
+            dropTargets = CopyDropTargets(newDropTargets);
+            portalItemObjectId = newPortalItemObjectId ?? string.Empty;
+            itemPortalDurationSeconds = Mathf.Max(1f, newItemPortalDurationSeconds);
+        }
+
+        /// <summary>Enables/disables this version. At least one of V1/V2 must stay enabled (caller-enforced).</summary>
+        public void SetEnabled(bool value)
+        {
+            enabled = value;
         }
 
         public string PortalId
@@ -306,6 +422,23 @@ namespace ExpandNullforge.Authoring
 
             DimensionPortalRequiredItemTemplate[] copy =
                 new DimensionPortalRequiredItemTemplate[source.Count];
+            for (int i = 0; i < source.Count; i++)
+            {
+                copy[i] = source[i];
+            }
+
+            return copy;
+        }
+
+        private static DimensionPortalDropTarget[] CopyDropTargets(
+            IReadOnlyList<DimensionPortalDropTarget> source)
+        {
+            if (source == null || source.Count == 0)
+            {
+                return new DimensionPortalDropTarget[0];
+            }
+
+            DimensionPortalDropTarget[] copy = new DimensionPortalDropTarget[source.Count];
             for (int i = 0; i < source.Count; i++)
             {
                 copy[i] = source[i];

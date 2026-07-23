@@ -15,6 +15,7 @@ MonoBehaviour:
   spriteAssets:
   - {fileID: 11400000, guid: 2d0507379ac332ca122a4a903b75b71f, type: 2}
   - {fileID: 11400000, guid: 76ce812d60a387ba5872a65c865b964c, type: 2}
+  - {fileID: 11400000, guid: 84153f45e45ee4c46990f0316903417d, type: 2}
   - {fileID: 11400000, guid: 401f37ea56c15d074ff105de64250607, type: 2}
   - {fileID: 11400000, guid: af0f7b1fb72e3b14aa1967aab47f065d, type: 2}
   - {fileID: 11400000, guid: 3eb82ccfd72f4cea956bdf52272b713e, type: 2}

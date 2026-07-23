@@ -28,16 +28,22 @@ MonoBehaviour:
       guid: fdaffac3ce881c34d9edcf424172ded2
     - path: Scripts/Scripts/Portals/DimensionReturnPortalSpawnRegistry.cs
       guid: 48302a022bd60864a9bdd8948a9e9b71
+    - path: Scripts/Scripts/Portals/DimensionPortalVisual.cs
+      guid: b0d9eac4252941eb8fe9a70cf736a3d2
     - path: Scripts/Scripts/Portals/DimensionPortalRuntime.cs
       guid: 30f9b818f9cf4784791c340e42f605b7
     - path: Scripts/Scripts/Portals/DimensionPortalRecipeInjector.cs
       guid: 444293e0af41cc4489cb69b25e672177
     - path: Scripts/Scripts/Portals/DimensionPortalObjectIdCache.cs
       guid: 3b009fb189a7ef4418882b0ccb4f3ef2
+    - path: Scripts/Scripts/Portals/DimensionPortalMapMarkerScopeSystem.cs
+      guid: c72eb5e190d94bcd88234305d30a6572
     - path: Scripts/Scripts/Portals/DimensionPortalItemPresentationRegistry.cs
       guid: 14f09bc88cab64240bc88bc8f7e19a0f
     - path: Scripts/Scripts/Portals/DimensionPortalHydrationSystem.cs
       guid: ff3a6c8f8398be44d966bc60e1e0cf86
+    - path: Scripts/Scripts/Portals/DimensionPortalDropRegistry.cs
+      guid: 5bcea45ffe7ba0c4f9d5142ca8a09391
     - path: Scripts/Scripts/Portals/DimensionPortalCraftingRegistry.cs
       guid: 04826b1177f11764bbe90e34c222e063
     - path: Scripts/Scripts/Portals/DimensionPortalComponents.cs
@@ -50,6 +56,12 @@ MonoBehaviour:
       guid: 6617cfd31962bde408f241a234af423c
     - path: Scripts/Scripts/Portals/DimensionPortal.cs
       guid: 0d18f68e6070f5044a43b4c999ded73e
+    - path: Scripts/Scripts/Portals/DimensionItemPortalUseHook.cs
+      guid: ecece5be3405b064ca9b1ef490e4565b
+    - path: Scripts/Scripts/Portals/DimensionItemPortalSpawnSystem.cs
+      guid: 2b243cbfd08b63844aed28a7157b0eab
+    - path: Scripts/Scripts/Portals/DimensionItemPortalRegistry.cs
+      guid: fca9f6061713d884d9eddaafe476b0a5
     - path: Scripts/Scripts/Persistence/DimensionWorldRegistry.cs
       guid: 9fbabbc6d09a8eb4f9ae8422413be246
     - path: Scripts/Scripts/Networking/DimensionTravelRpcSystems.cs
@@ -70,10 +82,18 @@ MonoBehaviour:
       guid: 72b5e5afd33e47742b7f7eb6f90f93ef
     - path: Scripts/Scripts/Networking/DimensionPlayerContextNetworkState.cs
       guid: 610f50b82cf9a7c44864a513e1ce45b8
+    - path: Scripts/Scripts/Networking/DimensionClientRpcReadiness.cs
+      guid: 363b88b489888dc48bc7353d38d7ce3a
     - path: Scripts/Scripts/Loading/DimensionLoadComponents.cs
       guid: ca4276602aa359740acbee9703960d38
+    - path: Scripts/Scripts/Generation/DimensionTileMapGenerationProvider.cs
+      guid: 110a58ae1446ac747a75bb3005181760
+    - path: Scripts/Scripts/Generation/DimensionTileMapCompiler.cs
+      guid: 615a28fb1acd661429b30e56022e5802
     - path: Scripts/Scripts/Generation/DimensionSafePlatformGenerationProvider.cs
       guid: 2a920c56559a51d4ea2074b6229d87da
+    - path: Scripts/Scripts/Generation/DimensionBlockTileMapping.cs
+      guid: 6906118b7a0e38842beb773ccfa1cd37
     - path: Scripts/Scripts/Foundation/NullforgeDimensionService.Zones.cs
       guid: 55a77ebabce7d7f469fa849d620f8422
     - path: Scripts/Scripts/Foundation/NullforgeDimensionService.ZoneEnvironmentInternals.cs
@@ -202,12 +222,18 @@ MonoBehaviour:
       guid: 0537f8d46ac1b0249a6e410582b19d66
     - path: Scripts/Scripts/Foundation/NullforgeDimensionService.AssetReferenceInternals.cs
       guid: 308dfba80c7621b40b8619917a08ca7f
+    - path: Scripts/Scripts/Foundation/DimensionTileMapRegistry.cs
+      guid: a9b3f7deb900ea74ba637de17a4dfeac
     - path: Scripts/Scripts/Foundation/DimensionSlotAllocator.cs
       guid: c6d4da95821366649a5920ed6e7ef3cc
     - path: Scripts/Scripts/Foundation/DimensionRegistryConstants.cs
       guid: c377037635c5a324a81a9bd90e5a9ae3
+    - path: Scripts/Scripts/Foundation/DimensionItemObjectRegistry.cs
+      guid: f1199478b25ae324e888d81972444ea8
     - path: Scripts/Scripts/Foundation/DimensionFrameworkLog.cs
       guid: 8b49f50384f49aa47876e83767eed12c
+    - path: Scripts/Scripts/DimensionRuntimeTestAssemblyInfo.cs
+      guid: f96d2b3dbeb6bad448d36f2b8ead06be
     - path: Scripts/Scripts/Bootstrap/ExpandNullforgeModEntry.cs
       guid: 0d7dd44c39c493c4da8bc861776a13b3
     - path: Scripts/Scripts/Authoring/SpawnRuleTemplateAsset.cs
@@ -226,6 +252,10 @@ MonoBehaviour:
       guid: 5d4b5b502d204d54f801f20764e1bcb2
     - path: Scripts/Scripts/Authoring/DimensionVisualAssetValidation.cs
       guid: 5396f1ee54794f3c9c0d3d6345b0f5ea
+    - path: Scripts/Scripts/Authoring/DimensionTileMapSnapshot.cs
+      guid: 784321f6843d50f47937375366bf1eb6
+    - path: Scripts/Scripts/Authoring/DimensionTileMapModel.cs
+      guid: e9b80cc6e13226149935ba275f86188e
     - path: Scripts/Scripts/Authoring/DimensionTemplateStarterFactory.cs
       guid: e3ea1ee0982e83f43923db62739f5167
     - path: Scripts/Scripts/Authoring/DimensionTemplateStarterAssessment.cs
@@ -306,10 +336,18 @@ MonoBehaviour:
       guid: c9133f2f30505a04e9a9fb093f1cbc16
     - path: Scripts/Scripts/Authoring/DimensionSceneContentAuthoring.cs
       guid: d645f6ceaaf54e9aaf1d14d9097f63ea
+    - path: Scripts/Scripts/Authoring/DimensionRuntimeManifestSnapshot.cs
+      guid: 8548d039981bec0439c6815726fc8d49
     - path: Scripts/Scripts/Authoring/DimensionRuntimeManifestAsset.cs
       guid: 3e3a5a120696bd14cbb8e7e1bb646f87
     - path: Scripts/Scripts/Authoring/DimensionResourceAuthoringAssets.cs
       guid: b86d37a795bf4a4aa58c9e18042e6b4d
+    - path: Scripts/Scripts/Authoring/DimensionPortalVisualProfileAsset.cs
+      guid: f48c59a2a9e14e48bff6c6a2a490187b
+    - path: Scripts/Scripts/Authoring/DimensionPortalVersions.cs
+      guid: 871bac5d60810ac44a2cc707e3d63d66
+    - path: Scripts/Scripts/Authoring/DimensionPortalPackageAsset.cs
+      guid: 6b6485d7a9ca4cbfb292b785671ac4f2
     - path: Scripts/Scripts/Authoring/DimensionPortalAccessRuleAsset.cs
       guid: 2588085199a843cb8d6646af1ef61191
     - path: Scripts/Scripts/Authoring/DimensionLayoutTemplatePresetCatalog.cs
@@ -326,6 +364,8 @@ MonoBehaviour:
       guid: e660bc9fba4fab84c974bf82ee7bea9d
     - path: Scripts/Scripts/Authoring/DimensionLayoutGridCellDefinition.cs
       guid: cf691a4f63f31c24ca5c2be40b9a5400
+    - path: Scripts/Scripts/Authoring/DimensionItemArchetypeValidator.cs
+      guid: 4e7744467cc469d4db1726dba4fce600
     - path: Scripts/Scripts/Authoring/DimensionFrameworkToolGuide.cs
       guid: 3efddf90ffbe4bb4ca155db7c1296004
     - path: Scripts/Scripts/Authoring/DimensionFrameworkSetupGuide.cs
@@ -524,6 +564,10 @@ MonoBehaviour:
       guid: 5c44be2b509f3c74dbd516678f8aa01d
     - path: Scripts/API/Scripts/DimensionTravelCancelRequest.cs
       guid: 746ee27f3a4d6684f876a00a92e6be83
+    - path: Scripts/API/Scripts/DimensionTilesetRegistry.cs
+      guid: 1b10b179bb8e93b408f20ed100bac116
+    - path: Scripts/API/Scripts/DimensionTileset.cs
+      guid: 824875137dea3394bab99b1d771580ea
     - path: Scripts/API/Scripts/DimensionTemplateManifestExportPreview.cs
       guid: 3c3aa39e9184482498da46cba1fbdcf9
     - path: Scripts/API/Scripts/DimensionStarterReadinessSnapshot.cs
@@ -546,6 +590,8 @@ MonoBehaviour:
       guid: 67146c089106cb54eb076faaab1b1094
     - path: Scripts/API/Scripts/DimensionSpaceKind.cs
       guid: 92a4890192bc4bc4bad2f545bb542bfa
+    - path: Scripts/API/Scripts/DimensionSlotResizeResult.cs
+      guid: a8c4e0990f8dd0142912f895a472195b
     - path: Scripts/API/Scripts/DimensionSlotRecord.cs
       guid: 8a9d64c399184264b9ff21c3644bbc83
     - path: Scripts/API/Scripts/DimensionSlotAllocationResult.cs
@@ -648,6 +694,8 @@ MonoBehaviour:
       guid: 9802a1ab611943b8bc84bb05be36f177
     - path: Scripts/API/Scripts/DimensionMapPresentationKind.cs
       guid: d67ea168b0d142e1ae7454457905f8db
+    - path: Scripts/API/Scripts/DimensionMapModel.cs
+      guid: 499014c7a77c81f4d8acbfb75585ac32
     - path: Scripts/API/Scripts/DimensionMapMarker.cs
       guid: 3a89cbd899007274f8f060227267312a
     - path: Scripts/API/Scripts/DimensionMapLayerDefinition.cs
@@ -674,6 +722,8 @@ MonoBehaviour:
       guid: c4ef7f0d2acbf684f960cc4b553decb1
     - path: Scripts/API/Scripts/DimensionLandingValidationRequest.cs
       guid: 8c03987bff0f79f4987c62d9b8a7e0ec
+    - path: Scripts/API/Scripts/DimensionItemArchetype.cs
+      guid: 44fac06cc2e473d4ca70b963162bd9b0
     - path: Scripts/API/Scripts/DimensionIds.cs
       guid: de72f1ccbed33864694104c13f512b7b
     - path: Scripts/API/Scripts/DimensionGenerationTableSelectionResult.cs
@@ -854,6 +904,8 @@ MonoBehaviour:
       guid: b1d388dd97bc06445a021c226d11e364
     - path: Scripts/API/Scripts/DimensionChangedEvent.cs
       guid: 05f3893dcf8c9384eaff8abf9328a57c
+    - path: Scripts/API/Scripts/DimensionCapabilityRegistry.cs
+      guid: 6a285649792d92f4ab363c4e0b70a97d
     - path: Scripts/API/Scripts/DimensionCapabilityFlags.cs
       guid: 4d1cba74967485f43af2828684efead8
     - path: Scripts/API/Scripts/DimensionBounds.cs
@@ -954,17 +1006,21 @@ MonoBehaviour:
       guid: fa67f10a4c53aa7478b40a16f07b66f0
     - path: Scripts/API/Scripts/DimensionAccessContext.cs
       guid: 4cec4131d068e0449a26e5840f1d61e0
-    - path: Scripts/Generated/DimensionPlayerContextRpcSystems__System_12733873760.g.cs
+    - path: Scripts/Generated/DimensionItemPortalSpawnSystem__System_9735001480.g.cs
       guid: 
-    - path: Scripts/Generated/DimensionPortalActivationSystem__System_19624080370.g.cs
+    - path: Scripts/Generated/DimensionPlayerContextRpcSystems__System_16860027550.g.cs
       guid: 
-    - path: Scripts/Generated/DimensionPortalHydrationSystem__System_7276304150.g.cs
+    - path: Scripts/Generated/DimensionPortalActivationSystem__System_18988215080.g.cs
       guid: 
-    - path: Scripts/Generated/DimensionReturnPortalSpawnSystem__System_8503337940.g.cs
+    - path: Scripts/Generated/DimensionPortalComponents__System_2308469450.g.cs
       guid: 
-    - path: Scripts/Generated/DimensionTravelRpcSystems__System_807351100.g.cs
+    - path: Scripts/Generated/DimensionPortalHydrationSystem__System_8789332400.g.cs
       guid: 
-    - path: Scripts/Generated/NullforgeReturnPortalSpawnSystem__System_21168114660.g.cs
+    - path: Scripts/Generated/DimensionPortalMapMarkerScopeSystem__System_16857343840.g.cs
+      guid: 
+    - path: Scripts/Generated/DimensionReturnPortalSpawnSystem__System_6350460930.g.cs
+      guid: 
+    - path: Scripts/Generated/DimensionTravelRpcSystems__System_19692772030.g.cs
       guid: 
     - path: Scripts/Generated/ExpandNullforge.Networking_DimensionPlayerContextRequestRpcCommandSerializer.cs
       guid: 
@@ -979,6 +1035,10 @@ MonoBehaviour:
     - path: Scripts/Generated/ExpandNullforge.Networking_DimensionTravelRequestRpcCommandSerializer.cs
       guid: 
     - path: Scripts/Generated/ExpandNullforge.Networking_DimensionTravelResultRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ExpandNullforge.Portals_DimensionPortalCDSerializer.cs
+      guid: 
+    - path: Scripts/Generated/GhostComponentSerializerCollection.cs
       guid: 
     - path: Bundles/ExpandNullforge_Windows.assetbundle
       guid: 
@@ -997,6 +1057,60 @@ MonoBehaviour:
   assets:
   - path: Assets/ExpandNullforge/Data/ExpandNullforge.asset
     hash: 3F963FA77DBDC466BC7A5536C86655ADE6D0E9E3A32E805F238D7898D49EB84A
+  - path: Assets/ExpandNullforge/DefaultArt/PortalItemIcon.png
+    hash: 4A254DA1FBC7469B1D3E5D387733C8E1BF4CCAB6F9CF827AFCAA916DD74F51B2
+  - path: Assets/ExpandNullforge/DefaultArt/PortalItemIcon_inHand.png
+    hash: 1C424FD8BDD3A399380E283ABBDA9C85567367C336975C502363DE8A622D2AD8
+  - path: Assets/ExpandNullforge/DefaultArt/README.md
+    hash: 6620070F8EF5F5F9F35290C1B267FB4D5EF5CA06FC05EF5487A86724E779194F
+  - path: Assets/ExpandNullforge/Editor/Shaders/PortalStudioAdditiveComposite.shader
+    hash: 283F5E5A256A73F9A26D40AC5C13CD2451F162C31C595E3B7CFE6F83B50BA7DD
+  - path: Assets/ExpandNullforge/Editor/VanillaPortalReference/Prefabs/DimensionPortalEntityTemplate.prefab
+    hash: 5FF5A535B591565DA2EEF0F028917535A1DBE53EBEBCEC10EFB069C218D6D69F
+  - path: Assets/ExpandNullforge/Editor/VanillaPortalReference/Prefabs/DimensionPortalVisualTemplate.prefab
+    hash: C1ED0EBE1CD355607098901ACB9257B84EB63B13088C037FFC0ABCB63AC79D48
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalBody.asset
+    hash: A1EFC83C98C5D1F051F714E678E6E726B7A1F547078990B21292469E5F86E325
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalCenterEffect.asset
+    hash: 9B8D7F38992D05E3FE5AF8FF7E02423DC0BC3310CDC6A59A3BD6F7614CEC798F
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalCenterEffectInstant.asset
+    hash: ECF3046E0E885172E5920C92333BD5153DA455C0DB8B8605DE145074CB9B2506
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalChargeProgress.asset
+    hash: 12D738AF34E4B4318AD2E6FA8809CDB3640722EC2E0A5F01E2560F39AE3A989F
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalCustomSwirl.asset
+    hash: 0557B461B365CC7E2A514A0D5D73A8D92CA85F6B96CD97A0B006CBEAC1FB6D74
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalEmissiveWave.asset
+    hash: 24F486C9F74B39099211D0410D23CA7914E4C7EBD73E3FBD8A4B3F222035DB92
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalOutlineMask.asset
+    hash: 00A333F068E22CA75A3510871E091982EC80B745C186F84B4C6AF9ACA503BCC9
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalShadow.asset
+    hash: 4EECFF6B5E764245D93B9941BA24E8F3EC345C534A16088124590D6C2F8FE77E
+  - path: Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalShadowCaster.asset
+    hash: 6F9F5E415107223EB22D83223277295F90A10F9BB52E52FA037942ED147951BB
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/Instant/PortalCenterEffect_close2.png
+    hash: 992EBA23C756CFD154C7F5C94AA6FD3D8A2B9C77C7CA2BD73FF9E6E148534DA5
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/Instant/PortalCenterEffect_idle2.png
+    hash: E48A76E4B31DAFE635520D43C2DD2B8BC24EC0502EFB3515B7F48488F7304DFB
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/Instant/PortalCenterEffect_open2.png
+    hash: FA0A517D51296DCA019E484D09EEAB0CEF482D0F5B78E8F2F8D8713F164B6189
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalCenterEffect_idle.png
+    hash: E704BB8BF590A790C9BA76D0DFDEDE9F3F20B0B0ADCD97ACF836C4E764702EAD
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalCenterEffect_open.png
+    hash: A0741C6A13ED86CAE91AF2087EDBAEE2AB313F1BE6D4A7670EC99961F06A79D5
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalChargeProgress_progress.png
+    hash: 3712EDEEEB7E31E354A9A8B3390ABAB08BEE7B689EE056F1B3A541FB104F4BA2
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalCustomSwirl_loop.png
+    hash: 557ADDCF8298E3B60E79315F4E3D4922831B66BB79021CC70C30F2FC6DD2FA6C
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalEmissiveWave_wave.png
+    hash: 1E7496352E65792719059814CD273FE813A6CEB4019CCA4F4DAF38EC301DA3DF
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalOutlineMask.png
+    hash: 6864AF55EDD2632A3F4E0CCDB727FDBE95BDAD5670074F770FF4638F60A34DB7
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalShadow.png
+    hash: DA881FBB145CBD604D093EFF7CDB4AE7CC8CC21EAF981FF342B052E491FA4B51
+  - path: Assets/ExpandNullforge/PortalVisuals/Texture2D/PortalShadowCaster.png
+    hash: 0145D3D4FBA2BD7669DBD1D0CE8C3000E7CD33C9D3DC829EBCF55468F305A8BC
+  - path: Assets/ExpandNullforge/SpriteAssetManifest.asset
+    hash: 8759B9BBDB12D27C0C678C1B33103D72C118EC7FC370F74F9285E910E7B79CA7
   - path: Assets/ExpandNullforge/VanillaPortalReference/Material/CoreSpawnLightning.mat
     hash: B827106A61D71BFCC43C0EED694DF32873EA99EEF09F39E7C94C7CDDDCBE58E6
   - path: Assets/ExpandNullforge/VanillaPortalReference/Material/EnergyEmissiveAmplify.mat
@@ -1006,7 +1120,7 @@ MonoBehaviour:
   - path: Assets/ExpandNullforge/VanillaPortalReference/Material/ParticleAdd.mat
     hash: 5E515B430CBE04184D8B065832A369071BCA36ECF6A7656928059579DDFB49EA
   - path: Assets/ExpandNullforge/VanillaPortalReference/Material/PortalAmplify.mat
-    hash: EF93CD44ABFA13B50E42ACE8133B860F4D375B5D5BEC7BE53A98E1F623DDD87D
+    hash: E8C32457ED9B8EE84045370D053659874412C00C76F3C2A90F0FEA99A049B53D
   - path: Assets/ExpandNullforge/VanillaPortalReference/Material/PortalEmissiveAmplify.mat
     hash: 7149CB83E3E530ED0DEC5FBC68B98223AEE7B26EE6685EA5160701CAEF118D26
   - path: Assets/ExpandNullforge/VanillaPortalReference/Material/ShadowCastingSprite.mat
@@ -1015,15 +1129,15 @@ MonoBehaviour:
       Light Emitter).mat
     hash: 5A3CC4138B19C1F14D7E7DD20985051061804B0EAB7DF9C20790E1C937812A6B
   - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_Emissive.shader
-    hash: 082001123CB1550443AE62E981665C58096775F5C209DB7EABC7E655E59B86C5
+    hash: 2B76B38704333B3BF8911A08F2EDD1A6AC9D591848DF3C5F8D208524A5779432
   - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_FloorShadow.shader
-    hash: 0FA56E1BCD724249A71918A14714FE20ACF7A8061EAC1FA7617E20C40CB6EFC6
+    hash: FE30AEE4D180DFF460D07DB42CF6E9D13B750500473A1CD7B8C70BFDEA22F887
   - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_Portal.shader
-    hash: A23DC3619F73A2115FAC323CA34362B036C4C9470F107A1A88067B3C5E726250
+    hash: 075E655F71A4DC1DBD87D84306B87C641A5A7A3000E651F893059FBE65586F24
   - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Amplify_ShadowCastingSprite.shader
-    hash: 93BF34D8B00D181E90A1DB529D185DD54CF777396675E7FD8F78C6C78C66BEA5
+    hash: 0F05A794A4C72B83947D48916C242EC70834EBA9727C86D553F30B2E9A1E02A9
   - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/Radical_alphaBlend_glow.shader
-    hash: 8390BC00A2F740A8924106B53CA0F28FF12FDD67BA38EB0A5769B6246DC7CDFE
+    hash: 3884CB4A6CA6C5282E7DF5CDD4903E14C764DBD059F2C44D7CCC3B59A2CC5027
   - path: Assets/ExpandNullforge/VanillaPortalReference/Shader/SpriteObject_StandardCK.shader
     hash: 2DCD2235E68D93BCE3682343B967E1A9EF975F11C193553D1EC08C171BD58E4C
   - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/flash_0.asset
@@ -1074,6 +1188,8 @@ MonoBehaviour:
     hash: A725DFE6FEF4F4062CF38970C867E857D581AF729DBF69BE896F53EC2B69B48C
   - path: Assets/ExpandNullforge/VanillaPortalReference/Sprite/wcircle.asset
     hash: E3E5FF863CC731E46F88AF8629337C1D1C91B6818CE1E0EA46221ABF1923F2E7
+  - path: Assets/ExpandNullforge/VanillaPortalReference/SpriteAsset/portal.asset
+    hash: 716ACAA41EF44BB1E9C6B46788236CAD1DB31709B771C6121A40D05976A88E72
   - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/black_gradient_no_clamp.png
     hash: 4ABC7156DBC4C6C91994ADEC2702607D4378F37EFE47DCDEFE2DD89A61503E96
   - path: Assets/ExpandNullforge/VanillaPortalReference/Texture2D/flash.png

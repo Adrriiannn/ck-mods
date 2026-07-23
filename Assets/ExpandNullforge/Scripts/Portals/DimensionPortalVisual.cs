@@ -79,6 +79,13 @@ namespace ExpandNullforge.Portals
     [SerializeField]
     private bool projectedShadowVisible = true;
 
+    // Baked true on the dedicated instant item-portal (V2) visual prefab: the frame, charge wave,
+    // milestones, outlines and ground shadow stay hidden, leaving the inner circle, swirls and
+    // light. Baked (not switched at runtime) so the frameless look never waits on replicated state,
+    // and safe under pooling because visual pools are per prefab.
+    [SerializeField]
+    private bool itemPortalMode;
+
     [Header("Resolved Portal Style")]
     [SerializeField]
     private Color portalBodyColor = Color.white;
@@ -120,20 +127,14 @@ namespace ExpandNullforge.Portals
     [SerializeField]
     private float thirdMilestone = 0.75f;
 
-    [SerializeField]
-    private int milestoneEmptyFrame;
-
-    [SerializeField]
-    private int milestoneFirstFrame = 1;
-
-    [SerializeField]
-    private int milestoneSecondFrame = 3;
-
-    [SerializeField]
-    private int milestoneThirdFrame = 4;
-
-    [SerializeField]
-    private int milestoneReadyFrame = 7;
+    // The milestone stage -> sheet frame mapping is fixed to the vanilla sheet order
+    // (empty 0, bottom 1, middle 3, upper 4, ready 7). Custom milestone sheets follow the
+    // same frame order; only the activation THRESHOLDS are authorable.
+    private const int MilestoneEmptyFrame = 0;
+    private const int MilestoneFirstFrame = 1;
+    private const int MilestoneSecondFrame = 3;
+    private const int MilestoneThirdFrame = 4;
+    private const int MilestoneReadyFrame = 7;
 
     [SerializeField]
     private Color centerColor =
@@ -154,6 +155,12 @@ namespace ExpandNullforge.Portals
     [SerializeField]
     private int centerOpeningAnimationIndex = 1;
 
+    // Animation index of the one-shot closing sequence (the opening in reverse). -1 disables
+    // closing entirely; the generator bakes 2 on the instant item-portal prefab, whose center
+    // SpriteAsset carries idle/opening/closing animations.
+    [SerializeField]
+    private int centerClosingAnimationIndex = -1;
+
     [SerializeField]
     private bool playReadyFlash = true;
 
@@ -171,6 +178,8 @@ namespace ExpandNullforge.Portals
     private bool centerOpeningObserved;
     private int centerOpeningAnimationHash;
     private float centerOpeningFallbackAt = -1.0f;
+    private bool centerClosingPending;
+    private float centerClosingEndsAt = -1.0f;
     private bool outlineCapVisible;
     private Color lastOutlineCapColor = Color.clear;
     private ParticleSystem[] centerParticleSystems;
@@ -201,6 +210,7 @@ namespace ExpandNullforge.Portals
     private void LateUpdate()
     {
       EnsureCenterIdleAfterOpening();
+      FinishCenterClosingIfDue();
       ApplyOutlineCapState();
       UpdateReadyFlashState();
     }
@@ -228,6 +238,120 @@ namespace ExpandNullforge.Portals
       MarkShadowAreaDirty();
     }
 
+    /// <summary>
+    /// True while this instance renders an instant item portal (V2) — baked on the dedicated
+    /// frameless prefab and switched per entity at view-bind time, because pooled portal
+    /// visuals can serve any portal entity.
+    /// </summary>
+    public bool IsItemPortalMode
+    {
+      get { return itemPortalMode; }
+    }
+
+    // The prefab-baked layer configuration, captured before the first runtime mode switch so a
+    // pooled instance can serve an instant portal and later a framed portal (or vice versa)
+    // without permanently losing its authored visibility.
+    private bool bakedDefaultsCaptured;
+    private bool bakedBodyVisible;
+    private bool bakedWaveVisible;
+    private bool bakedMilestoneVisible;
+    private bool bakedShadowVisible;
+    private bool bakedReadyFlash;
+    private int bakedClosingIndex;
+
+    private void CaptureBakedDefaults()
+    {
+      if (bakedDefaultsCaptured)
+      {
+        return;
+      }
+
+      bakedDefaultsCaptured = true;
+      bakedBodyVisible = portalBodyVisible;
+      bakedWaveVisible = chargeWaveVisible;
+      bakedMilestoneVisible = milestoneVisible;
+      bakedShadowVisible = projectedShadowVisible;
+      bakedReadyFlash = playReadyFlash;
+      bakedClosingIndex = centerClosingAnimationIndex;
+    }
+
+    /// <summary>
+    /// Switches this instance between the frameless instant item-portal look and its
+    /// prefab-baked configuration. Pooled portal visuals are shared across portal prefabs, so
+    /// the view resolves this per entity at bind time; turning the mode off restores the exact
+    /// baked layer visibility.
+    /// </summary>
+    public void SetItemPortalMode(bool on)
+    {
+      CaptureBakedDefaults();
+      if (itemPortalMode == on)
+      {
+        return;
+      }
+
+      itemPortalMode = on;
+      if (on)
+      {
+        portalBodyVisible = false;
+        chargeWaveVisible = false;
+        milestoneVisible = false;
+        projectedShadowVisible = false;
+        playReadyFlash = false;
+        if (centerClosingAnimationIndex < 0)
+        {
+          // Animation 2 is the closing one-shot of the instant center contract; the runtime
+          // guards gracefully when the bound center asset has no third animation.
+          centerClosingAnimationIndex = 2;
+        }
+      }
+      else
+      {
+        portalBodyVisible = bakedBodyVisible;
+        chargeWaveVisible = bakedWaveVisible;
+        milestoneVisible = bakedMilestoneVisible;
+        projectedShadowVisible = bakedShadowVisible;
+        playReadyFlash = bakedReadyFlash;
+        centerClosingAnimationIndex = bakedClosingIndex;
+      }
+
+      // Re-run the one-time static layer setup so the new visibility and outline gating apply.
+      staticStateApplied = false;
+      ApplyStaticState();
+    }
+
+    /// <summary>
+    /// Plays the portal opening animation and swirl intro once. An item portal spawns already active,
+    /// so the normal "just became active" trigger never fires — this drives it explicitly on spawn.
+    /// </summary>
+    public void PlayItemPortalOpening()
+    {
+      if (!centerVisible)
+      {
+        return;
+      }
+
+      // A pooled instance may be reused while its previous portal was still mid-close.
+      ResetCenterClosing();
+
+      // The one-time static layer setup leaves the center effect inactive until the first charge
+      // update; reactivate it here so the opening actually renders instead of playing on a hidden
+      // object.
+      SetActive(portalCenterEffect, true);
+      if (portalCenterEffect != null)
+      {
+        portalCenterEffect.enabled = true;
+      }
+
+      bool openingStarted = TryStartCenterOpening();
+      RestartCenterParticles();
+      RestartCustomSwirl();
+      PlayReadyFlash();
+      if (!openingStarted)
+      {
+        StartCenterIdleAnimation();
+      }
+    }
+
     private void ApplyStaticState()
     {
       ApplyVanillaShadowShaders();
@@ -243,8 +367,8 @@ namespace ExpandNullforge.Portals
             ScaleColor(
                 MultiplyColors(portalBodyEmissiveColor, portalBodyColor),
                 5.0f));
-        ConfigureStaticLayer(portalOutlineMask, true, Color.clear, Color.clear);
-        ConfigureStaticLayer(portalOutlineSupportMask, true, Color.clear, Color.clear);
+        ConfigureStaticLayer(portalOutlineMask, !itemPortalMode, Color.clear, Color.clear);
+        ConfigureStaticLayer(portalOutlineSupportMask, !itemPortalMode, Color.clear, Color.clear);
         ConfigureStaticLayer(portalOutlineCap, false, Color.clear, Color.clear);
         ConfigureStaticLayer(
             portalChargeProgress,
@@ -362,6 +486,12 @@ namespace ExpandNullforge.Portals
         return;
       }
 
+      if (itemPortalMode)
+      {
+        SetActive(portalOutlineCap, false);
+        return;
+      }
+
       Color outlineColor = GetCurrentOutlineColor();
       bool visible = outlineColor.a > 0.001f;
       if (!visible)
@@ -415,6 +545,7 @@ namespace ExpandNullforge.Portals
       chargeWaveStarted = false;
       centerIdleStarted = false;
       ResetCenterOpeningFallback();
+      ResetCenterClosing();
       outlineCapVisible = false;
       lastOutlineCapColor = Color.clear;
       portalBodyRendererStateApplied = false;
@@ -544,9 +675,9 @@ namespace ExpandNullforge.Portals
 
       int milestoneStage = ResolveMilestoneStage(progress, activated);
       // Keep the milestone layer available for stage zero as well. The vanilla
-      // frame mapped to that stage is transparent, so the default appearance is
-      // unchanged, while custom sheets can deliberately author a pre-threshold
-      // state and the `milestoneEmptyFrame` mapping is no longer dead data.
+      // frame for that stage is transparent, so the default appearance is
+      // unchanged, while custom sheets can author a visible pre-threshold state
+      // by drawing into frame 0.
       bool active = portalActive && milestoneVisible;
       SetActive(portalChargeProgress, active);
       if (!active || portalChargeProgress == null)
@@ -695,35 +826,39 @@ namespace ExpandNullforge.Portals
       return progress >= first ? 1 : 0;
     }
 
-    private int ResolveMilestoneFrame(int stage)
+    private static int ResolveMilestoneFrame(int stage)
     {
       if (stage >= 4)
       {
-        return Mathf.Max(0, milestoneReadyFrame);
+        return MilestoneReadyFrame;
       }
 
       if (stage == 3)
       {
-        return Mathf.Max(0, milestoneThirdFrame);
+        return MilestoneThirdFrame;
       }
 
       if (stage == 2)
       {
-        return Mathf.Max(0, milestoneSecondFrame);
+        return MilestoneSecondFrame;
       }
 
-      if (stage == 1)
-      {
-        return Mathf.Max(0, milestoneFirstFrame);
-      }
-
-      return Mathf.Max(0, milestoneEmptyFrame);
+      return stage == 1 ? MilestoneFirstFrame : MilestoneEmptyFrame;
     }
 
     private void ApplyCenterEffect(bool activated, bool becameActivated, bool force)
     {
       bool centerActive = activated && centerVisible;
-      SetActive(portalCenterEffect, centerActive);
+      if (activated)
+      {
+        ResetCenterClosing();
+      }
+
+      if (!centerClosingPending)
+      {
+        SetActive(portalCenterEffect, centerActive);
+      }
+
       if (portalCenterEffect != null)
       {
         portalCenterEffect.enabled = true;
@@ -756,6 +891,15 @@ namespace ExpandNullforge.Portals
         {
           readyFlashRoot.SetActive(false);
         }
+
+        // An instant item portal (V2) switches off by playing the opening in reverse: the
+        // swirls and particles are already hidden above, while the center stays visible just
+        // long enough for the one-shot closing animation before LateUpdate hides it too.
+        if (itemPortalMode && wasActivated && !centerClosingPending)
+        {
+          TryStartCenterClosing();
+        }
+
         return;
       }
 
@@ -774,7 +918,10 @@ namespace ExpandNullforge.Portals
 
       if (force || !centerIdleStarted)
       {
-        if (centerVisible)
+        // Never restart the idle loop while an opening is still playing. An item portal triggers its
+        // opening explicitly a frame or two after spawn (once its id replicates), and this branch would
+        // otherwise clobber that opening with the idle animation in the same frame.
+        if (centerVisible && !centerOpeningFallbackPending)
         {
           StartCenterIdleAnimation();
         }
@@ -909,6 +1056,70 @@ namespace ExpandNullforge.Portals
       centerOpeningObserved = false;
       centerOpeningAnimationHash = 0;
       centerOpeningFallbackAt = -1.0f;
+    }
+
+    /// <summary>
+    /// Plays the one-shot closing animation (the opening in reverse) on an instant item portal
+    /// that just switched off. The center is reactivated for the duration of the animation and
+    /// hidden again from LateUpdate once it completes.
+    /// </summary>
+    private bool TryStartCenterClosing()
+    {
+      if (!centerVisible ||
+          centerClosingAnimationIndex < 0 ||
+          portalCenterEffect == null ||
+          portalCenterEffect.asset == null)
+      {
+        return false;
+      }
+
+      SpriteAsset asset = portalCenterEffect.asset;
+      if (centerClosingAnimationIndex >= asset.animationCount)
+      {
+        return false;
+      }
+
+      SetActive(portalCenterEffect, true);
+      portalCenterEffect.enabled = true;
+      if (!TryPlayAnimation(portalCenterEffect, centerClosingAnimationIndex, true))
+      {
+        SetActive(portalCenterEffect, false);
+        return false;
+      }
+
+      FrameAnimation closing = asset.GetAnimationAt(centerClosingAnimationIndex);
+      float animationSpeed = Mathf.Abs(portalCenterEffect.animationTimescale);
+      if (animationSpeed <= 0.0001f)
+      {
+        animationSpeed = 1.0f;
+      }
+
+      float duration = closing == null ? 0.0f : closing.duration / animationSpeed;
+      if (float.IsNaN(duration) || float.IsInfinity(duration) || duration <= 0.0f)
+      {
+        duration = 0.01f;
+      }
+
+      centerClosingPending = true;
+      centerClosingEndsAt = Time.time + duration;
+      return true;
+    }
+
+    private void FinishCenterClosingIfDue()
+    {
+      if (!centerClosingPending || Time.time < centerClosingEndsAt)
+      {
+        return;
+      }
+
+      ResetCenterClosing();
+      SetActive(portalCenterEffect, false);
+    }
+
+    private void ResetCenterClosing()
+    {
+      centerClosingPending = false;
+      centerClosingEndsAt = -1.0f;
     }
 
     private void RestartCenterParticles()
