@@ -106,6 +106,7 @@ namespace ExpandNullforge.EditorTools
             List<string> generatedIds = new List<string>();
             List<DimensionLocalizationCsv.Row> localizationRows =
                 new List<DimensionLocalizationCsv.Row>();
+            List<string> retiredLocalizationKeys = new List<string>();
             try
             {
                 AssetDatabase.StartAssetEditing();
@@ -118,7 +119,8 @@ namespace ExpandNullforge.EditorTools
                             localizationRows,
                             item.ItemId,
                             item.DisplayName,
-                            item.Description);
+                            item.Description,
+                            retiredLocalizationKeys);
                     }
                 }
             }
@@ -131,7 +133,7 @@ namespace ExpandNullforge.EditorTools
 
             string modRoot = ResolveModRoot(outputFolder);
             RecordGeneratedItemIds(modRoot, generatedIds, report);
-            WriteLocalization(modRoot, localizationRows, report);
+            WriteLocalization(modRoot, localizationRows, retiredLocalizationKeys, report);
             return report;
         }
 
@@ -142,6 +144,7 @@ namespace ExpandNullforge.EditorTools
         private static void WriteLocalization(
             string modRoot,
             List<DimensionLocalizationCsv.Row> rows,
+            List<string> retiredKeys,
             DimensionItemGenerationReport report)
         {
             if (rows.Count == 0)
@@ -166,7 +169,7 @@ namespace ExpandNullforge.EditorTools
                 string existing = System.IO.File.Exists(absolutePath)
                     ? System.IO.File.ReadAllText(absolutePath)
                     : null;
-                string merged = DimensionLocalizationCsv.Merge(existing, rows);
+                string merged = DimensionLocalizationCsv.Merge(existing, rows, retiredKeys);
                 if (!string.Equals(existing, merged, StringComparison.Ordinal))
                 {
                     System.IO.File.WriteAllText(absolutePath, merged);
@@ -371,6 +374,18 @@ namespace ExpandNullforge.EditorTools
             ConfigureObject(root, item, report);
             ConfigureLocalization(root, item, report);
 
+            // Portal items (V2 instant portals) are framework-defined: rare rarity so the item
+            // reads as the special tool it is. Applied on every generate so existing consumer
+            // items pick it up without manual prefab edits.
+            if (item.Kind == DimensionItemKind.PortalItem)
+            {
+                ObjectAuthoring portalItemObject = root.GetComponent<ObjectAuthoring>();
+                if (portalItemObject != null)
+                {
+                    portalItemObject.rarity = Rarity.Rare;
+                }
+            }
+
             recipesByOutput.TryGetValue(item.ItemId, out DimensionRecipeAsset recipe);
             ApplyComponent<InventoryItemAuthoring>(
                 root, required, DimensionItemAuthoringComponents.InventoryItem,
@@ -513,10 +528,14 @@ namespace ExpandNullforge.EditorTools
             if (icon != null)
             {
                 inventory.icon = icon;
-                if (inventory.smallIcon == null)
-                {
-                    inventory.smallIcon = icon;
-                }
+            }
+
+            // Prefer an explicit small (in-hand / on-cursor) icon; fall back to the inventory icon so
+            // the item is never left without a held sprite.
+            Sprite smallIcon = item.SmallIconSprite != null ? item.SmallIconSprite : icon;
+            if (smallIcon != null)
+            {
+                inventory.smallIcon = smallIcon;
             }
         }
 

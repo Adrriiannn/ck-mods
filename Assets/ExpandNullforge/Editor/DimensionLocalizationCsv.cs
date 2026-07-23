@@ -39,14 +39,50 @@ namespace ExpandNullforge.EditorTools
             string displayName,
             string description)
         {
+            AddItemRows(rows, objectName, displayName, description, null);
+        }
+
+        /// <summary>
+        /// Localization keys Core Keeper reads for an object's name and tooltip.
+        /// Keys are written with ':' replaced by '_': the game's LocalizationManager applies that
+        /// replacement to every term before lookup (Term.Replace(':', '_')), so a key stored with a
+        /// colon can never be found. When the object name contained a colon, the old colon-form keys
+        /// are reported via <paramref name="retiredKeys"/> so the merge can drop stale rows.
+        /// </summary>
+        public static void AddItemRows(
+            List<Row> rows,
+            string objectName,
+            string displayName,
+            string description,
+            List<string> retiredKeys)
+        {
             if (rows == null || string.IsNullOrEmpty(objectName))
             {
                 return;
             }
 
-            string itemKey = "Items/" + objectName;
+            string lookupName = ToLookupKeyName(objectName);
+            string itemKey = "Items/" + lookupName;
             rows.Add(new Row(itemKey, displayName));
             rows.Add(new Row(itemKey + "Desc", description));
+
+            if (retiredKeys != null &&
+                !string.Equals(lookupName, objectName, StringComparison.Ordinal))
+            {
+                retiredKeys.Add("Items/" + objectName);
+                retiredKeys.Add("Items/" + objectName + "Desc");
+            }
+        }
+
+        /// <summary>
+        /// The form of an object name the game's localization lookup actually queries: Core Keeper's
+        /// patched I2 LocalizationManager replaces every ':' with '_' before searching its sources.
+        /// </summary>
+        public static string ToLookupKeyName(string objectName)
+        {
+            return string.IsNullOrEmpty(objectName)
+                ? string.Empty
+                : objectName.Replace(':', '_');
         }
 
         /// <summary>
@@ -54,6 +90,19 @@ namespace ExpandNullforge.EditorTools
         /// for a table that does not exist yet.
         /// </summary>
         public static string Merge(string existingContent, IReadOnlyList<Row> rows)
+        {
+            return Merge(existingContent, rows, null);
+        }
+
+        /// <summary>
+        /// Returns the new file content. <paramref name="retiredKeys"/> lists keys that are owned
+        /// but must no longer exist (e.g. the colon-form of a key the lookup can never resolve):
+        /// matching existing rows are dropped and nothing is written back for them.
+        /// </summary>
+        public static string Merge(
+            string existingContent,
+            IReadOnlyList<Row> rows,
+            IReadOnlyList<string> retiredKeys)
         {
             List<string> lines = new List<string>();
             HashSet<string> ownedKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -64,6 +113,17 @@ namespace ExpandNullforge.EditorTools
                     if (!string.IsNullOrEmpty(rows[i].Key))
                     {
                         ownedKeys.Add(rows[i].Key);
+                    }
+                }
+            }
+
+            if (retiredKeys != null)
+            {
+                for (int i = 0; i < retiredKeys.Count; i++)
+                {
+                    if (!string.IsNullOrEmpty(retiredKeys[i]))
+                    {
+                        ownedKeys.Add(retiredKeys[i]);
                     }
                 }
             }
