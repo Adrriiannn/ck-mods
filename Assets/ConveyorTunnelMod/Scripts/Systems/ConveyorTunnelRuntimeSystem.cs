@@ -59,7 +59,7 @@ public partial class ConveyorTunnelRuntimeSystem : SystemBase
   private const float TravelSecondsPerTile = 1.5f;
   private const int RouteMoveTime = 1;
   private const int MaxTransportDiagnosticLogs = 2048;
-  private const string RuntimeBuildTag = "mouth-aligned-side-intake-v24";
+  private const string RuntimeBuildTag = "far-distance-dropped-intake-v25";
 
   private readonly List<EndpointSnapshot> _endpoints = new List<EndpointSnapshot>();
   private readonly HashSet<Entity> _pairedEndpoints = new HashSet<Entity>();
@@ -148,7 +148,8 @@ public partial class ConveyorTunnelRuntimeSystem : SystemBase
       {
         ComponentType.ReadOnly<EntityDestroyedCD>(),
         ComponentType.ReadOnly<ConveyorTunnelPayloadCD>()
-      }
+      },
+      Options = EntityQueryOptions.IncludeDisabledEntities
     });
 
     _payloadQuery = GetEntityQuery(new EntityQueryDesc

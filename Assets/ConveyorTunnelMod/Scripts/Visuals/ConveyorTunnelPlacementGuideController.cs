@@ -6,6 +6,8 @@ using UnityEngine;
 
 public sealed class ConveyorTunnelPlacementGuideController : MonoBehaviour
 {
+  internal const float HologramMaxAlpha = 0.5f;
+
   private const int MaxGuideMarkerCount = 2048;
   private const float PreviewStaleSeconds = 0.15f;
   private const float ArrowSpeedTilesPerSecond = 1.8f;
@@ -586,8 +588,10 @@ public sealed class ConveyorTunnelConnectionOverlayController : MonoBehaviour
   private const float EndpointArrowInset = 0.68f;
   private const float BackgroundGroundHeightOffset = 0.031f;
   private const float ArrowGroundHeightOffset = 0.037f;
-  private const float BackgroundAlphaMultiplier = 0.58f;
-  private const float ArrowAlphaMultiplier = 0.96f;
+  private const float BackgroundAlphaMultiplier =
+      ConveyorTunnelPlacementGuideController.HologramMaxAlpha;
+  private const float ArrowAlphaMultiplier =
+      ConveyorTunnelPlacementGuideController.HologramMaxAlpha;
   private const float VisiblePathRadius = 28.0f;
 
   private static ConveyorTunnelConnectionOverlayController _instance;

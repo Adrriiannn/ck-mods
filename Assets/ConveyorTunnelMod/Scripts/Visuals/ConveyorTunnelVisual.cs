@@ -123,7 +123,8 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
 
   private void HandleEndpointStateChanged(int2 tile, ConveyorTunnelEndpointVisualState state)
   {
-    if (TryGetCurrentTile(out int2 currentTile) && currentTile.Equals(tile))
+    if (TryGetCurrentTile(out int2 currentTile) &&
+        (currentTile.Equals(tile) || AreOrthogonallyAdjacent(currentTile, tile)))
     {
       ApplyVisual(force: true);
     }
@@ -399,8 +400,10 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
   private int GetVariantIndex()
   {
     ConveyorTunnelEndpointRole role = ConveyorTunnelEndpointRole.Entrance;
-    int2 direction = ConveyorTunnelDirectionUtility.GetDirectionFromVariation(GetAnimationIndex());
-    bool connectedToBelt = false;
+    int2 visualDirection =
+        ConveyorTunnelDirectionUtility.GetDirectionFromVariation(GetAnimationIndex());
+    int2 direction = visualDirection;
+    bool connectedToTransport = false;
 
     if (TryGetCurrentTile(out int2 tile))
     {
@@ -419,27 +422,34 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
         }
       }
 
-      connectedToBelt = IsConnectedToConveyorBelt(tile, direction, role);
+      connectedToTransport = IsConnectedToTransport(
+          tile,
+          visualDirection,
+          direction,
+          role);
     }
 
     if (role == ConveyorTunnelEndpointRole.Exit)
     {
-      return connectedToBelt
+      return connectedToTransport
           ? ConnectedExitVariantIndex
           : TerminatedExitVariantIndex;
     }
 
-    return connectedToBelt
+    return connectedToTransport
         ? ConnectedEntranceVariantIndex
         : TerminatedEntranceVariantIndex;
   }
 
-  private static bool IsConnectedToConveyorBelt(
+  private static bool IsConnectedToTransport(
       int2 tile,
+      int2 visualDirection,
       int2 direction,
       ConveyorTunnelEndpointRole role)
   {
-    if (direction.Equals(int2.zero))
+    if (visualDirection.Equals(int2.zero) ||
+        direction.Equals(int2.zero) ||
+        !visualDirection.Equals(direction))
     {
       return false;
     }
@@ -448,6 +458,19 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
     int2 beltTile = new int2(
         tile.x + direction.x * side,
         tile.y + direction.y * side);
+
+    if (TunnelVisualsByTile.TryGetValue(
+            GetTileKey(beltTile),
+            out ConveyorTunnelVisual adjacentVisual) &&
+        adjacentVisual != null)
+    {
+      return IsValidChainedTunnelConnection(
+          tile,
+          beltTile,
+          direction,
+          role,
+          adjacentVisual);
+    }
 
     ConveyorBelt belt = ConveyorBelt.GetBeltAtPosition(beltTile);
     if (belt == null || belt.isHidden || !belt.entityExist)
@@ -458,6 +481,75 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
     int2 beltDirection =
         ConveyorTunnelDirectionUtility.GetDirectionFromVariation(belt.variation);
     return beltDirection.Equals(direction);
+  }
+
+  private static bool IsValidChainedTunnelConnection(
+      int2 tile,
+      int2 adjacentTile,
+      int2 direction,
+      ConveyorTunnelEndpointRole role,
+      ConveyorTunnelVisual adjacentVisual)
+  {
+    int2 adjacentVisualDirection =
+        ConveyorTunnelDirectionUtility.GetDirectionFromVariation(
+            adjacentVisual.GetAnimationIndex());
+
+    if (!adjacentVisualDirection.Equals(direction) ||
+        !ConveyorTunnelNetworkState.TryGetEndpointState(
+            tile,
+            out ConveyorTunnelEndpointVisualState currentState) ||
+        !ConveyorTunnelNetworkState.TryGetEndpointState(
+            adjacentTile,
+            out ConveyorTunnelEndpointVisualState adjacentState))
+    {
+      return false;
+    }
+
+    ConveyorTunnelEndpointRole requiredAdjacentRole =
+        role == ConveyorTunnelEndpointRole.Exit
+            ? ConveyorTunnelEndpointRole.Entrance
+            : ConveyorTunnelEndpointRole.Exit;
+
+    if (currentState.Linked == 0 ||
+        adjacentState.Linked == 0 ||
+        currentState.PairedTile.Equals(adjacentTile) ||
+        adjacentState.PairedTile.Equals(tile) ||
+        currentState.Role != role ||
+        adjacentState.Role != requiredAdjacentRole ||
+        !currentState.Direction.Equals(direction) ||
+        !adjacentState.Direction.Equals(direction))
+    {
+      return false;
+    }
+
+    return IsEndpointPairOrdered(tile, currentState, direction) &&
+           IsEndpointPairOrdered(adjacentTile, adjacentState, direction);
+  }
+
+  private static bool IsEndpointPairOrdered(
+      int2 tile,
+      ConveyorTunnelEndpointVisualState state,
+      int2 direction)
+  {
+    int2 entranceTile = state.Role == ConveyorTunnelEndpointRole.Entrance
+        ? tile
+        : state.PairedTile;
+    int2 exitTile = state.Role == ConveyorTunnelEndpointRole.Exit
+        ? tile
+        : state.PairedTile;
+
+    return ConveyorTunnelDirectionUtility.IsOrderedPair(
+        entranceTile,
+        direction,
+        exitTile,
+        direction,
+        direction);
+  }
+
+  private static bool AreOrthogonallyAdjacent(int2 a, int2 b)
+  {
+    int2 delta = a - b;
+    return math.abs(delta.x) + math.abs(delta.y) == 1;
   }
 
   private void SyncConveyorAnimationTime()
@@ -512,7 +604,7 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
     _registeredTile = tile;
     _registeredDirection = direction;
     _hasRegisteredTile = true;
-    RefreshAdjacentConveyorBelts(tile);
+    RefreshAdjacentTransportVisuals(tile);
   }
 
   private void UnregisterTunnelTile()
@@ -539,23 +631,31 @@ public sealed class ConveyorTunnelVisual : EntityMonoBehaviour
 
     int2 tile = _registeredTile;
     _hasRegisteredTile = false;
-    RefreshAdjacentConveyorBelts(tile);
+    RefreshAdjacentTransportVisuals(tile);
   }
 
-  private static void RefreshAdjacentConveyorBelts(int2 tile)
+  private static void RefreshAdjacentTransportVisuals(int2 tile)
   {
-    RefreshConveyorBeltVisual(tile + new int2(0, 1));
-    RefreshConveyorBeltVisual(tile + new int2(1, 0));
-    RefreshConveyorBeltVisual(tile + new int2(0, -1));
-    RefreshConveyorBeltVisual(tile + new int2(-1, 0));
+    RefreshTransportVisual(tile + new int2(0, 1));
+    RefreshTransportVisual(tile + new int2(1, 0));
+    RefreshTransportVisual(tile + new int2(0, -1));
+    RefreshTransportVisual(tile + new int2(-1, 0));
   }
 
-  private static void RefreshConveyorBeltVisual(int2 tile)
+  private static void RefreshTransportVisual(int2 tile)
   {
     ConveyorBelt belt = ConveyorBelt.GetBeltAtPosition(tile);
     if (belt != null)
     {
       belt.UpdateVisuals(false);
+    }
+
+    if (TunnelVisualsByTile.TryGetValue(
+            GetTileKey(tile),
+            out ConveyorTunnelVisual visual) &&
+        visual != null)
+    {
+      visual.ApplyVisual(force: true);
     }
   }
 

@@ -1,0 +1,148 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc43e4983a160e543856e5ba0421c9e1, type: 3}
+  m_Name: ChunkLoaderMod
+  m_EditorClassIdentifier: 
+  metadata:
+    guid: eacfaf27ca06482294703216279496d0
+    name: ChunkLoaderMod
+    displayName: 
+    skipSafetyChecks: 0
+    disableScripts: 0
+    accessesExtraAssemblies: 1
+    disableHarmonyPatching: 0
+    requiredOn: 3
+    files:
+    - path: Scripts/Scripts/UI/ChunkLoaderToolkitUi.cs
+      guid: 69c95a3cd3ca4a338e2f33dc9ecb69ca
+    - path: Scripts/Scripts/UI/ChunkLoaderToolkitSnapshot.cs
+      guid: 93561e2cc9704be3835cbccf40b783e4
+    - path: Scripts/Scripts/UI/ChunkLoaderToolkitMapControls.cs
+      guid: e7f779bf61d543ca889211775859ce86
+    - path: Scripts/Scripts/UI/ChunkLoaderMapUiHost.cs
+      guid: e1fefce4d81b1404db9d2cef9765050c
+    - path: Scripts/Scripts/UI/ChunkLoaderMapOverlayRenderer.cs
+      guid: ec846fc03563ee243a897fbf1bd368f3
+    - path: Scripts/Scripts/UI/ChunkLoaderManagerPanel.cs
+      guid: c04cf9c95a0b1564c98742d50c115e1f
+    - path: Scripts/Scripts/UI/ChunkLoaderCursorOverlay.cs
+      guid: 55209cfb760141ae9ae30b7f71a47cc2
+    - path: Scripts/Scripts/Telemetry/ChunkLoaderTelemetrySystem.cs
+      guid: f948b0b222e758649a42acb11ece9edd
+    - path: Scripts/Scripts/Telemetry/ChunkLoaderTelemetry.cs
+      guid: 1e7ea71c5f5dc3046b642c0512c2a45d
+    - path: Scripts/Scripts/Snapshot/ChunkLoaderDetailsSystems.cs
+      guid: e5349a352fca9594ea4eae46c6802df1
+    - path: Scripts/Scripts/Snapshot/ChunkLoaderDetailsState.cs
+      guid: 885d24ea28cbc074a94d7259e754527b
+    - path: Scripts/Scripts/Snapshot/ChunkLoaderDetailsRpc.cs
+      guid: 58c5df285e593664bb8eb7ba9d7be811
+    - path: Scripts/Scripts/Server/ChunkLoaderSpawnerCompatibilitySystems.cs
+      guid: c215fe0f5029a834aa2bda2a48f56a37
+    - path: Scripts/Scripts/Server/ChunkLoaderSimulationRegions.cs
+      guid: 947769b7227f92845ba54568c2656dfe
+    - path: Scripts/Scripts/Server/ChunkLoaderRuntimeSystem.cs
+      guid: b636748deff542f409d34bbe708da27b
+    - path: Scripts/Scripts/Server/ChunkLoaderPlayerResolver.cs
+      guid: 69e186feb6095bd4398fbde1e7bf55d9
+    - path: Scripts/Scripts/Server/ChunkLoaderPeriodicRespawnSystem.cs
+      guid: 42c325896b5afb24e905320c649cea70
+    - path: Scripts/Scripts/Persistence/ChunkLoaderRegistry.cs
+      guid: c64480d999bfae443b806c07440adc07
+    - path: Scripts/Scripts/Networking/ChunkLoaderRpc.cs
+      guid: 50e51a4c10d78d04a8c2dc62f21ad7e8
+    - path: Scripts/Scripts/Networking/ChunkLoaderNetworkSystems.cs
+      guid: a4fdf01cf087c714aa571e4e276864b4
+    - path: Scripts/Scripts/Networking/ChunkLoaderNetworkState.cs
+      guid: 0aeb3487741d48749a6de06967aedaec
+    - path: Scripts/Scripts/Core/ChunkLoaderSettings.cs
+      guid: c3ff1f350941d314ca123c33825a28cd
+    - path: Scripts/Scripts/Core/ChunkLoaderModels.cs
+      guid: 134ebd9a4d62f284c9074e6860a976e5
+    - path: Scripts/Scripts/Core/ChunkLoaderConstants.cs
+      guid: acba33a63810a5949b77588b137322d7
+    - path: Scripts/Scripts/Core/ChunkLoaderComponents.cs
+      guid: 584aa5aa70d2d48468c18ba3692bf822
+    - path: Scripts/Scripts/Core/ChunkCoordinate.cs
+      guid: c1cf7ce42434a2949a65311414e2a47a
+    - path: Scripts/Scripts/Compatibility/ChunkLoaderCompatibility.cs
+      guid: fa2b8a7c4fa149f499e787f9ba56d09d
+    - path: Scripts/Scripts/Bootstrap/ChunkLoaderModEntry.cs
+      guid: be8a1f8e7af4f514086570b8db2329cb
+    - path: Scripts/Generated/ChunkLoaderDetailsSystems__System_16925718370.g.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderPeriodicRespawnSystem__System_20830732380.g.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderRuntimeSystem__System_3132827090.g.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderSpawnerCompatibilitySystems__System_16547531100.g.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderTelemetrySystem__System_13453815140.g.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderDetailsBeginRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderDetailsEndRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderDetailsRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderLogLineRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderMutationRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderMutationResultRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderQuotaUpdateRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderRegistrationDeletedRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderRegistrationRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderRegistryRequestRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderRegistrySnapshotBeginRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderRegistrySnapshotEndRpcCommandSerializer.cs
+      guid: 
+    - path: Scripts/Generated/ChunkLoaderSnapshotSampleRpcCommandSerializer.cs
+      guid: 
+    - path: Bundles/ChunkLoaderMod_Windows.assetbundle
+      guid: 
+    - path: Bundles/ChunkLoaderMod_Windows.assetbundle.manifest
+      guid: 
+    - path: Bundles/ChunkLoaderMod_Linux.assetbundle
+      guid: 
+    - path: Bundles/ChunkLoaderMod_Linux.assetbundle.manifest
+      guid: 
+    dependencies: []
+  modPath: Assets\ChunkLoaderMod
+  forceReimport: 1
+  buildBundles: 1
+  cacheBundles: 0
+  buildLinux: 1
+  assets:
+  - path: Assets/ChunkLoaderMod/Data/ChunkLoaderMod.asset
+    hash: 946E7516225950A16047E959734EA860EE7F3EB230125ED283B9F202E50F13B1
+  - path: Assets/ChunkLoaderMod/UI/Fonts/PressStart2P-OFL.txt
+    hash: 705960C3281A5765ECC0B59BD4ED7CA59EED165748076BC2FC3E8FDBFEB944B0
+  - path: Assets/ChunkLoaderMod/UI/Fonts/PressStart2P-Regular.ttf
+    hash: 034C77F1F05EC89421E4A63F0E3A4CA1ECF852CC6D2BF611F126F275728E017D
+  - path: Assets/ChunkLoaderMod/UI/Fonts/Roboto-OFL.txt
+    hash: 061402327A96AADB0BFB694A960ED289ECD38D383E396243831AB81FEB109C41
+  - path: Assets/ChunkLoaderMod/UI/Fonts/Roboto-Variable.ttf
+    hash: D7598E12C5DBEF095FF8272CFC55DA0250BD07FBDECBAC8A530B9B277872A134
+  - path: Assets/ChunkLoaderMod/UI/Vanilla/32x32_map_border.png
+    hash: B0E68FF17850DA42B247B46AFCB866BA75A1AE378E5F2E642E8BAAEA14982FEA
+  - path: Assets/ChunkLoaderMod/UI/Vanilla/32x32_menu_border.png
+    hash: 2DA78DA5987AE411EC02187EFB2324DE0F501524A19764DE058C2664A0480DF8
+  - path: Assets/ChunkLoaderMod/UI/Vanilla/cursor_inv.png
+    hash: DECFBF438E07F3186C04A5B7A115D55334EA395EE17CA4B236F48A0A30B4F9B4
+  lastBuildLinux: 1
