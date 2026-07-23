@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2588085199a843cb8d6646af1ef61191, type: 3}
+  m_Name: Nullforge-NewDimension.portal.entry
+  m_EditorClassIdentifier: 
+  ruleId: Nullforge:NewDimension.portal.entry.rule
+  portalId: Nullforge:NewDimension.portal.entry
+  presentationId: Nullforge:NewDimension.portal.entry.presentation
+  displayName: New Dimension Portal
+  fromDimensionId: corekeeper.overworld
+  fromLocalPosition: {x: 0, y: 0}
+  toDimensionId: Nullforge:NewDimension
+  toLocalPosition: {x: 0, y: 0}
+  accessKind: 0
+  activationMode: 0
+  activationCooldownSeconds: 2
+  requireGeneratedAreaOnUse: 1
+  allowFallbackPositionOnUse: 1
+  promptText: Enter New Dimension
+  lockedPromptText: The portal is still activating.
+  iconId: 
+  visualEffectId: 
+  audioCueId: 
+  priority: 0
+  enabled: 1
+  interactable: 1
+  requiredItems: []
+  craftable: 1
+  craftingStationObjectId: 
+  generatedInWorld: 0
+  droppable: 0
+  dropTargets: []
+  portalItemObjectId: 
+  itemPortalDurationSeconds: 10

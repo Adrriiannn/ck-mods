@@ -1,0 +1,187 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc43e4983a160e543856e5ba0421c9e1, type: 3}
+  m_Name: Nullforge
+  m_EditorClassIdentifier: 
+  metadata:
+    guid: 94cc8533318e4cd88988aa2219cc0130
+    name: Nullforge
+    displayName: 
+    skipSafetyChecks: 0
+    disableScripts: 0
+    accessesExtraAssemblies: 1
+    disableHarmonyPatching: 0
+    requiredOn: 0
+    files:
+    - path: Localization/Localization.csv
+      guid: ce9fac19d37d10341bcc60e666df0639
+    - path: Scripts/Scripts/Generated/NullforgeNullforgeNewDimensionRuntimeBootstrap.cs
+      guid: 03b9c76a19fffd746b56c4416fb1f196
+    - path: Bundles/Nullforge_Windows.assetbundle
+      guid: 
+    - path: Bundles/Nullforge_Windows.assetbundle.manifest
+      guid: 
+    - path: Bundles/Nullforge_Linux.assetbundle
+      guid: 
+    - path: Bundles/Nullforge_Linux.assetbundle.manifest
+      guid: 
+    dependencies:
+    - modName: ExpandNullforge
+      required: 1
+  modPath: Assets\Nullforge
+  forceReimport: 1
+  buildBundles: 1
+  cacheBundles: 0
+  buildLinux: 1
+  assets:
+  - path: Assets/Nullforge/Data/Nullforge.asset
+    hash: D36BA39891F3730B5CDCBAD5AACAEDFBC3AA7497767E160B522F94D323AE5D79
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_Center.asset
+    hash: EB9042B717888FE9C6F4305E04B81F6C4CD6D28C9052048697FDE800AEB9F14F
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_Center_Anim0.png
+    hash: FE8DEF6817BD92717614EB1A757601A49F58EEF58CD62465D517FB52BE3351EE
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_Center_Anim1.png
+    hash: 64E60DEA7E8099CB5A51A0BAD3975A8B855CB6380FC4C0B1A85234872E04D298
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_CenterInstant.asset
+    hash: 73A8578CCA901F8CA84D3354F9E8DF8B9337022BE2B7062FFCFFAB526CB10D25
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_CenterInstant_Anim0.png
+    hash: 66B580BFE8EA00450B3588A1754E7A2248760E7097996AEEB52E37DD8C6D57D9
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_CenterInstant_Anim1.png
+    hash: 26D6923D71B1E2912872EA89E5C25A05104D1086DC34B6382DC2BD5106589962
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Center/PortalProfile_CenterInstant_Anim2.png
+    hash: 73016E2A8D6215E43156B3D017995A8E3F0CF1EB5EFD5ACF0199F5D5ADB76B62
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Charge/PortalProfile_ChargeSweep.asset
+    hash: 7013EE86802E6749312EFD1FBA9193490F37295B8AC5A85FC0DBC1EFCDBC53BC
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Charge/PortalProfile_ChargeSweep_Anim0.png
+    hash: 917208BCB90366D64B8099150FCC94CAEDDDE6952EECC61CE373DD9C9D6B4C0B
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Frame/PortalProfile_Frame.asset
+    hash: AC2E5FD2A56BCCB4714D1D2A6A7B79F805EE0B9E5B10E77111B122A8BF1AF9E2
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Frame/PortalProfile_Frame_Static_Custom_30f40459ee93.png
+    hash: 6550C3FE9FC06609886099F6B4EB28377245DE2ECE23ECF5A76CAD6B829761AB
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Frame/PortalProfile_Frame_Static_Custom_30f40459ee93_Emissive.png
+    hash: 6B59D0A154766F4F487ACEB516EBA4A7E69D7B7189E6C9110A2CB03B2911EB8D
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Milestones/PortalProfile_Milestones.asset
+    hash: FD9DD940268B5A4399068532634D152EED1C21FC09D50A1972322B0698CCE35C
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/Artwork/Milestones/PortalProfile_Milestones_Anim0.png
+    hash: FC4410D091BD4845CE70995FE1511CD00140FDCFBFC3AD079EB5278A6588E2A1
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/PortalPackage.asset
+    hash: 561CDFC112E56ABB0152C655A4871E7456A5217B4C9F57A1FFE3C8376D48AD58
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal/PortalProfile.asset
+    hash: F4CE16DB08E5B81609F08EE257D83014BCE89B72C11F128BA8F2FB17102F9764
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Center/PortalProfile_Center_Anim0.png
+    hash: FE8DEF6817BD92717614EB1A757601A49F58EEF58CD62465D517FB52BE3351EE
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Center/PortalProfile_Center_Anim1.png
+    hash: 64E60DEA7E8099CB5A51A0BAD3975A8B855CB6380FC4C0B1A85234872E04D298
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Center/PortalProfile_CenterInstant.asset
+    hash: 8F586320BFA4330CA0AE18E36FCA9A39A1B53FE874D53FF85F5346D6BE40B99E
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Center/PortalProfile_CenterInstant_Anim0.png
+    hash: 66B580BFE8EA00450B3588A1754E7A2248760E7097996AEEB52E37DD8C6D57D9
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Center/PortalProfile_CenterInstant_Anim1.png
+    hash: 26D6923D71B1E2912872EA89E5C25A05104D1086DC34B6382DC2BD5106589962
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Center/PortalProfile_CenterInstant_Anim2.png
+    hash: 73016E2A8D6215E43156B3D017995A8E3F0CF1EB5EFD5ACF0199F5D5ADB76B62
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Charge/PortalProfile_ChargeSweep.asset
+    hash: 896D52079943BCEFEA4371712C09447C3342DC62AB773A226B44ADC2FEBF968D
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Charge/PortalProfile_ChargeSweep_Anim0.png
+    hash: 917208BCB90366D64B8099150FCC94CAEDDDE6952EECC61CE373DD9C9D6B4C0B
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Frame/PortalProfile_Frame.asset
+    hash: FE98378DD8A02048C30726C9711F83473508DFA05CE2B7ECFCCA06D06087246C
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Frame/PortalProfile_Frame_Static_Custom_c64a12d6df2e.png
+    hash: 6550C3FE9FC06609886099F6B4EB28377245DE2ECE23ECF5A76CAD6B829761AB
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Frame/PortalProfile_Frame_Static_Custom_c64a12d6df2e_Emissive.png
+    hash: 6B59D0A154766F4F487ACEB516EBA4A7E69D7B7189E6C9110A2CB03B2911EB8D
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Milestones/PortalProfile_Milestones.asset
+    hash: 6B9134C50569E67CDD58114239194923CC47B75DA288C520B6EB50FE5446F626
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/Artwork/Milestones/PortalProfile_Milestones_Anim0.png
+    hash: FC4410D091BD4845CE70995FE1511CD00140FDCFBFC3AD079EB5278A6588E2A1
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/PortalPackage.asset
+    hash: ED8F7F0CB7FD0AEB1881FD63515E3A2317709EDD04E757DB71BC2A3CEE95B76E
+  - path: Assets/Nullforge/Data/Portals/Nullforge_NewDimension/Instant Portal 2/PortalProfile.asset
+    hash: D8A9356A106208DF94FECF302D9DE057C294E85BC3F8B5A504E1CD93BC9360F0
+  - path: Assets/Nullforge/Data/TextDataBlock/Items/Nullforge_NullforgeNewDimension_Portal.asset
+    hash: E399937F3AF2F2386CE0B164BE58EC8A0B40FC220F770D8A0F310B082ED14CD6
+  - path: Assets/Nullforge/Data/TextDataBlock/Items/Nullforge_NullforgeNewDimensionPortal.asset
+    hash: F2EE7D77BB4BF12C44C1F28EEB81E31E6613BA69B02CF15239C7B92CD8AC1B44
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Access/Nullforge-NewDimension.portal.entry.asset
+    hash: 79ABF7B6ECFFB39619A068FA5615F9BAE54496DBB643F176253453754F2D88BE
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Access/Nullforge-NewDimension.portal.item.asset
+    hash: E8CEC429ECE6C60D27C57CAB17813469FF778DC98435CD0AAA670B56470F572A
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Access/Nullforge-NewDimension.portal.return.asset
+    hash: 31757A949A8533DF9BCE4AD02118837E2D804C2F9C9DEA084F2AC3F7EEC40B34
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Biomes/Nullforge-NewDimensionStarterBiome.asset
+    hash: 8BF92BB8F5C7F09D390973B465F82D40A473FB0694622C71F04CFAD7A94C771A
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Environment/Nullforge-NewDimensionStarterBiome.environment.asset
+    hash: 7C60C0813D80BE8266C1FBCE74C5D2751ACCE31A19C67AE33B1A3291EE192E2A
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalEntity.prefab
+    hash: C984B36CAA3D70638CCAD0FF6F045813428F181F16FD6C221B0FF6ED695E7577
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalOutlineCap.asset
+    hash: 4DD23DADF58D0DD552BFDD8143AA25EE87D137F7796CE06545194CFC3ACD06FA
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalOutlineCap.png
+    hash: CAB5AF16E256787ED57C9686A8BE00395E19D06ABC1967795B81A58F686CB543
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalOutlineMask.asset
+    hash: 76856D2613D67BF0F8301C0AB80B593E007EE1B0D23791BEC7378C61C6628A02
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalOutlineMask.png
+    hash: A6AF29F3A132AF7F1FE8AAA775E98AFB8F2D92CBBDBBC6F49E44BC0A958EE7E9
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalOutlineSupportMask.asset
+    hash: 23F275D69D581DDE7D52F4A0AB0E805AC77CA5DC244ED0F3B2E2288C9B398BA3
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalOutlineSupportMask.png
+    hash: C66C15D4F45A6F0544B791ED58C7B237EDB7D07A613DB42E6DAB7253536AF2F6
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeItemPortalVisual.prefab
+    hash: F195F08D2A6BDDA68B1A8268590E24CBC83869B56226EDADB3C33805D6AED747
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalBodyShader.mat
+    hash: 63139385E8D1CD9BC9333E64FB6503FD661C59BC21D9AD04967749554E2CBC0D
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalEntity.prefab
+    hash: 6BF4CB5C81A9FD26339B79F23E9CD6CE51C6288A7D28310FFE89398A9410392C
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalOutlineCap.asset
+    hash: 0142F345B22D69EAEF9D9A34991B5A6A9718403E98AD0FB47BECB4891C85BC0B
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalOutlineCap.png
+    hash: CAB5AF16E256787ED57C9686A8BE00395E19D06ABC1967795B81A58F686CB543
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalOutlineMask.asset
+    hash: F093489FDA7E5A762AAFCF7D3853D834D6AEC68E481A55400C80E4D8E6800BF6
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalOutlineMask.png
+    hash: A6AF29F3A132AF7F1FE8AAA775E98AFB8F2D92CBBDBBC6F49E44BC0A958EE7E9
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalOutlineSupportMask.asset
+    hash: 83FBB6186BA50CC9EC2CE5D8C09D10616CD6A65F4686F6D87032934BCDAF0E16
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalOutlineSupportMask.png
+    hash: C66C15D4F45A6F0544B791ED58C7B237EDB7D07A613DB42E6DAB7253536AF2F6
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimePortalVisual.prefab
+    hash: E7065BD99021F11A0B52BFC63BE4A5CB981B3055B80D62344A0E0D309B89BA7F
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/Portal/NewDimensionRuntimeReturnPortalEntity.prefab
+    hash: A06F5D8F175B35FFCFE4AF9D038D5A534ABF5F46BD1B84088C4C81DCCFEA1991
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generated/RuntimeManifest.asset
+    hash: 8FD1FDDAE4B0A1D45D6903810A8559F33EAC3773A26B0F10FC2D16A5C23383AA
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generation/Nullforge-NewDimensionStarterBiome.generation.asset
+    hash: BCF559881BA18236CB469AF8C4A93EC5F7A9102E9E8C88C38124855E864D8782
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generation/Passes/terrain-pass.asset
+    hash: 8B7D00E34BD40A84B25E5A2F17EA10388F07A4F9B2C9CE298782C986DABE88A2
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Generation/Tables/terrain.asset
+    hash: 8BA88C4790DCD95DCEEA1855B9F452B0222D6DE26A1E069BB629077AE2AF32DF
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Layout/layout.asset
+    hash: B35FC2979C665F85D498599CB14358EEFFE5A583C92FBF69F573005687D40CD6
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Nullforge-NewDimension.asset
+    hash: B6F8B340CCE0C9B9D32D46CB640A551837290238F4332875F5CA5F9B2BD671DC
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Palettes/Nullforge-NewDimensionStarterBiome.palette.asset
+    hash: EE07203F2727B3DEB78F6F78417193682869B8B48F9DF08739AD23155BEC09E4
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/PortalVisualProfile.asset
+    hash: DF69730B38C6E83639C8BC979AD7073F1E8D465212C2D28CA3C24719F4C0B866
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Resources/PortalItem
+      1.asset
+    hash: 15D566159481CDF8655512D3117476B905798B978026D8EFD942D21D679FF3CA
+  - path: Assets/Nullforge/DimensionAssets/Nullforge-NewDimension/Resources/PortalItem.asset
+    hash: 9919C9B11D20E4C04D90F63128CF7491DF24F7E6585C57E4A07A086DBC09942D
+  - path: Assets/Nullforge/Items/Nullforge_NewDimension_portal_item_object.prefab
+    hash: 4E39BE364261B02358A35FAAECE75028DE64E5732A890CF69E484B8E9F74C450
+  - path: Assets/Nullforge/Localization/Localization.csv
+    hash: F8C22749C45874D026221C672144D78A5A18521922B471A53871C2EC9DF897FE
+  - path: Assets/Nullforge/SpriteAssetManifest.asset
+    hash: 259B227F2D6A26947BA76FE7FBBD9CD3EBC4B12CBA2EF41EFD8389AA3B9E7E30
+  lastBuildLinux: 1

@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b6485d7a9ca4cbfb292b785671ac4f2, type: 3}
+  m_Name: PortalPackage
+  m_EditorClassIdentifier: 
+  schemaVersion: 2
+  packageId: dd2e792287cd4ba699da620818f80dcc
+  displayName: Instant Portal 2
+  dimensionId: Nullforge:NewDimension
+  profile: {fileID: 11400000, guid: e652c5cd63ab85448a014e91fdfe6209, type: 2}
+  artwork:
+  - role: Frame
+    assetGuid: 829ae2917439c9f4e9ccc69d7b94f7ba
+    relativePath: Artwork/Frame/PortalProfile_Frame.asset
+    addressLow: 7850218096305842315
+    addressHigh: -6604277980133572159
+  - role: Charge
+    assetGuid: dc263f283dfac0747a5658464cff791d
+    relativePath: Artwork/Charge/PortalProfile_ChargeSweep.asset
+    addressLow: 7229147173972242499
+    addressHigh: -7307704884930807187
+  - role: Milestones
+    assetGuid: fe070ffa013226e48b72792e54a0705d
+    relativePath: Artwork/Milestones/PortalProfile_Milestones.asset
+    addressLow: 2993327634828126483
+    addressHigh: 1699552136462661625
+  - role: Center
+    assetGuid: 4921b45c18b6acc459bdac7e8681fa6b
+    relativePath: Artwork/Center/PortalProfile_CenterInstant.asset
+    addressLow: -7858830442076829984
+    addressHigh: -4928433452948857394
+  dependencies: []
