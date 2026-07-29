@@ -1480,40 +1480,18 @@ namespace ExpandNullforge.EditorTools
             SerializedObject serializedTemplate,
             float availableWidth)
         {
-            bool wide = availableWidth >= 860f;
-            // The charge duration is the placed portal's charge-up time; an instant portal
-            // spawns fully charged (the generator bakes zero charge), so the field is omitted.
-            bool showChargeDuration = !instantPortalMode;
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            // The Portal Studio identity strip and its mode tabs now live in the window's header
+            // (DrawPortalHeaderStrip); here we only surface the placed portal's charge-up time. An
+            // instant portal spawns fully charged, so it has nothing to show.
+            if (instantPortalMode)
+            {
+                return;
+            }
+
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Portal Studio", EditorStyles.boldLabel);
+            DrawChargeDuration(serializedTemplate);
             GUILayout.FlexibleSpace();
-            if (wide && showChargeDuration)
-            {
-                DrawChargeDuration(serializedTemplate);
-                GUILayout.Space(8f);
-            }
-
-            if (GUILayout.Button(
-                    new GUIContent(
-                        "Locate Asset",
-                        "Select and highlight the current portal profile in the Project window."),
-                    GUILayout.Width(88f)))
-            {
-                Selection.activeObject = profile;
-                EditorGUIUtility.PingObject(profile);
-            }
-
             EditorGUILayout.EndHorizontal();
-            if (!wide && showChargeDuration)
-            {
-                GUILayout.Space(2f);
-                EditorGUILayout.BeginHorizontal();
-                DrawChargeDuration(serializedTemplate);
-                GUILayout.FlexibleSpace();
-                EditorGUILayout.EndHorizontal();
-            }
-            EditorGUILayout.EndVertical();
         }
 
         private static void DrawChargeDuration(SerializedObject serializedTemplate)
@@ -1570,7 +1548,9 @@ namespace ExpandNullforge.EditorTools
                  runtimeOutOfDateProfile == profile);
             if (saveNeedsAttention)
             {
-                GUI.backgroundColor = new Color(1f, 0.58f, 0.18f, 1f);
+                // Blue attention tint keeps the whole Portal Studio in one palette (orange now
+                // signals the Tileset Studio) while still standing out from the grey neighbours.
+                GUI.backgroundColor = new Color(0.26f, 0.67f, 0.95f, 1f);
             }
 
             if (GUILayout.Button(

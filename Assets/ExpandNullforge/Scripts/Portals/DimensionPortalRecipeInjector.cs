@@ -12,6 +12,8 @@ namespace ExpandNullforge.Portals
     private static readonly List<PendingCraftingTarget> PendingCraftingTargets =
         new List<PendingCraftingTarget>();
 
+    private static readonly List<ResolvedRecipe> ResolvedRecipes = new List<ResolvedRecipe>();
+
     public static void OnObjectTypeAdded(
         Entity entity,
         GameObject authoringData,
@@ -63,8 +65,13 @@ namespace ExpandNullforge.Portals
         return false;
       }
 
-      bool addedAnyRecipe = false;
       DynamicBuffer<CanCraftObjectsBuffer> recipes = entityManager.GetBuffer<CanCraftObjectsBuffer>(entity);
+
+      // Collect everything this station should show in one pass. The framework's recipes belong
+      // together in the crafting window, so they have to be placed as a block rather than one at a
+      // time — objects resolve at different moments during conversion, and adding them piecemeal is
+      // what used to scatter them across separate pages.
+      ResolvedRecipes.Clear();
       for (int definitionIndex = 0; definitionIndex < DimensionPortalCraftingRegistry.Count; definitionIndex++)
       {
         DimensionPortalCraftingRecipeDefinition definition;
@@ -74,40 +81,62 @@ namespace ExpandNullforge.Portals
           continue;
         }
 
-        ObjectID portalObjectID;
+        ObjectID craftedObjectID;
         if (!DimensionPortalObjectIdCache.TryResolve(
             definition.PortalObjectName,
-            out portalObjectID))
+            out craftedObjectID))
         {
           continue;
         }
 
-        int recipeIndex = FindRecipe(recipes, portalObjectID);
-        bool addedRecipe = false;
+        ResolvedRecipes.Add(new ResolvedRecipe(craftedObjectID, definition));
+      }
+
+      if (ResolvedRecipes.Count == 0)
+      {
+        return false;
+      }
+
+      bool addedAnyRecipe = false;
+      int firstRecipeIndex = -1;
+      int lastRecipeIndex = -1;
+      for (int i = 0; i < ResolvedRecipes.Count; i++)
+      {
+        ResolvedRecipe resolved = ResolvedRecipes[i];
+        int recipeIndex = FindRecipe(recipes, resolved.ObjectID);
         if (recipeIndex < 0)
         {
           recipeIndex = recipes.Length;
-          recipes.Add(CreatePortalRecipe(portalObjectID, definition));
-          addedRecipe = true;
-        }
-
-        bool addedCategory = EnsurePortalCategory(
-            entity,
-            entityManager,
-            craftingStationObjectID,
-            portalObjectID,
-            recipeIndex);
-
-        if (addedRecipe || addedCategory)
-        {
+          recipes.Add(CreatePortalRecipe(resolved.ObjectID, resolved.Definition));
           addedAnyRecipe = true;
           DimensionFrameworkLog.Verbose(
               "[ExpandNullforge] Added " +
-              definition.DisplayName +
+              resolved.Definition.DisplayName +
               " recipe to registered crafting station " +
               (int)craftingStationObjectID +
               ".");
         }
+
+        if (firstRecipeIndex < 0 || recipeIndex < firstRecipeIndex)
+        {
+          firstRecipeIndex = recipeIndex;
+        }
+
+        if (recipeIndex > lastRecipeIndex)
+        {
+          lastRecipeIndex = recipeIndex;
+        }
+      }
+
+      if (EnsureSharedCategory(
+          entity,
+          entityManager,
+          craftingStationObjectID,
+          ResolvedRecipes[0].ObjectID,
+          firstRecipeIndex,
+          lastRecipeIndex - firstRecipeIndex + 1))
+      {
+        addedAnyRecipe = true;
       }
 
       return addedAnyRecipe;
@@ -328,59 +357,86 @@ namespace ExpandNullforge.Portals
       };
     }
 
-    private static bool EnsurePortalCategory(
+    /// <summary>
+    /// Puts every framework recipe on this station into ONE crafting category, so the player finds
+    /// them together on a single page instead of one per page.
+    /// </summary>
+    /// <remarks>
+    /// A category is the only way to add recipes to a station that is already full. The UI renders
+    /// at most three side-by-side windows of six, and it renders only the current category's slice —
+    /// so a station whose own recipes already fill those three windows has no room to simply append
+    /// (the game logs "Not enough SimpleCraftingUIs" and shows nothing). Giving the station's own
+    /// recipes one category and ours another keeps both within the limit, and ours all land on the
+    /// same page because they share a category. Ours is always added last, so if its icon object
+    /// ever fails to resolve, the game drops our page without shifting anyone else's.
+    /// </remarks>
+    private static bool EnsureSharedCategory(
         Entity entity,
         EntityManager entityManager,
         ObjectID craftingStationObjectID,
-        ObjectID portalObjectID,
-        int portalRecipeIndex)
+        ObjectID categoryObjectID,
+        int firstRecipeIndex,
+        int recipeCount)
     {
+      if (recipeCount < 1 || firstRecipeIndex < 0)
+      {
+        return false;
+      }
+
       if (!entityManager.HasBuffer<IncludedCraftingBuildingsBuffer>(entity))
       {
-        DynamicBuffer<IncludedCraftingBuildingsBuffer> fallbackCategories =
-            entityManager.AddBuffer<IncludedCraftingBuildingsBuffer>(entity);
-        if (portalRecipeIndex > 0)
-        {
-          fallbackCategories.Add(new IncludedCraftingBuildingsBuffer
-          {
-            objectID = craftingStationObjectID,
-            amountOfCraftingOptions = portalRecipeIndex
-          });
-        }
+        entityManager.AddBuffer<IncludedCraftingBuildingsBuffer>(entity);
       }
 
       DynamicBuffer<IncludedCraftingBuildingsBuffer> categories =
           entityManager.GetBuffer<IncludedCraftingBuildingsBuffer>(entity);
-      int existingPortalCategoryIndex = FindCategory(categories, portalObjectID);
-      if (existingPortalCategoryIndex >= 0)
+      int requiredCoverage = firstRecipeIndex + recipeCount;
+      int existingIndex = FindCategory(categories, categoryObjectID);
+      if (existingIndex >= 0)
       {
-        IncludedCraftingBuildingsBuffer portalCategory =
-            categories[existingPortalCategoryIndex];
-        if (portalCategory.amountOfCraftingOptions < 1)
+        // Our category already exists; resize it so it spans exactly our block, which may have
+        // grown since the last pass as more objects finished resolving.
+        int precedingCoverage = 0;
+        for (int i = 0; i < existingIndex; i++)
         {
-          portalCategory.amountOfCraftingOptions = 1;
-          categories[existingPortalCategoryIndex] = portalCategory;
-          return true;
+          precedingCoverage += Mathf.Max(0, categories[i].amountOfCraftingOptions);
         }
 
-        return false;
+        int desired = Mathf.Max(1, requiredCoverage - precedingCoverage);
+        IncludedCraftingBuildingsBuffer ours = categories[existingIndex];
+        if (ours.amountOfCraftingOptions == desired)
+        {
+          return false;
+        }
+
+        ours.amountOfCraftingOptions = desired;
+        categories[existingIndex] = ours;
+        return true;
       }
 
+      // Categories partition the recipe buffer by consecutive run lengths, so any gap ahead of our
+      // block has to be absorbed or every later category would point at the wrong recipes.
       int coveredRecipeCount = GetCoveredRecipeCount(categories);
-      if (portalRecipeIndex < coveredRecipeCount)
+      if (coveredRecipeCount > firstRecipeIndex)
       {
-        // Another mod or an authored prefab already made this recipe visible in an
-        // existing category range. Do not duplicate it into a second UI window.
-        return false;
+        // Our recipes already fall inside an authored range. Only extend if our tail runs past it.
+        if (coveredRecipeCount >= requiredCoverage || categories.Length == 0)
+        {
+          return false;
+        }
+
+        IncludedCraftingBuildingsBuffer tail = categories[categories.Length - 1];
+        tail.amountOfCraftingOptions += requiredCoverage - coveredRecipeCount;
+        categories[categories.Length - 1] = tail;
+        return true;
       }
 
-      if (portalRecipeIndex > coveredRecipeCount)
+      if (coveredRecipeCount < firstRecipeIndex)
       {
-        int gap = portalRecipeIndex - coveredRecipeCount;
+        int gap = firstRecipeIndex - coveredRecipeCount;
         if (categories.Length > 0)
         {
-          IncludedCraftingBuildingsBuffer lastCategory =
-              categories[categories.Length - 1];
+          IncludedCraftingBuildingsBuffer lastCategory = categories[categories.Length - 1];
           lastCategory.amountOfCraftingOptions += gap;
           categories[categories.Length - 1] = lastCategory;
         }
@@ -396,8 +452,8 @@ namespace ExpandNullforge.Portals
 
       categories.Add(new IncludedCraftingBuildingsBuffer
       {
-        objectID = portalObjectID,
-        amountOfCraftingOptions = 1
+        objectID = categoryObjectID,
+        amountOfCraftingOptions = recipeCount
       });
       return true;
     }
@@ -427,6 +483,19 @@ namespace ExpandNullforge.Portals
       }
 
       return count;
+    }
+
+    /// <summary>A registered recipe whose crafted object has resolved to a real id this pass.</summary>
+    private readonly struct ResolvedRecipe
+    {
+      public readonly ObjectID ObjectID;
+      public readonly DimensionPortalCraftingRecipeDefinition Definition;
+
+      public ResolvedRecipe(ObjectID objectID, DimensionPortalCraftingRecipeDefinition definition)
+      {
+        ObjectID = objectID;
+        Definition = definition;
+      }
     }
 
     private readonly struct PendingCraftingTarget

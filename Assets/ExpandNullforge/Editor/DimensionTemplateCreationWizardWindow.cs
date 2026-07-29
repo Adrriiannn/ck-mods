@@ -10,15 +10,23 @@ namespace ExpandNullforge.EditorTools
     public sealed class DimensionTemplateCreationWizardWindow : EditorWindow
     {
         private const string WindowTitle = "Create your Dimension";
-        private const float SetupColumnWidth = 430f;
-        private const float MinPreviewColumnWidth = 430f;
+        private const float SetupColumnWidth = 380f;
+        private const float MinPreviewColumnWidth = 420f;
         private const float PreviewWidth = 420f;
+        private const float FieldWidth = 264f;
+
+        private static readonly Color WizBlue = new Color(0.30f, 0.62f, 0.92f);
 
         private DimensionTemplateCreationWizardSessionController controller;
         private Vector2 scroll;
         private Vector2 previewScroll;
         private string lastResultMessage = string.Empty;
         private MessageType lastResultType = MessageType.Info;
+        private bool showAdvanced;
+        private GUIStyle wizHeaderStyle;
+        private GUIStyle wizSubtitleStyle;
+        private GUIStyle wizSectionStyle;
+        private GUIStyle wizFieldLabelStyle;
 
         [MenuItem("Dimensions API/Create your Dimension")]
         public static void Open()
@@ -44,15 +52,31 @@ namespace ExpandNullforge.EditorTools
 
             DrawHeader();
 
-            scroll = EditorGUILayout.BeginScrollView(scroll);
+            scroll = EditorGUILayout.BeginScrollView(scroll, GUILayout.ExpandHeight(true));
             EditorGUILayout.BeginHorizontal();
             DrawRequestPanel(snapshot);
-            GUILayout.Space(8f);
+            GUILayout.Space(10f);
             DrawPreviewPanel(snapshot);
             EditorGUILayout.EndHorizontal();
-            GUILayout.Space(8f);
-            DrawActionPanel(snapshot);
             EditorGUILayout.EndScrollView();
+
+            // Action bar pinned at the bottom, below the scroll area.
+            DrawActionPanel(snapshot);
+        }
+
+        private void EnsureWizStyles()
+        {
+            if (wizHeaderStyle != null)
+            {
+                return;
+            }
+
+            wizHeaderStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 15, alignment = TextAnchor.MiddleLeft };
+            wizSubtitleStyle = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
+            wizSubtitleStyle.normal.textColor = new Color(1f, 1f, 1f, 0.5f);
+            wizSectionStyle = new GUIStyle(EditorStyles.miniBoldLabel);
+            wizSectionStyle.normal.textColor = new Color(WizBlue.r, WizBlue.g, WizBlue.b, 0.9f);
+            wizFieldLabelStyle = new GUIStyle(EditorStyles.miniBoldLabel);
         }
 
         private void EnsureController()
@@ -73,17 +97,22 @@ namespace ExpandNullforge.EditorTools
 
         private void DrawHeader()
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField(
-                "Create the first Dimension Asset for your mod. Choose a starter template, name the dimension, choose where it lives in world space, and the framework will derive the IDs and starter assets for you.",
-                EditorStyles.wordWrappedLabel);
+            EnsureWizStyles();
+            Rect bar = EditorGUILayout.GetControlRect(false, 42f);
+            EditorGUI.DrawRect(bar, new Color(WizBlue.r, WizBlue.g, WizBlue.b, 0.15f));
+            EditorGUI.DrawRect(new Rect(bar.x, bar.y, 3f, bar.height), WizBlue);
+            GUI.Label(new Rect(bar.x + 14f, bar.y, bar.width - 24f, bar.height), "Create your Dimension", wizHeaderStyle);
+
+            GUILayout.Space(4f);
+            GUILayout.Label("Pick a starter, name it, choose a folder — the framework derives the IDs and starter assets.", wizSubtitleStyle);
 
             if (!string.IsNullOrEmpty(lastResultMessage))
             {
+                GUILayout.Space(2f);
                 EditorGUILayout.HelpBox(lastResultMessage, lastResultType);
             }
 
-            EditorGUILayout.EndVertical();
+            GUILayout.Space(6f);
         }
 
         private void DrawRequestPanel(
@@ -93,7 +122,8 @@ namespace ExpandNullforge.EditorTools
                 EditorStyles.helpBox,
                 GUILayout.Width(SetupColumnWidth),
                 GUILayout.ExpandHeight(true));
-            EditorGUILayout.LabelField("Dimension setup", EditorStyles.boldLabel);
+            GUILayout.Label("SETUP", wizSectionStyle);
+            GUILayout.Space(6f);
 
             DimensionTemplateCreationWizardModel model = snapshot == null ? null : snapshot.Model;
             IReadOnlyList<DimensionTemplateCreationWizardField> fields =
@@ -107,13 +137,30 @@ namespace ExpandNullforge.EditorTools
 
             for (int i = 0; i < fields.Count; i++)
             {
-                if (!ShouldShowInSetupPanel(fields[i]))
+                if (!ShouldShowInSetupPanel(fields[i]) || IsAdvancedField(fields[i]))
                 {
                     continue;
                 }
 
                 DrawWizardField(fields[i]);
+                GUILayout.Space(10f);
+            }
+
+            GUILayout.Space(2f);
+            showAdvanced = EditorGUILayout.Foldout(showAdvanced, "Advanced — world position & biome name", true);
+            if (showAdvanced)
+            {
                 GUILayout.Space(6f);
+                for (int i = 0; i < fields.Count; i++)
+                {
+                    if (!ShouldShowInSetupPanel(fields[i]) || !IsAdvancedField(fields[i]))
+                    {
+                        continue;
+                    }
+
+                    DrawWizardField(fields[i]);
+                    GUILayout.Space(8f);
+                }
             }
 
             GUILayout.FlexibleSpace();
@@ -135,11 +182,20 @@ namespace ExpandNullforge.EditorTools
             return true;
         }
 
+        // Position (auto-allocated by the framework) and the biome name (auto-derived) are tucked
+        // into the Advanced foldout so the default form is just template + name + folder.
+        private static bool IsAdvancedField(DimensionTemplateCreationWizardField field)
+        {
+            return field.FieldId == DimensionTemplateCreationWizardUtility.AbsoluteOriginXFieldId ||
+                   field.FieldId == DimensionTemplateCreationWizardUtility.AbsoluteOriginYFieldId ||
+                   field.FieldId == DimensionTemplateCreationWizardUtility.BiomeDisplayNameFieldId;
+        }
+
         private void DrawWizardField(DimensionTemplateCreationWizardField field)
         {
-            EditorGUILayout.LabelField(
+            GUILayout.Label(
                 field.Required ? field.Label + " *" : field.Label,
-                EditorStyles.miniBoldLabel);
+                wizFieldLabelStyle);
 
             if (field.Kind == DimensionTemplateCreationWizardFieldKind.Preset)
             {
@@ -154,7 +210,7 @@ namespace ExpandNullforge.EditorTools
                 using (new EditorGUI.DisabledScope(!field.Editable))
                 {
                     EditorGUI.BeginChangeCheck();
-                    string nextValue = EditorGUILayout.TextField(field.Value);
+                    string nextValue = EditorGUILayout.TextField(field.Value, GUILayout.Width(FieldWidth));
                     if (EditorGUI.EndChangeCheck())
                     {
                         controller.UpdateField(field.FieldId, nextValue);
@@ -167,14 +223,15 @@ namespace ExpandNullforge.EditorTools
         {
             using (new EditorGUI.DisabledScope(!field.Editable))
             {
-                EditorGUILayout.BeginHorizontal();
                 EditorGUI.BeginChangeCheck();
-                string nextValue = EditorGUILayout.TextField(field.Value);
+                string nextValue = EditorGUILayout.TextField(field.Value, GUILayout.Width(FieldWidth));
                 if (EditorGUI.EndChangeCheck())
                 {
                     UpdateTargetFolder(field.FieldId, nextValue, false);
                 }
 
+                GUILayout.Space(3f);
+                EditorGUILayout.BeginHorizontal();
                 if (GUILayout.Button("Use Active Mod", GUILayout.Width(110f)))
                 {
                     UseActiveModFolder(field);
@@ -185,6 +242,7 @@ namespace ExpandNullforge.EditorTools
                     PickDimensionAssetFolder(field);
                 }
 
+                GUILayout.FlexibleSpace();
                 EditorGUILayout.EndHorizontal();
             }
         }
@@ -264,7 +322,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUI.BeginChangeCheck();
-            int nextIndex = EditorGUILayout.Popup(selectedIndex, labels);
+            int nextIndex = EditorGUILayout.Popup(selectedIndex, labels, GUILayout.Width(FieldWidth));
             if (EditorGUI.EndChangeCheck() &&
                 nextIndex >= 0 &&
                 nextIndex < options.Count)
@@ -281,7 +339,8 @@ namespace ExpandNullforge.EditorTools
                 GUILayout.MinWidth(MinPreviewColumnWidth),
                 GUILayout.ExpandWidth(true),
                 GUILayout.ExpandHeight(true));
-            EditorGUILayout.LabelField("Starter preview", EditorStyles.boldLabel);
+            GUILayout.Label("PREVIEW", wizSectionStyle);
+            GUILayout.Space(4f);
 
             DimensionTemplateCreationWizardPreview preview =
                 snapshot == null ? null : snapshot.Preview;
@@ -293,49 +352,29 @@ namespace ExpandNullforge.EditorTools
             }
 
             DrawPresetPreview(preview);
-            GUILayout.Space(8f);
-            EditorGUILayout.HelpBox(
-                "This is only the starter bootstrap. It creates the root Dimension Asset and first biome so the project has something valid to open. The real world shape belongs in the Dimension Layout step, where the framework can use radial bands, angular sectors, manual regions, painted masks, or hybrid layouts.",
-                MessageType.Info);
-            GUILayout.Space(4f);
-
-            MessageType previewType = preview.CanCreate
-                ? MessageType.Info
-                : MessageType.Warning;
-            EditorGUILayout.HelpBox(preview.Message, previewType);
+            GUILayout.Space(10f);
 
             previewScroll = EditorGUILayout.BeginScrollView(previewScroll, GUILayout.ExpandHeight(true));
-            DrawPreviewLine("Starter template", ResolveExampleLabel(preview));
-            DrawPreviewLine("Starter layout", ResolveLayoutLabel(preview));
-
+            DrawPreviewLine("Template", ResolveExampleLabel(preview));
             if (preview.StarterRequest != null)
             {
-                DrawPreviewLine("Origin", preview.StarterRequest.AbsoluteOrigin.x + ", " + preview.StarterRequest.AbsoluteOrigin.y);
-                DrawPreviewLine("Starter shape", ResolveStarterShapeLabel(preview));
-                DrawPreviewLine("Bounds envelope", ResolveGenerationBoundsLabel(preview));
-                DrawPreviewLine("Compiled regions", ResolveCompiledRegionLabel(preview));
-                DrawPreviewLine("Terrain passes", ResolveGenerationPassLabel(preview));
-                DrawPreviewLine("Shell", preview.StarterRequest.ReservedShellPaddingTiles + " tiles");
+                DrawPreviewLine("World position", preview.StarterRequest.AbsoluteOrigin.x + ", " + preview.StarterRequest.AbsoluteOrigin.y);
+                DrawPreviewLine("Size", ResolveGenerationBoundsLabel(preview));
                 DrawPreviewLine("Dimension ID", preview.StarterRequest.DimensionId);
-                DrawPreviewLine("Biome", preview.StarterRequest.BiomeDisplayName);
-                DrawPreviewLine("Biome ID", preview.StarterRequest.BiomeId);
             }
 
             if (preview.SavePlan != null)
             {
-                GUILayout.Space(6f);
-                EditorGUILayout.LabelField("Save target", EditorStyles.miniBoldLabel);
                 DrawPreviewLine("Folder", preview.SavePlan.RootFolder);
                 DrawPreviewLine("Assets", Count(preview.SavePlan.Entries).ToString());
             }
 
             if (preview.Warnings != null && preview.Warnings.Count > 0)
             {
-                GUILayout.Space(6f);
-                EditorGUILayout.LabelField("Warnings", EditorStyles.miniBoldLabel);
+                GUILayout.Space(8f);
                 for (int i = 0; i < preview.Warnings.Count; i++)
                 {
-                    EditorGUILayout.LabelField("- " + preview.Warnings[i], EditorStyles.wordWrappedMiniLabel);
+                    EditorGUILayout.HelpBox(preview.Warnings[i], MessageType.Warning);
                 }
             }
 
@@ -354,39 +393,6 @@ namespace ExpandNullforge.EditorTools
             return preview.SelectedExample.DisplayName;
         }
 
-        private static string ResolveLayoutLabel(
-            DimensionTemplateCreationWizardPreview preview)
-        {
-            if (preview == null || string.IsNullOrEmpty(preview.SelectedLayoutPreset.PresetId))
-            {
-                return "-";
-            }
-
-            return preview.SelectedLayoutPreset.DisplayName;
-        }
-
-        private static string ResolveStarterShapeLabel(
-            DimensionTemplateCreationWizardPreview preview)
-        {
-            if (preview == null)
-            {
-                return "-";
-            }
-
-            string presetId = preview.SelectedLayoutPreset.PresetId;
-            if (presetId == DimensionLayoutTemplatePresetCatalog.CenteredGridPresetId)
-            {
-                return "3 x 3 grid cells";
-            }
-
-            if (presetId == DimensionLayoutTemplatePresetCatalog.RadialRingsPresetId)
-            {
-                return "3 radial rings";
-            }
-
-            return "Single square room";
-        }
-
         private static string ResolveGenerationBoundsLabel(
             DimensionTemplateCreationWizardPreview preview)
         {
@@ -398,20 +404,6 @@ namespace ExpandNullforge.EditorTools
 
             int diameter = ResolvePlayableDiameter(preview);
             return diameter + " x " + diameter + " tiles";
-        }
-
-        private static string ResolveCompiledRegionLabel(
-            DimensionTemplateCreationWizardPreview preview)
-        {
-            int count = CountPreviewEntries(preview, DimensionAuthoringPreviewLayerKind.BiomeRegion);
-            return count <= 0 ? "-" : count.ToString();
-        }
-
-        private static string ResolveGenerationPassLabel(
-            DimensionTemplateCreationWizardPreview preview)
-        {
-            int count = CountPreviewEntries(preview, DimensionAuthoringPreviewLayerKind.GenerationPassBounds);
-            return count <= 0 ? "-" : count.ToString();
         }
 
         private static bool TryGetCompiledPlayableBounds(
@@ -431,31 +423,6 @@ namespace ExpandNullforge.EditorTools
             bounds = summary.PlayableLocalBounds;
             return bounds.MaxExclusive.x > bounds.Min.x &&
                    bounds.MaxExclusive.y > bounds.Min.y;
-        }
-
-        private static int CountPreviewEntries(
-            DimensionTemplateCreationWizardPreview preview,
-            DimensionAuthoringPreviewLayerKind layerKind)
-        {
-            DimensionAuthoringPreviewSummary summary =
-                preview == null || preview.Assessment == null
-                    ? default(DimensionAuthoringPreviewSummary)
-                    : preview.Assessment.Preview;
-            if (summary.Entries == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            for (int i = 0; i < summary.Entries.Count; i++)
-            {
-                if (summary.Entries[i].LayerKind == layerKind)
-                {
-                    count++;
-                }
-            }
-
-            return count;
         }
 
         private static string FormatTileSize(int2 size)
@@ -665,36 +632,44 @@ namespace ExpandNullforge.EditorTools
         private void DrawActionPanel(
             DimensionTemplateCreationWizardSessionSnapshot snapshot)
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            bool canCreate = snapshot != null &&
+                snapshot.Preview != null &&
+                snapshot.Preview.CanCreate;
+
+            Rect divider = EditorGUILayout.GetControlRect(false, 1f);
+            EditorGUI.DrawRect(divider, new Color(1f, 1f, 1f, 0.08f));
+            GUILayout.Space(6f);
 
             EditorGUILayout.BeginHorizontal();
+            if (!canCreate)
+            {
+                string message = snapshot == null || snapshot.Preview == null
+                    ? "Fill in the required fields to continue."
+                    : snapshot.Preview.Message;
+                GUILayout.Label(message, wizSubtitleStyle, GUILayout.MaxWidth(520f));
+            }
+
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Reset", GUILayout.Width(110f), GUILayout.Height(30f)))
+            if (GUILayout.Button("Reset", GUILayout.Width(90f), GUILayout.Height(30f)))
             {
                 RunAction(DimensionTemplateCreationWizardActionPlanUtility.ResetToMinimalActionId);
             }
 
-            bool canCreate = snapshot != null &&
-                snapshot.Preview != null &&
-                snapshot.Preview.CanCreate;
+            GUILayout.Space(6f);
             using (new EditorGUI.DisabledScope(!canCreate))
             {
-                if (GUILayout.Button("Create Dimension Asset", GUILayout.Width(210f), GUILayout.Height(30f)))
+                Color previous = GUI.backgroundColor;
+                GUI.backgroundColor = WizBlue;
+                if (GUILayout.Button("Create Dimension", GUILayout.Width(180f), GUILayout.Height(30f)))
                 {
                     RunSaveAssetsAction();
                 }
+
+                GUI.backgroundColor = previous;
             }
+
             EditorGUILayout.EndHorizontal();
-
-            if (!canCreate)
-            {
-                string message = snapshot == null || snapshot.Preview == null
-                    ? "Fill the required fields to preview the Dimension Asset."
-                    : snapshot.Preview.Message;
-                EditorGUILayout.HelpBox(message, MessageType.Warning);
-            }
-
-            EditorGUILayout.EndVertical();
+            GUILayout.Space(4f);
         }
 
         private void RunAction(string actionId)

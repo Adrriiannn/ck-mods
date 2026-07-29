@@ -5974,6 +5974,7 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("using ExpandNullforge.Authoring;");
             builder.AppendLine("using ExpandNullforge.Foundation;");
             builder.AppendLine("using ExpandNullforge.Portals;");
+            builder.AppendLine("using ExpandNullforge.Tilesets;");
             builder.AppendLine("using PugMod;");
             builder.AppendLine("using Unity.Mathematics;");
             builder.AppendLine("using UnityEngine;");
@@ -6088,6 +6089,16 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine();
             builder.AppendLine("  public void ModObjectLoaded(UnityEngine.Object obj)");
             builder.AppendLine("  {");
+            builder.AppendLine("    // Custom tilesets register the moment their asset loads — mod load runs before");
+            builder.AppendLine("    // the ECS worlds are created, so rendering, placement and the map-color table");
+            builder.AppendLine("    // are all wired before any tile of the set can appear.");
+            builder.AppendLine("    DimensionTilesetAsset tilesetAsset = obj as DimensionTilesetAsset;");
+            builder.AppendLine("    if (tilesetAsset != null)");
+            builder.AppendLine("    {");
+            builder.AppendLine("      DimensionTilesetAssetRuntime.Register(tilesetAsset);");
+            builder.AppendLine("      return;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
             builder.AppendLine("    DimensionRuntimeManifestAsset manifest = obj as DimensionRuntimeManifestAsset;");
             builder.AppendLine("    if (manifest == null)");
             builder.AppendLine("    {");
@@ -6283,6 +6294,8 @@ namespace ExpandNullforge.EditorTools
                     }
                 }
             }
+
+            AppendBlockCraftingRegistrations(builder, template);
 
             builder.AppendLine("    staticRuntimeExtrasRegistered = true;");
             builder.AppendLine("  }");
@@ -6925,6 +6938,46 @@ namespace ExpandNullforge.EditorTools
         /// True when the placed portal (V1) should be craftable: an enabled user-accessible rule
         /// with Craftable set exists — or no placed rule was authored at all (legacy default).
         /// </summary>
+        /// <summary>
+        /// Makes every generated block item show up at the Wooden Workbench, alongside the portals.
+        /// A block with no authored recipe still registers — it simply crafts from nothing, which is
+        /// what lets a creator place and look at a brand-new block before designing its cost.
+        /// Ingredients, once authored, ride the item's own InventoryItem authoring like vanilla.
+        /// </summary>
+        private static void AppendBlockCraftingRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template)
+        {
+            DimensionTilesetAsset[] tilesets = template == null ? null : template.Tilesets;
+            if (tilesets == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < tilesets.Length; i++)
+            {
+                DimensionTilesetAsset tileset = tilesets[i];
+                if (tileset == null || !tileset.Enabled || !tileset.GenerateWallBlock)
+                {
+                    continue;
+                }
+
+                string itemId = tileset.WallBlockItemId;
+                if (string.IsNullOrEmpty(itemId))
+                {
+                    continue;
+                }
+
+                builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
+                builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
+                builder.Append("            ").Append(ToCSharpString(itemId)).AppendLine(",");
+                builder.AppendLine("            ObjectID.WoodenWorkBench,");
+                builder.AppendLine("            1,");
+                builder.AppendLine("            0f,");
+                builder.Append("            ").Append(ToCSharpString(tileset.BlockName + " Block")).AppendLine("));");
+            }
+        }
+
         private static bool IsPlacedPortalCraftable(DimensionTemplateAsset template)
         {
             DimensionPortalAccessRuleAsset[] rules = template == null

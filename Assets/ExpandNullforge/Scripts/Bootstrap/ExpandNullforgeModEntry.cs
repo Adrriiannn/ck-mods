@@ -100,10 +100,33 @@ public sealed class ExpandNullforgeModEntry : IMod
 
   public void ModObjectLoaded(Object obj)
   {
+    // Tileset assets shipped in the framework's own bundle register here; consumer-mod
+    // tilesets register through the generated bootstrap's identical branch.
+    ExpandNullforge.Authoring.DimensionTilesetAsset tilesetAsset =
+        obj as ExpandNullforge.Authoring.DimensionTilesetAsset;
+    if (tilesetAsset != null)
+    {
+      ExpandNullforge.Tilesets.DimensionTilesetAssetRuntime.Register(tilesetAsset);
+    }
   }
 
   public void Update()
   {
+    // Core Keeper's real adaptive tileset lookup isn't shipped to the SDK, so it has to be read
+    // in-game and baked into DimensionTilesetAtlasData. That bake is done, so the capture stays
+    // quiet — re-dumping the whole atlas into the player log every launch when we already have the
+    // answer buries everything else. It runs again only if the bake ever comes up empty, which is
+    // what a Core Keeper update that invalidates the layout would look like.
+    // Core Keeper's real adaptive tileset lookup isn't shipped to the SDK, so it has to be read
+    // in-game and baked into DimensionTilesetAtlasData. That bake is done, so the capture stays
+    // quiet — re-dumping the whole atlas into the player log every launch when we already have the
+    // answer buries everything else. It runs again only if the bake ever comes up empty, which is
+    // what a Core Keeper update that invalidates the layout would look like.
+    if (!ExpandNullforge.Tilesets.DimensionTilesetAtlas.IsReady)
+    {
+      ExpandNullforge.Tilesets.DimensionTilesetAtlasCapture.TryCaptureOnce();
+    }
+
     if (DimensionService.HasAttachedServerWorld)
     {
       TryInitializeServerWorldPersistence();
@@ -149,6 +172,33 @@ public sealed class ExpandNullforgeModEntry : IMod
     }
   }
 
+  /// <summary>
+  /// Registers a world with the Burst disabler, so <c>EquipmentUpdateSystem</c> actually runs
+  /// un-Bursted there.
+  /// </summary>
+  /// <remarks>
+  /// <c>DisableBurstForSystem&lt;T&gt;</c> in Init only registers the system TYPE. For an unmanaged
+  /// system the disabler still has to resolve that type to each world's own SystemHandle, which is
+  /// what <c>AddWorld</c> does — and a world nobody registers keeps running the system Burst-compiled.
+  /// That silently defeats every managed patch on the placement path: on a dedicated server the tile
+  /// write reached vanilla's untouched <c>EntityUtility.AddTile</c>, which rejects any tileset id
+  /// above 74 ("Trying to add invalid tileset 45378 for tileType 35"), so placed custom blocks were
+  /// never created server-side and the client's prediction was simply corrected away.
+  /// Cheap and idempotent — the disabler stores handles in a HashSet.
+  /// </remarks>
+  private static void EnsureBurstDisabledForWorld(World world)
+  {
+    if (world == null || !world.IsCreated)
+    {
+      return;
+    }
+
+    BurstDisabler.AddWorld(world);
+    UnityEngine.Debug.Log(
+        "[NF_TILESET] Registered " + world.Name +
+        " with the Burst disabler so tile-write patches apply there.");
+  }
+
   private void RegisterServerWorld()
   {
     if (API.Server == null ||
@@ -166,6 +216,8 @@ public sealed class ExpandNullforgeModEntry : IMod
 
     registeredServerWorld = world;
     serverWorldPersistenceInitialized = false;
+    EnsureBurstDisabledForWorld(world);
+    ExpandNullforge.Tilesets.DimensionCustomTileRescue.EnsureSystemOrdering(world);
     world.GetOrCreateSystemManaged<DimensionTravelServerRpcSystem>();
     world.GetOrCreateSystemManaged<DimensionPlayerContextServerRpcSystem>();
     DimensionReturnPortalSpawnSystem returnPortalSpawnSystem =
@@ -284,6 +336,8 @@ public sealed class ExpandNullforgeModEntry : IMod
     }
 
     registeredClientWorld = world;
+    EnsureBurstDisabledForWorld(world);
+    ExpandNullforge.Tilesets.DimensionCustomTileRescue.EnsureSystemOrdering(world);
     world.GetOrCreateSystemManaged<DimensionTravelClientRpcSystem>();
     world.GetOrCreateSystemManaged<DimensionPlayerContextClientRpcSystem>();
     world.GetOrCreateSystemManaged<DimensionPortalMapMarkerScopeSystem>();
@@ -300,6 +354,7 @@ public sealed class ExpandNullforgeModEntry : IMod
   {
     DimensionPortalRecipeInjector.ClearWorldState("server world destroyed");
     DimensionPortalObjectIdCache.Clear();
+    ExpandNullforge.Tilesets.DimensionCustomTileRescue.Clear();
     DimensionPortalRuntime.Reset();
     DimensionService.PreparePersistenceForWorldUnload("server world destroyed");
     registeredServerWorld = null;
@@ -313,6 +368,7 @@ public sealed class ExpandNullforgeModEntry : IMod
   private void OnClientWorldDestroyed()
   {
     DimensionPortalRecipeInjector.ClearWorldState("client world destroyed");
+    ExpandNullforge.Tilesets.DimensionCustomTileRescue.Clear();
     DimensionPortalRuntime.Reset();
     registeredClientWorld = null;
     DimensionService.ClearClientWorld();

@@ -80,14 +80,28 @@ namespace ExpandNullforge.Authoring
                     new List<DimensionTemplateAssetSavePlanEntry>());
             }
 
-            string dimensionId = SafeName(graph.Dimension.DimensionId, graph.Dimension.name, "dimension");
-            string dimensionFolder = EndsWithFolderSegment(normalizedRoot, dimensionId)
+            // The root Dimension Asset is named just the mod (e.g. "Nullforge"); its folder is
+            // "{Mod} Dimension" (e.g. "Nullforge Dimension"), with the rest of the content nested
+            // under it. The mod prefix is the part of the dimension id before the colon.
+            string rawDimensionId = graph.Dimension.DimensionId ?? string.Empty;
+            int modColon = rawDimensionId.IndexOf(':');
+            string modPrefix = modColon > 0
+                ? rawDimensionId.Substring(0, modColon)
+                : SafeName(rawDimensionId, graph.Dimension.name, "Dimension");
+            if (string.IsNullOrEmpty(modPrefix))
+            {
+                modPrefix = "Dimension";
+            }
+
+            string dimensionAssetName = SafeName(modPrefix, graph.Dimension.name, "dimension");
+            string dimensionFolderName = modPrefix + " Dimension";
+            string dimensionFolder = EndsWithFolderSegment(normalizedRoot, dimensionFolderName)
                 ? normalizedRoot
-                : normalizedRoot + "/" + dimensionId;
+                : normalizedRoot + "/" + dimensionFolderName;
             List<DimensionTemplateAssetSavePlanEntry> entries =
                 new List<DimensionTemplateAssetSavePlanEntry>();
 
-            AddEntry(entries, graph.Dimension, "Dimension", dimensionFolder, dimensionId, true,
+            AddEntry(entries, graph.Dimension, "Dimension", dimensionFolder, dimensionAssetName, true,
                 "Root Dimension Asset. Save this first so editor tooling has one primary asset to select.");
             AddEntry(entries, graph.PortalVisualProfile, "Portal Visual Profile", dimensionFolder, "PortalVisualProfile", false,
                 "Vanilla-default portal appearance profile. Edit this asset through the dashboard to customize each portal visual layer.");
@@ -111,7 +125,7 @@ namespace ExpandNullforge.Authoring
 
             return new DimensionTemplateAssetSavePlan(
                 normalizedRoot,
-                dimensionId,
+                dimensionAssetName,
                 "ready",
                 "Save plan prepared. This plan is advisory only and does not create folders or assets.",
                 entries);

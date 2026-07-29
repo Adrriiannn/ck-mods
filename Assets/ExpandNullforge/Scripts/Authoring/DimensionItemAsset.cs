@@ -27,6 +27,11 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private int maxStack = 999;
         [SerializeField] private string rarityId = string.Empty;
         [SerializeField] private bool enabled = true;
+        // Framework-managed: hidden items still generate (they are real objects the runtime needs) but
+        // are kept out of the dashboard's editable item lists. Used for the auto-created ground
+        // counterpart of a tileset block, which is infrastructure the modder should never have to see.
+        [HideInInspector]
+        [SerializeField] private bool hidden = false;
         [SerializeField] private string notes = string.Empty;
 
         [Header("Archetype data (only the fields your archetype needs are used)")]
@@ -159,6 +164,15 @@ namespace ExpandNullforge.Authoring
         public bool Enabled
         {
             get { return enabled; }
+        }
+
+        /// <summary>
+        /// True for framework infrastructure items that must generate but should never appear in the
+        /// dashboard's editable item lists (e.g. a tileset block's auto-created ground counterpart).
+        /// </summary>
+        public bool Hidden
+        {
+            get { return hidden; }
         }
 
         public string Notes

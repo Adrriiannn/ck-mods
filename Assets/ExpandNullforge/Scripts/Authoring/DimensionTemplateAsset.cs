@@ -44,6 +44,7 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private SceneTemplateAsset[] globalScenes = new SceneTemplateAsset[0];
         [SerializeField] private ResourceNodeTemplateAsset[] globalResourceNodes = new ResourceNodeTemplateAsset[0];
         [SerializeField] private DimensionItemAsset[] globalItems = new DimensionItemAsset[0];
+        [SerializeField] private DimensionTilesetAsset[] tilesets = new DimensionTilesetAsset[0];
         [SerializeField] private DimensionRecipeAsset[] globalRecipes = new DimensionRecipeAsset[0];
         [SerializeField] private DimensionWorkbenchAsset[] globalWorkbenches = new DimensionWorkbenchAsset[0];
         [SerializeField] private DimensionLootTableAsset[] globalLootTables = new DimensionLootTableAsset[0];
@@ -142,6 +143,11 @@ namespace ExpandNullforge.Authoring
         public DimensionItemAsset[] GlobalItems
         {
             get { return globalItems ?? new DimensionItemAsset[0]; }
+        }
+
+        public DimensionTilesetAsset[] Tilesets
+        {
+            get { return tilesets ?? new DimensionTilesetAsset[0]; }
         }
 
         public DimensionRecipeAsset[] GlobalRecipes
@@ -360,6 +366,11 @@ namespace ExpandNullforge.Authoring
         public void SetGlobalItems(IReadOnlyList<DimensionItemAsset> assets)
         {
             globalItems = CopyObjects(assets);
+        }
+
+        public void SetTilesets(IReadOnlyList<DimensionTilesetAsset> assets)
+        {
+            tilesets = CopyObjects(assets);
         }
 
         public void SetGlobalRecipes(IReadOnlyList<DimensionRecipeAsset> assets)

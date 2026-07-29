@@ -52,7 +52,7 @@ namespace ExpandNullforge.Authoring
             request.ContentPackId = request.DimensionId + ".pack";
             request.ContentPackDisplayName = request.DimensionDisplayName + " Pack";
             request.BiomeId = request.DimensionId + ".starter";
-            request.BiomeDisplayName = request.DimensionDisplayName + " Starter Biome";
+            request.BiomeDisplayName = "Starter Biome";
             request.TerrainGenerationProviderId = DimensionGenerationProviderIds.SafePlatform;
             return request;
         }

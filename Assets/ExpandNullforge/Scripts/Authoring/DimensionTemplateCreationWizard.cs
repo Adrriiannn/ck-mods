@@ -74,7 +74,7 @@ namespace ExpandNullforge.Authoring
         public string ExampleId = DimensionTemplateAuthoringExampleCatalog.MinimalRoomExampleId;
         public string ModIdPrefix = string.Empty;
         public string DimensionId = string.Empty;
-        public string DimensionDisplayName = "New Dimension";
+        public string DimensionDisplayName = "Dimension";
         public string ContentPackId = string.Empty;
         public string ContentPackDisplayName = string.Empty;
         public string ContentPackAuthor = string.Empty;
@@ -447,7 +447,7 @@ namespace ExpandNullforge.Authoring
             normalized.SuggestedRootFolder = source.SuggestedRootFolder ?? string.Empty;
             normalized.ModIdPrefix = ResolveModIdPrefix(source);
             normalized.DimensionDisplayName = string.IsNullOrEmpty(source.DimensionDisplayName)
-                ? "New Dimension"
+                ? "Dimension"
                 : source.DimensionDisplayName;
             string dimensionToken = NormalizeIdToken(
                 normalized.DimensionDisplayName,
@@ -459,9 +459,9 @@ namespace ExpandNullforge.Authoring
                 : source.ContentPackDisplayName;
             normalized.ContentPackAuthor = source.ContentPackAuthor ?? string.Empty;
             string biomeName = string.IsNullOrEmpty(source.BiomeDisplayName)
-                ? normalized.DimensionDisplayName + " Starter Biome"
+                ? "Starter Biome"
                 : source.BiomeDisplayName;
-            string biomeToken = NormalizeIdToken(biomeName, dimensionToken + "Biome");
+            string biomeToken = NormalizeIdToken(biomeName, "StarterBiome");
             normalized.BiomeId = normalized.ModIdPrefix + ":" + biomeToken;
             normalized.BiomeDisplayName = biomeName;
             normalized.ZoneId = normalized.BiomeId;
@@ -560,7 +560,7 @@ namespace ExpandNullforge.Authoring
                 DimensionDisplayNameFieldId,
                 "Dimension Name",
                 request.DimensionDisplayName,
-                "New Dimension",
+                "Dimension",
                 string.Empty,
                 true));
             fields.Add(CreateTextField(
@@ -605,7 +605,7 @@ namespace ExpandNullforge.Authoring
                 BiomeDisplayNameFieldId,
                 "Starter Biome Name",
                 request.BiomeDisplayName,
-                request.DimensionDisplayName + " Starter Biome",
+                "Starter Biome",
                 string.Empty,
                 true));
             fields.Add(CreateTextField(

@@ -67,19 +67,30 @@ namespace ExpandNullforge.EditorTools
             IEnumerable<DimensionItemAsset> items,
             string outputFolder)
         {
-            return Generate(items, outputFolder, null);
+            return Generate(items, outputFolder, null, null);
+        }
+
+        public static DimensionItemGenerationReport Generate(
+            IEnumerable<DimensionItemAsset> items,
+            string outputFolder,
+            IEnumerable<DimensionRecipeAsset> recipes)
+        {
+            return Generate(items, outputFolder, recipes, null);
         }
 
         /// <summary>
         /// Generates items and, where a recipe produces one of them, writes that recipe's
         /// ingredients and craft time onto the item. Core Keeper keeps a recipe's ingredient list
         /// on the produced item rather than on the crafting station, so this is where a recipe
-        /// becomes real.
+        /// becomes real. When <paramref name="tilesets"/> is supplied, any generated item that is a
+        /// tileset's ground or wall block additionally receives its tile-behaviour components so it
+        /// places, digs/mines, and drops as a real custom block.
         /// </summary>
         public static DimensionItemGenerationReport Generate(
             IEnumerable<DimensionItemAsset> items,
             string outputFolder,
-            IEnumerable<DimensionRecipeAsset> recipes)
+            IEnumerable<DimensionRecipeAsset> recipes,
+            IEnumerable<DimensionTilesetAsset> tilesets)
         {
             DimensionItemGenerationReport report = new DimensionItemGenerationReport();
             if (items == null)
@@ -102,6 +113,7 @@ namespace ExpandNullforge.EditorTools
                 return report;
             }
 
+            Dictionary<string, TilesetBlockBinding> blockIndex = IndexTilesetBlocks(tilesets);
             Dictionary<string, DimensionRecipeAsset> recipesByOutput = IndexRecipes(recipes, report);
             List<string> generatedIds = new List<string>();
             List<DimensionLocalizationCsv.Row> localizationRows =
@@ -112,7 +124,7 @@ namespace ExpandNullforge.EditorTools
                 AssetDatabase.StartAssetEditing();
                 foreach (DimensionItemAsset item in items)
                 {
-                    if (GenerateOne(item, outputFolder, recipesByOutput, report) && item != null)
+                    if (GenerateOne(item, outputFolder, recipesByOutput, blockIndex, report) && item != null)
                     {
                         generatedIds.Add(item.ItemId);
                         DimensionLocalizationCsv.AddItemRows(
@@ -279,11 +291,62 @@ namespace ExpandNullforge.EditorTools
             return byOutput;
         }
 
+        /// <summary>Which tileset a generated block item belongs to, and whether it is the wall kind.</summary>
+        private readonly struct TilesetBlockBinding
+        {
+            public readonly DimensionTilesetAsset Tileset;
+            public readonly bool IsWall;
+
+            public TilesetBlockBinding(DimensionTilesetAsset tileset, bool isWall)
+            {
+                Tileset = tileset;
+                IsWall = isWall;
+            }
+        }
+
+        /// <summary>
+        /// Maps each enabled tileset's toggled-on block item ids to their tileset + kind, so a block
+        /// item can be recognised during generation and given its tile-behaviour components. A
+        /// duplicate id (two tilesets colliding on a block id) keeps the first and is left for the
+        /// tileset registry's own collision reporting.
+        /// </summary>
+        private static Dictionary<string, TilesetBlockBinding> IndexTilesetBlocks(
+            IEnumerable<DimensionTilesetAsset> tilesets)
+        {
+            Dictionary<string, TilesetBlockBinding> byId =
+                new Dictionary<string, TilesetBlockBinding>(StringComparer.Ordinal);
+            if (tilesets == null)
+            {
+                return byId;
+            }
+
+            foreach (DimensionTilesetAsset tileset in tilesets)
+            {
+                if (tileset == null || !tileset.Enabled || string.IsNullOrEmpty(tileset.TilesetName))
+                {
+                    continue;
+                }
+
+                if (tileset.GenerateGroundBlock && !byId.ContainsKey(tileset.GroundBlockItemId))
+                {
+                    byId.Add(tileset.GroundBlockItemId, new TilesetBlockBinding(tileset, false));
+                }
+
+                if (tileset.GenerateWallBlock && !byId.ContainsKey(tileset.WallBlockItemId))
+                {
+                    byId.Add(tileset.WallBlockItemId, new TilesetBlockBinding(tileset, true));
+                }
+            }
+
+            return byId;
+        }
+
         /// <returns>True when a prefab was written for this item.</returns>
         private static bool GenerateOne(
             DimensionItemAsset item,
             string outputFolder,
             Dictionary<string, DimensionRecipeAsset> recipesByOutput,
+            Dictionary<string, TilesetBlockBinding> blockIndex,
             DimensionItemGenerationReport report)
         {
             if (item == null)
@@ -327,7 +390,7 @@ namespace ExpandNullforge.EditorTools
             bool written = false;
             try
             {
-                Configure(root, item, recipesByOutput, report);
+                Configure(root, item, recipesByOutput, blockIndex, report);
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 written = true;
                 if (updating)
@@ -363,6 +426,7 @@ namespace ExpandNullforge.EditorTools
             GameObject root,
             DimensionItemAsset item,
             Dictionary<string, DimensionRecipeAsset> recipesByOutput,
+            Dictionary<string, TilesetBlockBinding> blockIndex,
             DimensionItemGenerationReport report)
         {
             DimensionItemArchetype archetype = item.Archetype;
@@ -471,6 +535,15 @@ namespace ExpandNullforge.EditorTools
                     ": boss encounter wiring (phases, arena, music) has no framework path yet; " +
                     "the prefab is generated without it.");
             }
+
+            // A block item that belongs to a tileset becomes a real custom tile: stamp the tileset
+            // identity and attach the ground/wall dig/mine/spawn/crack behaviour on top of the
+            // placeable object the Block archetype already produced.
+            if (blockIndex != null &&
+                blockIndex.TryGetValue(item.ItemId, out TilesetBlockBinding binding))
+            {
+                DimensionTilesetBlockAuthoring.Apply(root, binding.Tileset, binding.IsWall, report);
+            }
         }
 
         private static void ConfigureObject(
@@ -491,6 +564,15 @@ namespace ExpandNullforge.EditorTools
                     DefaultPlaceableObjectType,
                     item,
                     report);
+            }
+
+            // Rarity is a Core Keeper enum on ObjectAuthoring. Honour the item's authored rarity so
+            // any item — the tileset block included — can set its tier from the dashboard; empty
+            // leaves the vanilla default. (Portal items re-assert Rare in Configure, keeping their
+            // fixed framework identity.)
+            if (!string.IsNullOrEmpty(item.RarityId))
+            {
+                TrySetEnumProperty(objectAuthoring, "rarity", item.RarityId, item, report);
             }
 
             if (ResolveSprite(item) == null && !string.IsNullOrEmpty(item.IconId))
@@ -793,6 +875,32 @@ namespace ExpandNullforge.EditorTools
             }
 
             return AssetDatabase.IsValidFolder(folder);
+        }
+
+        /// <summary>
+        /// Deletes the generated prefab for an item id (the "Generate Items" output). Called when the
+        /// item — or the block that owns it — is deleted, so create and delete stay symmetrical.
+        /// Localization rows are left in place: the CSV is fully rewritten by the next generate, and
+        /// stale rows are inert until then.
+        /// </summary>
+        public static void DeleteGeneratedArtifacts(string templatePath, string itemId)
+        {
+            if (string.IsNullOrEmpty(templatePath) || string.IsNullOrEmpty(itemId))
+            {
+                return;
+            }
+
+            string modRoot = DimensionApiModFolderUtility.ResolveModRootFolderForAssetPath(templatePath);
+            if (string.IsNullOrEmpty(modRoot))
+            {
+                return;
+            }
+
+            string prefabPath = modRoot + "/Items/" + SanitizeFileName(itemId) + ".prefab";
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null)
+            {
+                AssetDatabase.DeleteAsset(prefabPath);
+            }
         }
 
         private static string SanitizeFileName(string value)

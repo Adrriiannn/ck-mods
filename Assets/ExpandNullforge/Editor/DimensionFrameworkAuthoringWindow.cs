@@ -20,6 +20,7 @@ namespace ExpandNullforge.EditorTools
         private string activeSectionId = "overview";
         private int selectedBiomeIndex;
         private Vector2 rootScroll;
+        private Vector2 navScroll;
         private Vector2 detailScroll;
         private Vector2 notesScroll;
         private Vector2 actionScroll;
@@ -41,6 +42,7 @@ namespace ExpandNullforge.EditorTools
         private Object lastGeneratedManifestAsset;
         private bool portalVisualProfileSetupQueued;
         private DimensionPortalAppearanceStudio portalAppearanceStudio;
+        private readonly DimensionTilesetStudio tilesetStudio = new DimensionTilesetStudio();
         private DimensionTemplateAsset initializedPortalTemplate;
         private DimensionPortalVisualProfileAsset initializedPortalProfile;
         private bool itemPortalVisualProfileSetupQueued;
@@ -48,6 +50,7 @@ namespace ExpandNullforge.EditorTools
         private DimensionTemplateAsset initializedItemPortalTemplate;
         private DimensionPortalVisualProfileAsset initializedItemPortalProfile;
         private int portalStudioTab;
+        private int selectedTilesetIndex;
         private Object serializedAssetBindingTarget;
         private SerializedObject serializedAssetBinding;
         private readonly Dictionary<string, SerializedProperty> serializedAssetBindingProperties =
@@ -83,6 +86,7 @@ namespace ExpandNullforge.EditorTools
             pendingPortalTransition = null;
             portalTransitionQueued = false;
             ReleaseSerializedAssetBinding();
+            tilesetStudio.Cleanup();
             if (portalAppearanceStudio != null)
             {
                 portalAppearanceStudio.Dispose();
@@ -108,7 +112,10 @@ namespace ExpandNullforge.EditorTools
                 activeStudio.IsPlaying &&
                 !EditorApplication.isCompiling &&
                 !EditorApplication.isUpdating;
-            bool needsMouseMoveEvents = portalSectionActive && !previewRepaintsContinuously;
+            // The Tileset Studio's scene preview needs mouse-move events too, so its add/remove
+            // placement outline can follow the cursor.
+            bool tilesetSectionActive = activeSectionId == "tilesets";
+            bool needsMouseMoveEvents = (portalSectionActive && !previewRepaintsContinuously) || tilesetSectionActive;
             if (wantsMouseMove != needsMouseMoveEvents)
             {
                 wantsMouseMove = needsMouseMoveEvents;
@@ -157,73 +164,70 @@ namespace ExpandNullforge.EditorTools
                 displayedEditorActionType = lastEditorActionType;
             }
 
+            // Redraw as the cursor moves over the Tileset Studio so its placement outline tracks it.
+            if (currentEvent != null && currentEvent.type == EventType.MouseMove && activeSectionId == "tilesets")
+            {
+                Repaint();
+            }
+
             DrawHeader();
-            DrawTemplatePicker();
 
             if (selectedTemplate == null || workspace == null || viewModel == null)
             {
+                DrawTemplatePicker();
                 DrawMissingTemplateState();
                 return;
             }
 
-            rootScroll = EditorGUILayout.BeginScrollView(rootScroll);
+            // Two independently scrolling columns: the section nav on the left stays put while the
+            // active section on the right scrolls (and vice versa).
             EditorGUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+
+            EditorGUILayout.BeginVertical(GUILayout.Width(SidebarWidth), GUILayout.ExpandHeight(true));
+            navScroll = EditorGUILayout.BeginScrollView(navScroll, GUILayout.ExpandHeight(true));
             DrawNavigationSidebar();
-            GUILayout.Space(8f);
-            DrawCurrentSection();
-            EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndScrollView();
+            DrawTemplatePicker();
+            EditorGUILayout.EndVertical();
+
+            GUILayout.Space(8f);
+
+            EditorGUILayout.BeginVertical(GUILayout.ExpandHeight(true));
+            rootScroll = EditorGUILayout.BeginScrollView(rootScroll, GUILayout.ExpandHeight(true));
+            DrawCurrentSection();
+            EditorGUILayout.EndScrollView();
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.EndHorizontal();
         }
 
         private void DrawHeader()
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("Dimensions API", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(
-                "Create a Core Keeper dimension from its root Dimension Asset to a playable world. Start by creating or selecting that asset, then follow the steps below.",
-                EditorStyles.wordWrappedLabel);
+            // Feedback only — the old title/description block was removed for a cleaner top.
             if (!string.IsNullOrEmpty(displayedEditorActionMessage))
             {
-                EditorGUILayout.HelpBox(
-                    displayedEditorActionMessage,
-                    displayedEditorActionType);
+                EditorGUILayout.HelpBox(displayedEditorActionMessage, displayedEditorActionType);
             }
-
-            EditorGUILayout.EndVertical();
         }
 
         private void DrawTemplatePicker()
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            // No background box — just the label and field.
+            EditorGUILayout.BeginVertical();
+            GUILayout.Label("Dimension Asset", EditorStyles.miniBoldLabel);
             EditorGUI.BeginChangeCheck();
             DimensionTemplateAsset requestedTemplate =
                 (DimensionTemplateAsset)EditorGUILayout.ObjectField(
-                "Dimension Asset",
-                selectedTemplate,
-                typeof(DimensionTemplateAsset),
-                false);
+                    selectedTemplate,
+                    typeof(DimensionTemplateAsset),
+                    false,
+                    GUILayout.Width(SidebarWidth - 8f));
             bool templateChanged = EditorGUI.EndChangeCheck();
-            autoUseProjectSelection = EditorGUILayout.ToggleLeft(
-                "Follow Project selection",
-                autoUseProjectSelection,
-                GUILayout.Width(180f));
-            if (GUILayout.Button("Use Selection", GUILayout.Width(110f)))
-            {
-                TryUseProjectSelection();
-            }
+            EditorGUILayout.EndVertical();
 
-            if (GUILayout.Button("Refresh", GUILayout.Width(90f)))
+            if (templateChanged && requestedTemplate != selectedTemplate)
             {
-                RebuildWorkspace();
-            }
-
-            EditorGUILayout.EndHorizontal();
-            if (templateChanged)
-            {
-                if (requestedTemplate != selectedTemplate)
-                {
-                    RequestTemplateChange(requestedTemplate);
-                }
+                RequestTemplateChange(requestedTemplate);
             }
         }
 
@@ -244,7 +248,7 @@ namespace ExpandNullforge.EditorTools
 
             GUILayout.Space(6f);
             EditorGUILayout.HelpBox(
-                "Use the wizard first. When it finishes, select the created Dimension Asset in the field above, or select it in the Project window and press Use Selection.",
+                "Use the wizard first. When it finishes, drop the created Dimension Asset into the field above, or just select it in the Project window.",
                 MessageType.Info);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndVertical();
@@ -819,6 +823,11 @@ namespace ExpandNullforge.EditorTools
                 return "Dimension";
             }
 
+            if (sectionId == "tilesets")
+            {
+                return "Tileset Studio";
+            }
+
             if (sectionId == "layout")
             {
                 return "Layout";
@@ -1168,43 +1177,161 @@ namespace ExpandNullforge.EditorTools
             EditorGUILayout.EndVertical();
         }
 
+        // The dashboard sections are colour-coded BLUE so a creator can tell "I'm in the section
+        // list" at a peripheral glance — distinct from the orange Tileset Studio and (soon) the
+        // blue-accented Portal Studio interior.
+        private static readonly Color NavBlue = new Color(0.34f, 0.62f, 0.92f);
+        private static readonly Color NavBlueSoft = new Color(0.34f, 0.62f, 0.92f, 0.14f);
+        private static readonly Color NavIcon = new Color(0.5f, 0.74f, 1f);
+        private GUIStyle navTitleStyle;
+        private GUIStyle navTitleSelStyle;
+        private GUIStyle navDescStyle;
+        private GUIStyle portalHeaderStyle;
+        private GUIStyle portalTabNameStyle;
+        private GUIStyle portalTabNameSelStyle;
+        private GUIStyle portalTickStyle;
+
         private void DrawNavigationSidebar()
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(SidebarWidth));
-            EditorGUILayout.LabelField("Sections", EditorStyles.boldLabel);
+            EnsureNavStyles();
+            // Width comes from the shared left column, so this vertical just fills it.
+            EditorGUILayout.BeginVertical();
+            GUILayout.Label("SECTIONS", EditorStyles.miniBoldLabel);
+            GUILayout.Space(2f);
+
             IReadOnlyList<DimensionTemplateCustomizerSectionItem> sections =
                 viewModel.Navigation == null ? null : viewModel.Navigation.Sections;
             if (sections != null)
             {
                 for (int i = 0; i < sections.Count; i++)
                 {
-                    DimensionTemplateCustomizerSectionItem section = sections[i];
-                    GUIStyle style = section.SectionId == activeSectionId
-                        ? EditorStyles.toolbarButton
-                        : EditorStyles.miniButton;
-                    Color oldColor = GUI.color;
-                    GUI.color = StateColor(section.State);
-                    if (GUILayout.Button(SectionButtonText(section), style))
-                    {
-                        RequestSectionChange(section.SectionId);
-                    }
-
-                    GUI.color = oldColor;
+                    DrawNavItem(sections[i]);
                 }
             }
 
-            GUILayout.Space(8f);
-            DrawReadinessLegend();
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawReadinessLegend()
+        private void DrawNavItem(DimensionTemplateCustomizerSectionItem section)
         {
-            EditorGUILayout.LabelField("Legend", EditorStyles.miniBoldLabel);
-            EditorGUILayout.LabelField("Ready = green");
-            EditorGUILayout.LabelField("Partial = yellow");
-            EditorGUILayout.LabelField("Blocked = red");
-            EditorGUILayout.LabelField("Missing = gray");
+            bool selected = section.SectionId == activeSectionId;
+            Rect r = EditorGUILayout.GetControlRect(false, 40f, GUILayout.Width(SidebarWidth - 18f));
+
+            if (selected)
+            {
+                EditorGUI.DrawRect(r, NavBlueSoft);
+                EditorGUI.DrawRect(new Rect(r.x, r.y, 3f, r.height), NavBlue);
+            }
+            else if (r.Contains(Event.current.mousePosition))
+            {
+                EditorGUI.DrawRect(r, new Color(1f, 1f, 1f, 0.04f));
+            }
+
+            Rect icon = new Rect(r.x + 12f, r.y + 10f, 20f, 20f);
+            DrawSectionIcon(icon, section.SectionId, selected ? new Color(0.66f, 0.84f, 1f) : NavIcon);
+
+            float textX = icon.xMax + 12f;
+            float textW = r.xMax - textX - 8f;
+            GUI.Label(new Rect(textX, r.y + 5f, textW, 16f), section.DisplayName,
+                selected ? navTitleSelStyle : navTitleStyle);
+            GUI.Label(new Rect(textX, r.y + 21f, textW, 13f), SectionDescription(section.SectionId), navDescStyle);
+
+            if (GUI.Button(r, GUIContent.none, GUIStyle.none))
+            {
+                RequestSectionChange(section.SectionId);
+            }
+        }
+
+        // Section icons: a real PNG dropped in Assets/ExpandNullforge/Editor/Icons/<id>.png wins
+        // (drawn at full colour); otherwise a smooth code-generated icon is drawn, tinted to state.
+        private static Dictionary<string, Texture2D> sectionIconPngCache;
+
+        private static void DrawSectionIcon(Rect box, string sectionId, Color tint)
+        {
+            Texture2D png = SectionIconPng(sectionId);
+            if (png != null)
+            {
+                GUI.DrawTexture(box, png, ScaleMode.ScaleToFit);
+                return;
+            }
+
+            Texture2D generated = DimensionSectionIcons.Generated(sectionId);
+            if (generated != null)
+            {
+                GUI.DrawTexture(box, generated, ScaleMode.ScaleToFit, true, 0f, tint, Vector4.zero, Vector4.zero);
+            }
+        }
+
+        private static Texture2D SectionIconPng(string sectionId)
+        {
+            if (sectionIconPngCache == null)
+            {
+                sectionIconPngCache = new Dictionary<string, Texture2D>();
+            }
+
+            if (!sectionIconPngCache.TryGetValue(sectionId, out Texture2D tex))
+            {
+                tex = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/ExpandNullforge/Editor/Icons/" + sectionId + ".png");
+                sectionIconPngCache[sectionId] = tex;
+            }
+
+            return tex;
+        }
+
+        private static Color StateColor(DimensionAuthoringReadinessState state)
+        {
+            if (state == DimensionAuthoringReadinessState.Ready)
+            {
+                return new Color(0.75f, 1f, 0.75f, 1f);
+            }
+
+            if (state == DimensionAuthoringReadinessState.Partial)
+            {
+                return new Color(1f, 0.92f, 0.62f, 1f);
+            }
+
+            if (state == DimensionAuthoringReadinessState.Blocked)
+            {
+                return new Color(1f, 0.65f, 0.65f, 1f);
+            }
+
+            return new Color(0.75f, 0.75f, 0.75f, 1f);
+        }
+
+        private static string SectionDescription(string sectionId)
+        {
+            switch (sectionId)
+            {
+                case "overview": return "Everything at a glance";
+                case "dimension": return "Identity & coordinates";
+                case "portals": return "Design your portals";
+                case "tilesets": return "Custom blocks & tiles";
+                case "layout": return "Shape of the world";
+                case "biomes": return "Zones & palettes";
+                case "terrain": return "Ground, walls, liquids";
+                case "generation": return "How the world builds";
+                case "scenes": return "Handcrafted structures";
+                case "resources": return "Items, recipes, loot";
+                case "spawns": return "Creatures & mobs";
+                case "export": return "Build the manifest";
+                case "diagnostics": return "Readiness & issues";
+                default: return string.Empty;
+            }
+        }
+
+        private void EnsureNavStyles()
+        {
+            if (navTitleStyle != null)
+            {
+                return;
+            }
+
+            navTitleStyle = new GUIStyle(EditorStyles.label) { fontStyle = FontStyle.Bold, fontSize = 13, alignment = TextAnchor.MiddleLeft };
+            navTitleSelStyle = new GUIStyle(navTitleStyle);
+            navTitleSelStyle.normal.textColor = new Color(0.72f, 0.85f, 1f);
+            navDescStyle = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleLeft };
+            navDescStyle.normal.textColor = new Color(1f, 1f, 1f, 0.45f);
         }
 
         private void DrawCurrentSection()
@@ -1220,6 +1347,10 @@ namespace ExpandNullforge.EditorTools
             else if (activeSectionId == "portals")
             {
                 DrawPortalEditor();
+            }
+            else if (activeSectionId == "tilesets")
+            {
+                DrawTilesetsEditor();
             }
             else if (activeSectionId == "layout")
             {
@@ -1300,6 +1431,8 @@ namespace ExpandNullforge.EditorTools
                     return "dimension-identity-registry";
                 case "portals":
                     return "portal-studio";
+                case "tilesets":
+                    return "custom-tilesets";
                 case "layout":
                     return "coordinate-translation";
                 case "biomes":
@@ -1522,25 +1655,18 @@ namespace ExpandNullforge.EditorTools
             DrawPortalAccessRuleEditors();
         }
 
-        /// <summary>
-        /// The active tab's portal-version Enabled toggle, living where portals are configured.
-        /// Both versions may be enabled together; the toggle locks on when it is the last enabled
-        /// entry so a dimension can never lose its only way in. Applies on the next
-        /// Generate Runtime Manifest.
-        /// </summary>
-        private void DrawPortalVersionEnabledToggle(bool instantTab)
+        private void ComputePortalVersion(bool instant, out bool has, out bool enabled, out bool otherEnabled)
         {
-            DimensionPortalAccessRuleAsset[] rules = selectedTemplate == null
-                ? null
-                : selectedTemplate.PortalAccessRules;
+            has = false;
+            enabled = false;
+            otherEnabled = false;
+            DimensionPortalAccessRuleAsset[] rules =
+                selectedTemplate == null ? null : selectedTemplate.PortalAccessRules;
             if (rules == null)
             {
                 return;
             }
 
-            bool anyRuleForTab = false;
-            bool tabEnabled = false;
-            bool otherEnabled = false;
             for (int i = 0; i < rules.Length; i++)
             {
                 DimensionPortalAccessRuleAsset rule = rules[i];
@@ -1551,53 +1677,61 @@ namespace ExpandNullforge.EditorTools
 
                 bool isInstant = DimensionPortalVersions.IsInstantaneousItem(rule.AccessKind);
                 bool isPlaced = DimensionPortalVersions.IsUserAccessible(rule.AccessKind);
-                if (instantTab ? isInstant : isPlaced)
+                if (instant ? isInstant : isPlaced)
                 {
-                    anyRuleForTab = true;
-                    tabEnabled |= rule.Enabled;
+                    has = true;
+                    enabled |= rule.Enabled;
                 }
-                else if (instantTab ? isPlaced : isInstant)
+                else if (instant ? isPlaced : isInstant)
                 {
                     otherEnabled |= rule.Enabled;
                 }
             }
+        }
 
-            if (!anyRuleForTab)
+        private bool HasPortalVersion(bool instant)
+        {
+            ComputePortalVersion(instant, out bool has, out _, out _);
+            return has;
+        }
+
+        private bool IsPortalVersionEnabled(bool instant)
+        {
+            ComputePortalVersion(instant, out _, out bool enabled, out _);
+            return enabled;
+        }
+
+        /// <summary>
+        /// Toggles whether a portal version exists in-game. Both versions can be enabled together;
+        /// the last enabled one is locked on so a dimension never loses its only way in. Applies on
+        /// the next Generate Runtime Manifest.
+        /// </summary>
+        private void TogglePortalVersionEnabled(bool instant)
+        {
+            ComputePortalVersion(instant, out bool has, out bool enabled, out bool otherEnabled);
+            if (!has || (enabled && !otherEnabled))
             {
                 return;
             }
 
-            bool lockedOn = tabEnabled && !otherEnabled;
-            using (new EditorGUI.DisabledScope(lockedOn))
+            bool next = !enabled;
+            DimensionPortalAccessRuleAsset[] rules = selectedTemplate.PortalAccessRules;
+            for (int i = 0; i < rules.Length; i++)
             {
-                bool next = GUILayout.Toggle(
-                    tabEnabled,
-                    new GUIContent(
-                        "Enabled",
-                        lockedOn
-                            ? "At least one portal version must stay enabled — turn on the other version first."
-                            : "Whether this portal version exists in-game. Both versions can be enabled together. Applies on the next Generate Runtime Manifest."),
-                    GUILayout.Width(70f));
-                if (next != tabEnabled)
+                DimensionPortalAccessRuleAsset rule = rules[i];
+                if (rule == null)
                 {
-                    for (int i = 0; i < rules.Length; i++)
-                    {
-                        DimensionPortalAccessRuleAsset rule = rules[i];
-                        if (rule == null)
-                        {
-                            continue;
-                        }
+                    continue;
+                }
 
-                        bool isTabRule = instantTab
-                            ? DimensionPortalVersions.IsInstantaneousItem(rule.AccessKind)
-                            : DimensionPortalVersions.IsUserAccessible(rule.AccessKind);
-                        if (isTabRule)
-                        {
-                            Undo.RecordObject(rule, "Portal Version Enabled");
-                            rule.SetEnabled(next);
-                            EditorUtility.SetDirty(rule);
-                        }
-                    }
+                bool isTabRule = instant
+                    ? DimensionPortalVersions.IsInstantaneousItem(rule.AccessKind)
+                    : DimensionPortalVersions.IsUserAccessible(rule.AccessKind);
+                if (isTabRule)
+                {
+                    Undo.RecordObject(rule, "Portal Version Enabled");
+                    rule.SetEnabled(next);
+                    EditorUtility.SetDirty(rule);
                 }
             }
         }
@@ -1680,25 +1814,108 @@ namespace ExpandNullforge.EditorTools
             GUILayout.Space(2f);
         }
 
+        // The Portal Studio's blue identity strip, now carrying the mode tabs on its right. The tabs
+        // are borderless so the strip shows through; the active one gets a darker-blue wash, and a
+        // tiny tick by each name shows (and toggles) whether that version ships.
+        private static readonly Color PortalBlue = new Color(0.26f, 0.67f, 0.95f);
+
+        private void DrawPortalHeaderStrip()
+        {
+            EnsurePortalHeaderStyles();
+            Rect bar = EditorGUILayout.GetControlRect(false, 40f);
+            EditorGUI.DrawRect(bar, new Color(PortalBlue.r, PortalBlue.g, PortalBlue.b, 0.15f));
+            EditorGUI.DrawRect(new Rect(bar.x, bar.y, 3f, bar.height), PortalBlue);
+            GUI.Label(new Rect(bar.x + 12f, bar.y, 200f, bar.height), "Portal Studio", portalHeaderStyle);
+
+            float placedW = PortalTabWidth("Placed Portal");
+            float instantW = PortalTabWidth("Instant Portal");
+            const float gap = 4f;
+            float startX = bar.xMax - placedW - gap - instantW - 6f;
+            DrawPortalTab(new Rect(startX, bar.y, placedW, bar.height), false, "Placed Portal");
+            DrawPortalTab(new Rect(startX + placedW + gap, bar.y, instantW, bar.height), true, "Instant Portal");
+        }
+
+        private float PortalTabWidth(string name)
+        {
+            // Room for the tick (~25px lead-in) + the name + trailing breathing space.
+            return portalTabNameStyle.CalcSize(new GUIContent(name)).x + 34f;
+        }
+
+        private void DrawPortalTab(Rect rect, bool instant, string name)
+        {
+            bool selected = (portalStudioTab == 1) == instant;
+            if (selected)
+            {
+                // A slight darker-blue wash marks the active tab; the strip shows through.
+                EditorGUI.DrawRect(rect, new Color(0.10f, 0.30f, 0.52f, 0.42f));
+            }
+            else if (rect.Contains(Event.current.mousePosition))
+            {
+                EditorGUI.DrawRect(rect, new Color(1f, 1f, 1f, 0.05f));
+            }
+
+            bool hasVersion = HasPortalVersion(instant);
+            bool enabled = IsPortalVersionEnabled(instant);
+
+            // A genuinely tiny tick beside the name: filled + check when the version ships, a faint
+            // hollow square when it does not.
+            const float ts = 10f;
+            Rect tick = new Rect(rect.x + 9f, rect.y + (rect.height - ts) / 2f, ts, ts);
+            if (hasVersion)
+            {
+                if (enabled)
+                {
+                    EditorGUI.DrawRect(tick, PortalBlue);
+                    GUI.Label(new Rect(tick.x - 1f, tick.y - 2f, tick.width + 2f, tick.height + 2f), "✓", portalTickStyle);
+                }
+                else
+                {
+                    DrawThinBorder(tick, new Color(1f, 1f, 1f, 0.35f));
+                }
+            }
+
+            Rect nameRect = new Rect(tick.xMax + 6f, rect.y, rect.xMax - (tick.xMax + 6f), rect.height);
+            GUI.Label(nameRect, name, selected ? portalTabNameSelStyle : portalTabNameStyle);
+
+            if (hasVersion && GUI.Button(tick, GUIContent.none, GUIStyle.none))
+            {
+                TogglePortalVersionEnabled(instant);
+            }
+
+            if (GUI.Button(nameRect, GUIContent.none, GUIStyle.none))
+            {
+                portalStudioTab = instant ? 1 : 0;
+                GUI.FocusControl(null);
+            }
+        }
+
+        private static void DrawThinBorder(Rect r, Color c)
+        {
+            EditorGUI.DrawRect(new Rect(r.x, r.y, r.width, 1f), c);
+            EditorGUI.DrawRect(new Rect(r.x, r.yMax - 1f, r.width, 1f), c);
+            EditorGUI.DrawRect(new Rect(r.x, r.y, 1f, r.height), c);
+            EditorGUI.DrawRect(new Rect(r.xMax - 1f, r.y, 1f, r.height), c);
+        }
+
+        private void EnsurePortalHeaderStyles()
+        {
+            if (portalHeaderStyle != null)
+            {
+                return;
+            }
+
+            portalHeaderStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14, alignment = TextAnchor.MiddleLeft };
+            portalTabNameStyle = new GUIStyle(EditorStyles.label) { fontStyle = FontStyle.Bold, fontSize = 12, alignment = TextAnchor.MiddleLeft };
+            portalTabNameStyle.normal.textColor = new Color(1f, 1f, 1f, 0.6f);
+            portalTabNameSelStyle = new GUIStyle(portalTabNameStyle);
+            portalTabNameSelStyle.normal.textColor = Color.white;
+            portalTickStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 10, alignment = TextAnchor.MiddleCenter };
+            portalTickStyle.normal.textColor = Color.white;
+        }
+
         private void DrawPortalEditor()
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            portalStudioTab = GUILayout.Toolbar(
-                portalStudioTab,
-                new[]
-                {
-                    new GUIContent(
-                        "Placed Portal",
-                        "The static portal that you can place down, and its indestructible brother that generates on the other side."),
-                    new GUIContent(
-                        "Instant Portal",
-                        "Your friendly neighborhood pocket portal.")
-                },
-                EditorStyles.toolbarButton,
-                GUILayout.Width(280f));
-            GUILayout.FlexibleSpace();
-            DrawPortalVersionEnabledToggle(portalStudioTab == 1);
-            EditorGUILayout.EndHorizontal();
+            DrawPortalHeaderStrip();
             GUILayout.Space(4f);
 
             if (portalStudioTab == 1)
@@ -2649,6 +2866,124 @@ namespace ExpandNullforge.EditorTools
                 "Scene placement belongs here: random pools, exact coordinates, collision warnings, required clearances, and optional SceneBuilder-style import/export.");
         }
 
+        private void DrawTilesetsEditor()
+        {
+            DimensionTilesetAsset[] tilesets = selectedTemplate.Tilesets ?? new DimensionTilesetAsset[0];
+            int count = CountNonNull(tilesets);
+
+            if (count == 0 && !tilesetStudio.WizardActive)
+            {
+                GUILayout.Space(10f);
+                DrawEditorCard(
+                    "No blocks yet",
+                    "Add your first block — a short wizard asks what kind of block it is, which states it supports, and how it reaches the game.");
+                Color previous = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.90f, 0.58f, 0.26f);
+                if (GUILayout.Button("+ Add block", GUILayout.Width(130f), GUILayout.Height(26f)))
+                {
+                    tilesetStudio.BeginWizard();
+                    Repaint();
+                }
+
+                GUI.backgroundColor = previous;
+                return;
+            }
+
+            // Keep the selection valid, then hand the whole thing to the Studio.
+            ResolveSelectedTileset(tilesets);
+            DimensionTilesetStudio.DrawResult r =
+                tilesetStudio.Draw(selectedTemplate, tilesets, selectedTilesetIndex, position.width - SidebarWidth);
+
+            if (r.WizardRequest != null)
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.CreateWizardBlock(selectedTemplate, r.WizardRequest));
+                selectedTilesetIndex = CountNonNull(selectedTemplate.Tilesets) - 1;
+                GUIUtility.ExitGUI();
+            }
+
+            if (r.DeleteRequested)
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.DeleteTileset(selectedTemplate, tilesets[selectedTilesetIndex]));
+                selectedTilesetIndex = 0;
+                GUIUtility.ExitGUI();
+            }
+
+            if (r.GenerateRequested)
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.GenerateTilesetData(tilesets[selectedTilesetIndex]));
+                GUIUtility.ExitGUI();
+            }
+
+            if (r.FocusItem != null)
+            {
+                // The Studio's "Edit ▸" deep-link: jump to Resources with the item selected.
+                activeSectionId = "resources";
+                Selection.activeObject = r.FocusItem;
+                EditorGUIUtility.PingObject(r.FocusItem);
+                Repaint();
+            }
+
+            if (r.SelectIndex >= 0)
+            {
+                selectedTilesetIndex = r.SelectIndex;
+                Repaint();
+            }
+
+            if (!string.IsNullOrEmpty(r.Message))
+            {
+                lastEditorActionMessage = r.Message;
+                lastEditorActionType = r.MessageType;
+            }
+
+            if (r.Changed)
+            {
+                RebuildWorkspace();
+                Repaint();
+            }
+        }
+
+        private DimensionTilesetAsset ResolveSelectedTileset(DimensionTilesetAsset[] tilesets)
+        {
+            if (selectedTilesetIndex < 0 || selectedTilesetIndex >= tilesets.Length ||
+                tilesets[selectedTilesetIndex] == null)
+            {
+                for (int i = 0; i < tilesets.Length; i++)
+                {
+                    if (tilesets[i] != null)
+                    {
+                        selectedTilesetIndex = i;
+                        return tilesets[i];
+                    }
+                }
+
+                return null;
+            }
+
+            return tilesets[selectedTilesetIndex];
+        }
+
+        private static int CountNonNull(DimensionTilesetAsset[] tilesets)
+        {
+            if (tilesets == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            for (int i = 0; i < tilesets.Length; i++)
+            {
+                if (tilesets[i] != null)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private void DrawResourcesEditor()
         {
             DrawSectionIntro(
@@ -2969,12 +3304,37 @@ namespace ExpandNullforge.EditorTools
                     continue;
                 }
 
+                // Hidden items are framework infrastructure the modder should never edit — e.g. a
+                // tileset block's auto-created ground counterpart. They still generate; they just
+                // don't clutter the item list.
+                if (item.Hidden)
+                {
+                    continue;
+                }
+
                 DrawSerializedAsset(
                     item,
                     BuildAssetEditorTitle("Item", item.DisplayName, item.ItemId, i),
                     BuildItemFields(item));
 
                 DrawItemArchetypeSummary(item);
+
+                // Symmetry: an item leaves with its whole footprint (.asset + generated prefab).
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Delete item…", GUILayout.Width(100f)) &&
+                    EditorUtility.DisplayDialog(
+                        "Delete item",
+                        "Delete \"" + item.DisplayName + "\" and its generated prefab?",
+                        "Delete",
+                        "Cancel"))
+                {
+                    RunAssetAction(DimensionFrameworkAuthoringAssetUtility.DeleteItem(selectedTemplate, item));
+                    GUIUtility.ExitGUI();
+                }
+
+                EditorGUILayout.EndHorizontal();
+                GUILayout.Space(4f);
             }
         }
 
@@ -3097,6 +3457,10 @@ namespace ExpandNullforge.EditorTools
             DimensionFrameworkAuthoringAssetActionResult portalItemResult =
                 DimensionFrameworkAuthoringAssetUtility.EnsurePortalItems(selectedTemplate);
             DimensionFrameworkAuthoringAssetUtility.ApplyDefaultPortalIcons(selectedTemplate);
+
+            // Same guarantee for tileset blocks: every enabled tileset's toggled-on block kinds get
+            // a real item asset (id locked to the tileset's derived block id) before generation.
+            DimensionFrameworkAuthoringAssetUtility.EnsureTilesetBlockItems(selectedTemplate);
             int portalItemsCreated =
                 portalItemResult != null && portalItemResult.CreatedObject != null ? 1 : 0;
 
@@ -3104,7 +3468,7 @@ namespace ExpandNullforge.EditorTools
             DimensionItemAsset[] itemsToGenerate = selectedTemplate.GlobalItems;
 
             DimensionItemGenerationReport report = DimensionItemGenerator.Generate(
-                itemsToGenerate, outputFolder, selectedTemplate.GlobalRecipes);
+                itemsToGenerate, outputFolder, selectedTemplate.GlobalRecipes, selectedTemplate.Tilesets);
 
             for (int i = 0; i < report.Errors.Count; i++)
             {
@@ -4938,46 +5302,6 @@ namespace ExpandNullforge.EditorTools
             return true;
         }
 
-        private static string SectionButtonText(DimensionTemplateCustomizerSectionItem section)
-        {
-            string prefix = section.State == DimensionAuthoringReadinessState.Ready
-                ? "✓ "
-                : section.State == DimensionAuthoringReadinessState.Blocked
-                    ? "! "
-                    : section.State == DimensionAuthoringReadinessState.Partial
-                        ? "~ "
-                        : "- ";
-            bool showContentCount =
-                section.ContentCount > 0 &&
-                (section.Kind == DimensionTemplateCustomizerSectionKind.Biomes ||
-                    section.Kind == DimensionTemplateCustomizerSectionKind.Scenes ||
-                    section.Kind == DimensionTemplateCustomizerSectionKind.Resources ||
-                    section.Kind == DimensionTemplateCustomizerSectionKind.Spawns);
-
-            return showContentCount
-                ? section.DisplayName + " (" + section.ContentCount + ")"
-                : section.DisplayName;
-        }
-
-        private static Color StateColor(DimensionAuthoringReadinessState state)
-        {
-            if (state == DimensionAuthoringReadinessState.Ready)
-            {
-                return new Color(0.75f, 1f, 0.75f, 1f);
-            }
-
-            if (state == DimensionAuthoringReadinessState.Partial)
-            {
-                return new Color(1f, 0.92f, 0.62f, 1f);
-            }
-
-            if (state == DimensionAuthoringReadinessState.Blocked)
-            {
-                return new Color(1f, 0.65f, 0.65f, 1f);
-            }
-
-            return new Color(0.75f, 0.75f, 0.75f, 1f);
-        }
 
         private static Color CommandStateColor(DimensionTemplateCustomizerCommandState state)
         {

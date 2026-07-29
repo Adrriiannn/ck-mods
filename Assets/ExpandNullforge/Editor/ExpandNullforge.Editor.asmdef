@@ -19,6 +19,7 @@
         "Pug.Base.dll",
         "Pug.ECS.Authoring.dll",
         "Pug.Other.dll",
+        "PugMap.Common.dll",
         "PugSprite.dll",
         "Pug.UnityExtensions.dll",
         "PugMod.SDK.Runtime.dll",

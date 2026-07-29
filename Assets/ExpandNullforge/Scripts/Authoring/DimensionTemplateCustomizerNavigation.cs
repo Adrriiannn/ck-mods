@@ -16,7 +16,8 @@ namespace ExpandNullforge.Authoring
         Spawns = 8,
         Export = 9,
         Diagnostics = 10,
-        Portals = 11
+        Portals = 11,
+        Tilesets = 12
     }
 
     public readonly struct DimensionTemplateCustomizerSectionItem
@@ -139,6 +140,7 @@ namespace ExpandNullforge.Authoring
                 CountContent(preview, DimensionAuthoringContentSummaryKind.Dimension),
                 workspace);
             AddPortalSection(sections, workspace);
+            AddTilesetsSection(sections, workspace);
             AddReadinessSection(
                 sections,
                 DimensionTemplateCustomizerSectionKind.Layout,
@@ -307,6 +309,45 @@ namespace ExpandNullforge.Authoring
                 0,
                 0,
                 19,
+                false));
+        }
+
+        private static void AddTilesetsSection(
+            List<DimensionTemplateCustomizerSectionItem> sections,
+            DimensionTemplateAuthoringWorkspace workspace)
+        {
+            DimensionTemplateAsset dimension =
+                workspace == null || workspace.Graph == null
+                    ? null
+                    : workspace.Graph.Dimension;
+            DimensionTilesetAsset[] tilesets =
+                dimension == null ? new DimensionTilesetAsset[0] : dimension.Tilesets;
+            int tilesetCount = 0;
+            for (int i = 0; i < tilesets.Length; i++)
+            {
+                if (tilesets[i] != null)
+                {
+                    tilesetCount++;
+                }
+            }
+
+            string message = tilesetCount > 0
+                ? tilesetCount + (tilesetCount == 1 ? " custom tileset." : " custom tilesets.")
+                : "Create a tileset from a dirt-layout sheet to get placeable custom blocks.";
+
+            sections.Add(new DimensionTemplateCustomizerSectionItem(
+                DimensionTemplateCustomizerSectionKind.Tilesets,
+                DimensionAuthoringReadinessState.Ready,
+                "tilesets",
+                "Tileset Studio",
+                message,
+                "configure-tilesets",
+                tilesetCount,
+                0,
+                0,
+                0,
+                0,
+                20,
                 false));
         }
 

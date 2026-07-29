@@ -136,6 +136,11 @@ namespace ExpandNullforge.Api
                 DimensionCapabilityMaturity.ExperimentalUnstable,
                 "Rich preview, profiles, layers, packages; profile-owned baking and a parity validator now exist but need in-game golden-capture proof."),
             new DimensionCapability(
+                "custom-tilesets",
+                "Custom tilesets",
+                DimensionCapabilityMaturity.ExperimentalUnstable,
+                "Hash-identity registry plus rendering/placement/map-color patches and block generation exist; not yet cleared in a built game."),
+            new DimensionCapability(
                 "manifest-ownership",
                 "Content manifest and ownership",
                 DimensionCapabilityMaturity.ImplementedNotFullyProven,
