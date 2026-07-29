@@ -1,7 +1,9 @@
 Key	Type	Desc	English
-Items/Nullforge_NullforgeNewDimension_Portal	Text		Nullforge Portal
-Items/Nullforge_NullforgeNewDimension_PortalDesc	Text		Portal to New Dimension.
-Items/Nullforge_NullforgeNewDimensionPortal	Text		Nullforge Portal
-Items/Nullforge_NullforgeNewDimensionPortalDesc	Text		Portal to New Dimension.
-Items/Nullforge_NewDimension.portal.item.object	Text		Vaelor's Lost Crystal
-Items/Nullforge_NewDimension.portal.item.objectDesc	Text		Its glow has faded, but traces of royal magic remain.
+Items/Nullforge_NullforgeWhiskey_Portal	Text		Nullforge Portal
+Items/Nullforge_NullforgeWhiskey_PortalDesc	Text		Portal to Whiskey.
+Items/Nullforge_NullforgeWhiskeyPortal	Text		Nullforge Portal
+Items/Nullforge_NullforgeWhiskeyPortalDesc	Text		Portal to Whiskey.
+Items/Nullforge_Nullglass.ground.block	Text		Nullglass Ground
+Items/Nullforge_Nullglass.ground.blockDesc	Text		
+Items/Nullforge_Nullglass.wall.block	Text		Nullglass Block
+Items/Nullforge_Nullglass.wall.blockDesc	Text		Ancient technology said to be dormant for a thousand years.

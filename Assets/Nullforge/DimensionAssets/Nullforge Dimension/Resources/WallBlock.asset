@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 773a5804ac98251cfdc04b0a01966eb7, type: 3}
+  m_Name: WallBlock
+  m_EditorClassIdentifier: 
+  itemId: Nullforge:Nullglass.wall.block
+  displayName: Nullglass Block
+  archetype: 2
+  kind: 4
+  description: Ancient technology said to be dormant for a thousand years.
+  iconSprite: {fileID: 21300000, guid: 2719bfe910e81f044b09945d56ff686b, type: 3}
+  smallIconSprite: {fileID: 21300000, guid: abb0bc3b28332554ba6bac120df08bad, type: 3}
+  iconId: 
+  objectId: Nullforge:Nullglass.wall.block
+  maxStack: 999
+  rarityId: 
+  enabled: 1
+  hidden: 0
+  notes: 
+  lootTableId: 
+  healthPoints: 0
+  durabilityPoints: 0
+  damageAmount: 0
+  cooldownSeconds: 0

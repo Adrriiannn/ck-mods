@@ -1,0 +1,92 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e3a5a120696bd14cbb8e7e1bb646f87, type: 3}
+  m_Name: RuntimeManifest
+  m_EditorClassIdentifier: 
+  manifestId: Nullforge:Whiskey.runtime-manifest
+  displayName: Whiskey Runtime Manifest
+  sourceTemplate: {fileID: 11400000, guid: 43a3f1231be856e45b9976ec381723f7, type: 2}
+  updateExisting: 1
+  requireExistingOwnershipRecords: 0
+  generatedFromDimensionId: Nullforge:Whiskey
+  generatedFromContentPackId: Nullforge:WhiskeyPack
+  lastBuildCode: manifest-export-ready
+  lastBuildMessage: Dimension template manifest is ready for validation, application,
+    and runtime generation.
+  serializedManifestSchemaVersion: 1
+  serializedManifestJson: '{"contentPacks":[{"id":"Nullforge:WhiskeyPack","displayName":"Whiskey
+    Pack","version":"1.0.0","author":"","description":"A tiny first-biome room for
+    validating dimension travel, local coordinates, and export plumbing before you
+    design the full biome layout.","minimumApiVersion":1,"dependencyIds":[],"enabled":true}],"dimensions":[{"id":"Nullforge:Whiskey","displayName":"Whiskey","absoluteOrigin":{"x":0,"y":7000},"localBounds":{"minX":-72,"minY":-72,"maxX":72,"maxY":72},"generationVersion":1,"spaceKind":1,"capabilities":352255,"lifecycleState":1}],"zones":[{"id":"Nullforge:Iceborne","displayName":"Single
+    Biome","dimensionId":"Nullforge:Whiskey","localBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"kind":"Nullforge:Iceborne","priority":0,"enabled":true}],"mapLayers":[],"mapMarkers":[],"anchors":[],"portals":[{"id":"Nullforge:Whiskey.portal.entry","displayName":"Whiskey
+    Portal","fromDimensionId":"corekeeper.overworld","fromLocalPosition":{"x":0.0,"y":0.0},"toDimensionId":"Nullforge:Whiskey","toLocalPosition":{"x":0.0,"y":0.0},"state":2},{"id":"Nullforge:Whiskey.portal.return","displayName":"Whiskey
+    Return Portal","fromDimensionId":"Nullforge:Whiskey","fromLocalPosition":{"x":0.0,"y":0.0},"toDimensionId":"corekeeper.overworld","toLocalPosition":{"x":0.0,"y":0.0},"state":2}],"portalPresentations":[{"id":"Nullforge:Whiskey.portal.entry.presentation","portalId":"Nullforge:Whiskey.portal.entry","displayName":"Whiskey
+    Portal","promptText":"Enter Whiskey","lockedPromptText":"The portal is still
+    activating.","iconId":"","visualEffectId":"","audioCueId":"","cooldownSeconds":2.0,"priority":0,"enabled":true,"interactable":true,"requireGeneratedAreaOnUse":true,"allowFallbackPositionOnUse":true},{"id":"Nullforge:Whiskey.portal.return.presentation","portalId":"Nullforge:Whiskey.portal.return","displayName":"Whiskey
+    Return Portal","promptText":"Return to the Core","lockedPromptText":"","iconId":"","visualEffectId":"","audioCueId":"","cooldownSeconds":0.0,"priority":0,"enabled":true,"interactable":true,"requireGeneratedAreaOnUse":false,"allowFallbackPositionOnUse":true}],"travelRequirements":[],"starters":[{"id":"Nullforge:Whiskey.starter","dimensionId":"Nullforge:Whiskey","displayName":"Whiskey
+    Starter","description":"Starter generation and travel loop for Whiskey Starter.","contentPackId":"Nullforge:WhiskeyPack","enabled":true,"readiness":{"id":"Nullforge:Whiskey.starter.readiness","displayName":"Whiskey
+    Starter Readiness","requirements":[]},"travelLoop":{"sourceDimensionId":"corekeeper.overworld","targetDimensionId":"Nullforge:Whiskey","entryPortalId":"Nullforge:Whiskey.portal.entry","returnPortalId":"Nullforge:Whiskey.portal.return","sourceAnchorId":"","targetAnchorId":"","sourceMarkerId":"","targetMarkerId":"","targetLandingBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"requireReturnPortal":true,"requireSourceAnchor":false,"requireTargetAnchor":false,"requireMarkers":false,"requireTargetAreaReady":true,"requireMapLayers":false},"generation":{"starterId":"Nullforge:Whiskey.starter","requesterId":"dimension-starter:Nullforge:Whiskey.starter","dimensionId":"Nullforge:Whiskey","localBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"priority":100,"createIfMissing":true,"reason":"Starter
+    generation area for Whiskey Starter."}}],"sceneTemplates":[],"scenes":[],"spawnRules":[],"encounters":[],"generationPasses":[{"id":"Nullforge:Whiskey.single-biome.terrain-pass","displayName":"Terrain","dimensionId":"Nullforge:Whiskey","zoneId":"Nullforge:Iceborne","hasLocalBounds":true,"localBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"phase":0,"priority":0,"providerId":"expandnullforge:safe-platform","enabled":true}],"resourceNodes":[],"progressFlags":[],"worldEvents":[],"ownershipBindings":[{"contentPackId":"Nullforge:WhiskeyPack","recordKind":1,"recordId":"Nullforge:Whiskey","displayName":"Whiskey","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":14,"recordId":"Nullforge:Iceborne.environment","displayName":"Iceborne
+    Environment","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":9,"recordId":"Nullforge:Iceborne","displayName":"Iceborne","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":12,"recordId":"Nullforge:Iceborne","displayName":"Single
+    Biome","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":27,"recordId":"Nullforge:Nullglass.ground.block","displayName":"Nullglass
+    Ground","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":27,"recordId":"Nullforge:Nullglass.wall.block","displayName":"Nullglass
+    Block","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":23,"recordId":"Nullforge:Whiskey.single-biome.terrain-pass","displayName":"Terrain","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":10,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.terrain","displayName":"Terrain
+    Choices","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":11,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.terrain.floor","displayName":"Nullforge:GroundIceborneBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":11,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.terrain.wall","displayName":"Nullforge:WallIceborneBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":10,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.floor-objects","displayName":"Floor
+    Objects","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":10,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.wall-objects","displayName":"Wall
+    Objects","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":11,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.floor-objects.entry-0","displayName":"Nullforge:GroundIceborneBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":11,"recordId":"Nullforge:Whiskey.Nullforge:Iceborne.wall-objects.entry-0","displayName":"Nullforge:WallIceborneBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":25,"recordId":"Nullforge:Iceborne.palette","displayName":"Iceborne
+    Palette","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":25,"recordId":"Nullforge:Iceborne.palette.floor","displayName":"Floor","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":25,"recordId":"Nullforge:Iceborne.palette.wall","displayName":"Wall","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":25,"recordId":"Nullforge:Nullglass.ground.block.object","displayName":"Nullglass
+    Ground Object","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":25,"recordId":"Nullforge:Nullglass.wall.block.object","displayName":"Nullglass
+    Block Object","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":2,"recordId":"Nullforge:Whiskey.portal.entry","displayName":"Whiskey
+    Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":3,"recordId":"Nullforge:Whiskey.portal.entry.presentation","displayName":"Whiskey
+    Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":2,"recordId":"Nullforge:Whiskey.portal.return","displayName":"Whiskey
+    Return Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":3,"recordId":"Nullforge:Whiskey.portal.return.presentation","displayName":"Whiskey
+    Return Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"Nullforge:WhiskeyPack","recordKind":26,"recordId":"Nullforge:Whiskey.starter","displayName":"Whiskey
+    Starter","notes":"Generated from a dimension authoring template."}],"assetReferences":[{"id":"Nullforge:Iceborne.palette","contentPackId":"Nullforge:WhiskeyPack","displayName":"Iceborne
+    Palette","kind":13,"resourceKey":"Nullforge:Iceborne.palette","dimensionId":"Nullforge:Whiskey","zoneId":"","variantId":"palette","priority":0,"enabled":true,"notes":"Starter
+    palette generated by the Dimension Framework authoring helpers."},{"id":"Nullforge:Iceborne.palette.floor","contentPackId":"Nullforge:WhiskeyPack","displayName":"Floor","kind":7,"resourceKey":"Nullforge:GroundIceborneBlock","dimensionId":"Nullforge:Whiskey","zoneId":"","variantId":"floor","priority":0,"enabled":true,"notes":""},{"id":"Nullforge:Iceborne.palette.wall","contentPackId":"Nullforge:WhiskeyPack","displayName":"Wall","kind":7,"resourceKey":"Nullforge:WallIceborneBlock","dimensionId":"Nullforge:Whiskey","zoneId":"","variantId":"wall","priority":0,"enabled":true,"notes":""},{"id":"Nullforge:Nullglass.ground.block.object","contentPackId":"Nullforge:WhiskeyPack","displayName":"Nullglass
+    Ground Object","kind":8,"resourceKey":"Nullforge:Nullglass.ground.block","dimensionId":"Nullforge:Whiskey","zoneId":"","variantId":"","priority":10,"enabled":true,"notes":""},{"id":"Nullforge:Nullglass.wall.block.object","contentPackId":"Nullforge:WhiskeyPack","displayName":"Nullglass
+    Block Object","kind":8,"resourceKey":"Nullforge:Nullglass.wall.block","dimensionId":"Nullforge:Whiskey","zoneId":"","variantId":"","priority":10,"enabled":true,"notes":""}],"environmentProfiles":[{"id":"Nullforge:Iceborne.environment","displayName":"Iceborne
+    Environment","dimensionId":"Nullforge:Whiskey","zoneId":"Nullforge:Iceborne","musicCueId":"","ambientCueId":"","lightingProfileId":"","fogProfileId":"","hasMapColor":true,"mapColorRgba":946898431,"priority":0,"enabled":true}],"biomes":[{"id":"Nullforge:Iceborne","displayName":"Iceborne","dimensionId":"Nullforge:Whiskey","environmentProfileId":"Nullforge:Iceborne.environment","paletteAssetId":"Nullforge:Iceborne.palette","spawnTableId":"","resourceTableId":"","worldEventTableId":"","mapColorRgba":946898431,"priority":0,"enabled":true,"notes":"Semantic
+    terrain preset applied. Runtime generation will expand these IDs into scoped
+    generation tables."}],"generationTables":[{"id":"Nullforge:Whiskey.Nullforge:Iceborne.terrain","displayName":"Terrain
+    Choices","dimensionId":"Nullforge:Whiskey","biomeId":"Nullforge:Iceborne","kind":1,"priority":0,"enabled":true,"notes":"Starter
+    terrain table generated by the Dimension Framework authoring helpers."},{"id":"Nullforge:Whiskey.Nullforge:Iceborne.floor-objects","displayName":"Floor
+    Objects","dimensionId":"Nullforge:Whiskey","biomeId":"Nullforge:Iceborne","kind":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."},{"id":"Nullforge:Whiskey.Nullforge:Iceborne.wall-objects","displayName":"Wall
+    Objects","dimensionId":"Nullforge:Whiskey","biomeId":"Nullforge:Iceborne","kind":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."}],"generationTableEntries":[{"id":"Nullforge:Whiskey.Nullforge:Iceborne.terrain.floor","tableId":"Nullforge:Whiskey.Nullforge:Iceborne.terrain","subjectId":"Nullforge:GroundIceborneBlock","subjectKind":"tile","weight":100,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":""},{"id":"Nullforge:Whiskey.Nullforge:Iceborne.terrain.wall","tableId":"Nullforge:Whiskey.Nullforge:Iceborne.terrain","subjectId":"Nullforge:WallIceborneBlock","subjectKind":"tile","weight":100,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":""},{"id":"Nullforge:Whiskey.Nullforge:Iceborne.floor-objects.entry-0","tableId":"Nullforge:Whiskey.Nullforge:Iceborne.floor-objects","subjectId":"Nullforge:GroundIceborneBlock","subjectKind":"floor-object","weight":1,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."},{"id":"Nullforge:Whiskey.Nullforge:Iceborne.wall-objects.entry-0","tableId":"Nullforge:Whiskey.Nullforge:Iceborne.wall-objects","subjectId":"Nullforge:WallIceborneBlock","subjectKind":"wall-object","weight":1,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."}]}'
+  dimensionCount: 1
+  biomeCount: 1
+  zoneCount: 1
+  portalCount: 2
+  sceneCount: 0
+  resourceNodeCount: 0
+  spawnRuleCount: 0
+  generationPassCount: 1
+  generationTableCount: 3
+  ownershipBindingCount: 24
+  assetReferenceCount: 5
+  generatedItemIds:
+  - Nullforge:Nullglass.ground.block
+  - Nullforge:Nullglass.wall.block
+  tileMapJson: 

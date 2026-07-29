@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 804cf53dc823b8448aebf8ba05135bb8, type: 3}
+  m_Name: MPTest
+  m_EditorClassIdentifier: 
+  dimensionId: MPTest:MPTest
+  displayName: MPTest
+  description: A tiny first-biome room for validating dimension travel, local coordinates,
+    and export plumbing before you design the full biome layout.
+  contentPackId: MPTest:MPTestPack
+  contentPackDisplayName: MPTest Pack
+  contentPackVersion: 1.0.0
+  contentPackAuthor: 
+  minimumApiVersion: 1
+  dependencyContentPackIds: []
+  absoluteOrigin: {x: 0, y: 7000}
+  reservedLocalMin: {x: -136, y: -136}
+  reservedLocalMaxExclusive: {x: 136, y: 136}
+  generationVersion: 1
+  spaceKind: 1
+  capabilities: 352255
+  layoutTemplate: {fileID: 11400000, guid: d7feb9891fc4a3a4986fb8df6e8b3451, type: 2}
+  environmentProfiles: []
+  biomes:
+  - {fileID: 11400000, guid: d6719c4e502426b4c914357f350ce4ed, type: 2}
+  globalScenes: []
+  globalResourceNodes: []
+  globalItems:
+  - {fileID: 11400000, guid: 5cd6db0e88b3cc04391fd243051c5f6a, type: 2}
+  - {fileID: 11400000, guid: 43640d97596c7c24a853a7835601d5ef, type: 2}
+  tilesets:
+  - {fileID: 11400000, guid: c75c04bfebd1d9941b288ea71fd2d0e7, type: 2}
+  globalRecipes: []
+  globalWorkbenches: []
+  globalLootTables: []
+  globalAnimals: []
+  globalCritters: []
+  globalMobs: []
+  globalBosses: []
+  globalSpawnRules: []
+  globalGenerationPasses: []
+  globalGenerationTables: []
+  portalAccessRules:
+  - {fileID: 11400000, guid: 875a92e420a4ecb49a4817d03638bd44, type: 2}
+  - {fileID: 11400000, guid: ae0a3ebe4ea7da24fb0d01568011820b, type: 2}
+  - {fileID: 11400000, guid: 0cee90834497ad5428d35e81b954e38a, type: 2}
+  portalActivationChargeSeconds: 30
+  portalVisualProfile: {fileID: 11400000, guid: ff1d654db5452bb4b93add103c50714a,
+    type: 2}
+  itemPortalVisualProfile: {fileID: 0}
+  placedPortalActivationSound: 
+  instantPortalSoundMode: 0
+  instantPortalActivationSound: AF_portal_appear
+  instantPortalDeactivationSound: AF_portal_collapse
+  instantPortalLoopSound: 

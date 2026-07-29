@@ -1,0 +1,92 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e3a5a120696bd14cbb8e7e1bb646f87, type: 3}
+  m_Name: RuntimeManifest
+  m_EditorClassIdentifier: 
+  manifestId: MPTest:MPTest.runtime-manifest
+  displayName: MPTest Runtime Manifest
+  sourceTemplate: {fileID: 11400000, guid: 341fd40172e8a454f81562fdaba73103, type: 2}
+  updateExisting: 1
+  requireExistingOwnershipRecords: 0
+  generatedFromDimensionId: MPTest:MPTest
+  generatedFromContentPackId: MPTest:MPTestPack
+  lastBuildCode: manifest-export-ready
+  lastBuildMessage: Dimension template manifest is ready for validation, application,
+    and runtime generation.
+  serializedManifestSchemaVersion: 1
+  serializedManifestJson: '{"contentPacks":[{"id":"MPTest:MPTestPack","displayName":"MPTest
+    Pack","version":"1.0.0","author":"","description":"A tiny first-biome room for
+    validating dimension travel, local coordinates, and export plumbing before you
+    design the full biome layout.","minimumApiVersion":1,"dependencyIds":[],"enabled":true}],"dimensions":[{"id":"MPTest:MPTest","displayName":"MPTest","absoluteOrigin":{"x":0,"y":7000},"localBounds":{"minX":-72,"minY":-72,"maxX":72,"maxY":72},"generationVersion":1,"spaceKind":1,"capabilities":352255,"lifecycleState":1}],"zones":[{"id":"MPTest:StarterBiome","displayName":"Single
+    Biome","dimensionId":"MPTest:MPTest","localBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"kind":"MPTest:StarterBiome","priority":0,"enabled":true}],"mapLayers":[],"mapMarkers":[],"anchors":[],"portals":[{"id":"MPTest:MPTest.portal.entry","displayName":"MPTest
+    Portal","fromDimensionId":"corekeeper.overworld","fromLocalPosition":{"x":0.0,"y":0.0},"toDimensionId":"MPTest:MPTest","toLocalPosition":{"x":0.0,"y":0.0},"state":2},{"id":"MPTest:MPTest.portal.return","displayName":"MPTest
+    Return Portal","fromDimensionId":"MPTest:MPTest","fromLocalPosition":{"x":0.0,"y":0.0},"toDimensionId":"corekeeper.overworld","toLocalPosition":{"x":0.0,"y":0.0},"state":2}],"portalPresentations":[{"id":"MPTest:MPTest.portal.entry.presentation","portalId":"MPTest:MPTest.portal.entry","displayName":"MPTest
+    Portal","promptText":"Enter MPTest","lockedPromptText":"The portal is still activating.","iconId":"","visualEffectId":"","audioCueId":"","cooldownSeconds":2.0,"priority":0,"enabled":true,"interactable":true,"requireGeneratedAreaOnUse":true,"allowFallbackPositionOnUse":true},{"id":"MPTest:MPTest.portal.return.presentation","portalId":"MPTest:MPTest.portal.return","displayName":"MPTest
+    Return Portal","promptText":"Return to the Core","lockedPromptText":"","iconId":"","visualEffectId":"","audioCueId":"","cooldownSeconds":0.0,"priority":0,"enabled":true,"interactable":true,"requireGeneratedAreaOnUse":false,"allowFallbackPositionOnUse":true}],"travelRequirements":[],"starters":[{"id":"MPTest:MPTest.starter","dimensionId":"MPTest:MPTest","displayName":"MPTest
+    Starter","description":"Starter generation and travel loop for MPTest Starter.","contentPackId":"MPTest:MPTestPack","enabled":true,"readiness":{"id":"MPTest:MPTest.starter.readiness","displayName":"MPTest
+    Starter Readiness","requirements":[]},"travelLoop":{"sourceDimensionId":"corekeeper.overworld","targetDimensionId":"MPTest:MPTest","entryPortalId":"MPTest:MPTest.portal.entry","returnPortalId":"MPTest:MPTest.portal.return","sourceAnchorId":"","targetAnchorId":"","sourceMarkerId":"","targetMarkerId":"","targetLandingBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"requireReturnPortal":true,"requireSourceAnchor":false,"requireTargetAnchor":false,"requireMarkers":false,"requireTargetAreaReady":true,"requireMapLayers":false},"generation":{"starterId":"MPTest:MPTest.starter","requesterId":"dimension-starter:MPTest:MPTest.starter","dimensionId":"MPTest:MPTest","localBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"priority":100,"createIfMissing":true,"reason":"Starter
+    generation area for MPTest Starter."}}],"sceneTemplates":[],"scenes":[],"spawnRules":[],"encounters":[],"generationPasses":[{"id":"MPTest:MPTest.single-biome.terrain-pass","displayName":"Terrain","dimensionId":"MPTest:MPTest","zoneId":"MPTest:StarterBiome","hasLocalBounds":true,"localBounds":{"minX":-8,"minY":-8,"maxX":8,"maxY":8},"phase":0,"priority":0,"providerId":"expandnullforge:safe-platform","enabled":true}],"resourceNodes":[],"progressFlags":[],"worldEvents":[],"ownershipBindings":[{"contentPackId":"MPTest:MPTestPack","recordKind":1,"recordId":"MPTest:MPTest","displayName":"MPTest","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":14,"recordId":"MPTest:StarterBiome.environment","displayName":"Starter
+    Biome Environment","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":9,"recordId":"MPTest:StarterBiome","displayName":"Starter
+    Biome","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":12,"recordId":"MPTest:StarterBiome","displayName":"Single
+    Biome","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":27,"recordId":"MPTest:MPTest.ground.block","displayName":"MPTest
+    Ground","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":27,"recordId":"MPTest:MPTest.wall.block","displayName":"MPTest
+    Block","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":23,"recordId":"MPTest:MPTest.single-biome.terrain-pass","displayName":"Terrain","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":10,"recordId":"MPTest:MPTest.MPTest:StarterBiome.terrain","displayName":"Terrain
+    Choices","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":11,"recordId":"MPTest:MPTest.MPTest:StarterBiome.terrain.floor","displayName":"MPTest:GroundStarterBiomeBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":11,"recordId":"MPTest:MPTest.MPTest:StarterBiome.terrain.wall","displayName":"MPTest:WallStarterBiomeBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":10,"recordId":"MPTest:MPTest.MPTest:StarterBiome.floor-objects","displayName":"Floor
+    Objects","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":10,"recordId":"MPTest:MPTest.MPTest:StarterBiome.wall-objects","displayName":"Wall
+    Objects","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":11,"recordId":"MPTest:MPTest.MPTest:StarterBiome.floor-objects.entry-0","displayName":"MPTest:GroundStarterBiomeBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":11,"recordId":"MPTest:MPTest.MPTest:StarterBiome.wall-objects.entry-0","displayName":"MPTest:WallStarterBiomeBlock","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":25,"recordId":"MPTest:StarterBiome.palette","displayName":"Starter
+    Biome Palette","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":25,"recordId":"MPTest:StarterBiome.palette.floor","displayName":"Floor","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":25,"recordId":"MPTest:StarterBiome.palette.wall","displayName":"Wall","notes":"Generated
+    from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":25,"recordId":"MPTest:MPTest.ground.block.object","displayName":"MPTest
+    Ground Object","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":25,"recordId":"MPTest:MPTest.wall.block.object","displayName":"MPTest
+    Block Object","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":2,"recordId":"MPTest:MPTest.portal.entry","displayName":"MPTest
+    Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":3,"recordId":"MPTest:MPTest.portal.entry.presentation","displayName":"MPTest
+    Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":2,"recordId":"MPTest:MPTest.portal.return","displayName":"MPTest
+    Return Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":3,"recordId":"MPTest:MPTest.portal.return.presentation","displayName":"MPTest
+    Return Portal","notes":"Generated from a dimension authoring template."},{"contentPackId":"MPTest:MPTestPack","recordKind":26,"recordId":"MPTest:MPTest.starter","displayName":"MPTest
+    Starter","notes":"Generated from a dimension authoring template."}],"assetReferences":[{"id":"MPTest:StarterBiome.palette","contentPackId":"MPTest:MPTestPack","displayName":"Starter
+    Biome Palette","kind":13,"resourceKey":"MPTest:StarterBiome.palette","dimensionId":"MPTest:MPTest","zoneId":"","variantId":"palette","priority":0,"enabled":true,"notes":"Starter
+    palette generated by the Dimension Framework authoring helpers."},{"id":"MPTest:StarterBiome.palette.floor","contentPackId":"MPTest:MPTestPack","displayName":"Floor","kind":7,"resourceKey":"MPTest:GroundStarterBiomeBlock","dimensionId":"MPTest:MPTest","zoneId":"","variantId":"floor","priority":0,"enabled":true,"notes":""},{"id":"MPTest:StarterBiome.palette.wall","contentPackId":"MPTest:MPTestPack","displayName":"Wall","kind":7,"resourceKey":"MPTest:WallStarterBiomeBlock","dimensionId":"MPTest:MPTest","zoneId":"","variantId":"wall","priority":0,"enabled":true,"notes":""},{"id":"MPTest:MPTest.ground.block.object","contentPackId":"MPTest:MPTestPack","displayName":"MPTest
+    Ground Object","kind":8,"resourceKey":"MPTest:MPTest.ground.block","dimensionId":"MPTest:MPTest","zoneId":"","variantId":"","priority":10,"enabled":true,"notes":""},{"id":"MPTest:MPTest.wall.block.object","contentPackId":"MPTest:MPTestPack","displayName":"MPTest
+    Block Object","kind":8,"resourceKey":"MPTest:MPTest.wall.block","dimensionId":"MPTest:MPTest","zoneId":"","variantId":"","priority":10,"enabled":true,"notes":""}],"environmentProfiles":[{"id":"MPTest:StarterBiome.environment","displayName":"Starter
+    Biome Environment","dimensionId":"MPTest:MPTest","zoneId":"MPTest:StarterBiome","musicCueId":"","ambientCueId":"","lightingProfileId":"","fogProfileId":"","hasMapColor":true,"mapColorRgba":946898431,"priority":0,"enabled":true}],"biomes":[{"id":"MPTest:StarterBiome","displayName":"Starter
+    Biome","dimensionId":"MPTest:MPTest","environmentProfileId":"MPTest:StarterBiome.environment","paletteAssetId":"MPTest:StarterBiome.palette","spawnTableId":"","resourceTableId":"","worldEventTableId":"","mapColorRgba":946898431,"priority":0,"enabled":true,"notes":"Semantic
+    terrain preset applied. Runtime generation will expand these IDs into scoped
+    generation tables."}],"generationTables":[{"id":"MPTest:MPTest.MPTest:StarterBiome.terrain","displayName":"Terrain
+    Choices","dimensionId":"MPTest:MPTest","biomeId":"MPTest:StarterBiome","kind":1,"priority":0,"enabled":true,"notes":"Starter
+    terrain table generated by the Dimension Framework authoring helpers."},{"id":"MPTest:MPTest.MPTest:StarterBiome.floor-objects","displayName":"Floor
+    Objects","dimensionId":"MPTest:MPTest","biomeId":"MPTest:StarterBiome","kind":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."},{"id":"MPTest:MPTest.MPTest:StarterBiome.wall-objects","displayName":"Wall
+    Objects","dimensionId":"MPTest:MPTest","biomeId":"MPTest:StarterBiome","kind":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."}],"generationTableEntries":[{"id":"MPTest:MPTest.MPTest:StarterBiome.terrain.floor","tableId":"MPTest:MPTest.MPTest:StarterBiome.terrain","subjectId":"MPTest:GroundStarterBiomeBlock","subjectKind":"tile","weight":100,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":""},{"id":"MPTest:MPTest.MPTest:StarterBiome.terrain.wall","tableId":"MPTest:MPTest.MPTest:StarterBiome.terrain","subjectId":"MPTest:WallStarterBiomeBlock","subjectKind":"tile","weight":100,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":""},{"id":"MPTest:MPTest.MPTest:StarterBiome.floor-objects.entry-0","tableId":"MPTest:MPTest.MPTest:StarterBiome.floor-objects","subjectId":"MPTest:GroundStarterBiomeBlock","subjectKind":"floor-object","weight":1,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."},{"id":"MPTest:MPTest.MPTest:StarterBiome.wall-objects.entry-0","tableId":"MPTest:MPTest.MPTest:StarterBiome.wall-objects","subjectId":"MPTest:WallStarterBiomeBlock","subjectKind":"wall-object","weight":1,"minCount":1,"maxCount":1,"priority":0,"enabled":true,"notes":"Generated
+    from biome semantic object ids."}]}'
+  dimensionCount: 1
+  biomeCount: 1
+  zoneCount: 1
+  portalCount: 2
+  sceneCount: 0
+  resourceNodeCount: 0
+  spawnRuleCount: 0
+  generationPassCount: 1
+  generationTableCount: 3
+  ownershipBindingCount: 24
+  assetReferenceCount: 5
+  generatedItemIds:
+  - MPTest:MPTest.ground.block
+  - MPTest:MPTest.wall.block
+  tileMapJson: 

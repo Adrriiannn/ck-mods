@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 229de5eec03caf14887f828ebef52735, type: 3}
+  m_Name: layout
+  m_EditorClassIdentifier: 
+  layoutId: layout
+  displayName: Dimension Layout
+  layoutKind: 0
+  regions:
+  - regionId: single-biome
+    biomeId: MPTest:StarterBiome
+    zoneId: MPTest:StarterBiome
+    displayName: Single Biome
+    localMin: {x: -8, y: -8}
+    localMaxExclusive: {x: 8, y: 8}
+    priority: 0
+    enabled: 1
+  gridLocalMin: {x: -64, y: -64}
+  gridCellSize: {x: 64, y: 64}
+  gridCells: []
+  radialBandSizeTiles: 64
+  radialRings: []
+  biomeMask: {fileID: 0}
+  maskBiomeMappings: []
+  maskLocalMin: {x: -64, y: -64}
+  tilesPerMaskPixel: {x: 16, y: 16}
+  maskAlphaThreshold: 8
+  notes: Generated from the single-biome square preset.

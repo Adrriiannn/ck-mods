@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6bde605d10993f4aad1118f008582e8, type: 3}
+  m_Name: Nullforge-Iceborne
+  m_EditorClassIdentifier: 
+  biomeId: Nullforge:Iceborne
+  displayName: Iceborne
+  environmentProfileId: Nullforge:Iceborne.environment
+  environmentProfileTemplate: {fileID: 11400000, guid: f330172d34d222a4fa738c1316bd2563,
+    type: 2}
+  paletteAssetId: Nullforge:Iceborne.palette
+  paletteTemplate: {fileID: 11400000, guid: 41dc78bda1b38b845b9fcab47e733a6d, type: 2}
+  spawnTableId: 
+  resourceTableId: 
+  worldEventTableId: 
+  contentPresets: []
+  mapColor: {r: 0.22, g: 0.44, b: 0.52, a: 1}
+  priority: 0
+  enabled: 1
+  hasFallbackLocalBounds: 1
+  fallbackLocalMin: {x: -8, y: -8}
+  fallbackLocalMaxExclusive: {x: 8, y: 8}
+  floorObjectIds:
+  - Nullforge:GroundIceborneBlock
+  wallObjectIds:
+  - Nullforge:WallIceborneBlock
+  oreObjectIds: []
+  waterObjectIds: []
+  scenePool: []
+  resourceNodes: []
+  spawnRules: []
+  generationProfile: {fileID: 11400000, guid: 9414bd5bb38e4104792c9378f58d0195, type: 2}
+  generationPasses: []
+  generationTables: []
+  notes: Semantic terrain preset applied. Runtime generation will expand these IDs
+    into scoped generation tables.

@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 804cf53dc823b8448aebf8ba05135bb8, type: 3}
+  m_Name: Nullforge
+  m_EditorClassIdentifier: 
+  dimensionId: Nullforge:Whiskey
+  displayName: Whiskey
+  description: A tiny first-biome room for validating dimension travel, local coordinates,
+    and export plumbing before you design the full biome layout.
+  contentPackId: Nullforge:WhiskeyPack
+  contentPackDisplayName: Whiskey Pack
+  contentPackVersion: 1.0.0
+  contentPackAuthor: 
+  minimumApiVersion: 1
+  dependencyContentPackIds: []
+  absoluteOrigin: {x: 0, y: 7000}
+  reservedLocalMin: {x: -136, y: -136}
+  reservedLocalMaxExclusive: {x: 136, y: 136}
+  generationVersion: 1
+  spaceKind: 1
+  capabilities: 352255
+  layoutTemplate: {fileID: 11400000, guid: f603bd7c4df1c72449c5ce9a72d2993f, type: 2}
+  environmentProfiles: []
+  biomes:
+  - {fileID: 11400000, guid: e803350852efa6843bf6381bcfbc9255, type: 2}
+  globalScenes: []
+  globalResourceNodes: []
+  globalItems:
+  - {fileID: 11400000, guid: 2f71fdce7a883484cb540dff634c806a, type: 2}
+  - {fileID: 11400000, guid: 79a6ef6ea44fc0a42b37c3a79291e1c0, type: 2}
+  tilesets:
+  - {fileID: 11400000, guid: bb17c1ed9444209418056e0a48d52ecd, type: 2}
+  - {fileID: 11400000, guid: 4ef7c8d66eeade84aa941e60b4ad17c9, type: 2}
+  globalRecipes: []
+  globalWorkbenches: []
+  globalLootTables: []
+  globalAnimals: []
+  globalCritters: []
+  globalMobs: []
+  globalBosses: []
+  globalSpawnRules: []
+  globalGenerationPasses: []
+  globalGenerationTables: []
+  portalAccessRules:
+  - {fileID: 11400000, guid: 18f5da408c31af840a5f3d6724f90977, type: 2}
+  - {fileID: 11400000, guid: 7a6ad61c78fa52a4bb8528e5f2527b72, type: 2}
+  - {fileID: 11400000, guid: a8495bfb2d7ccdd418b22be996ab2daf, type: 2}
+  portalActivationChargeSeconds: 30
+  portalVisualProfile: {fileID: 11400000, guid: 603c03de4cf35db4f96193b503a543f4,
+    type: 2}
+  itemPortalVisualProfile: {fileID: 0}
+  placedPortalActivationSound: 
+  instantPortalSoundMode: 0
+  instantPortalActivationSound: AF_portal_appear
+  instantPortalDeactivationSound: AF_portal_collapse
+  instantPortalLoopSound: 

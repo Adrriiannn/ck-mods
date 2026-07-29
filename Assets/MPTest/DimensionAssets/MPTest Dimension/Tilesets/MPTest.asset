@@ -1,0 +1,68 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8bec0386b819e0d46af87b04ddbc1631, type: 3}
+  m_Name: MPTest
+  m_EditorClassIdentifier: 
+  blockName: MPTest
+  modPrefix: MPTest
+  tilesetTexture: {fileID: 2800000, guid: 2b176db762f677441b376c7ef8a8729c, type: 3}
+  isEmissive: 0
+  emissiveTexture: {fileID: 0}
+  enabled: 1
+  circuitFloor: 0
+  rigidSurface: 0
+  circuitFloorMaterial: {fileID: 2100000, guid: 5e587b65e5bf46f5885fa21c0dee7d05,
+    type: 2}
+  groundMapColor:
+    serializedVersion: 2
+    rgba: 4281587247
+  wallMapColor:
+    serializedVersion: 2
+    rgba: 4278222081
+  blockType: terrain
+  itemMode: 0
+  reskinTilesetIndex: -1
+  layers:
+  - key: surface
+    enabled: 1
+    texture: {fileID: 0}
+  - key: wall
+    enabled: 1
+    texture: {fileID: 0}
+  generatedGenLayers: 080000000300000010000000110000000a00000012000000180000000f00000015000000020000002f00000039000000
+  generatedGenTextures:
+  - {fileID: 2800000, guid: 134132295b5faa541ab6cf1d408598af, type: 3}
+  - {fileID: 2800000, guid: e0814bcc3b60e044aa8c7fc0cd781369, type: 3}
+  - {fileID: 2800000, guid: 11f52cb8f1b051d4dac40b7822350b41, type: 3}
+  - {fileID: 2800000, guid: 76107fd6ea779b146b4809434d78f8aa, type: 3}
+  - {fileID: 2800000, guid: f2a103ab87b218c4fa8366b0b819471c, type: 3}
+  - {fileID: 2800000, guid: 4cd78a55b8744f143bec34fbc59bee68, type: 3}
+  - {fileID: 2800000, guid: 11b6491d699c3b6448637ad0acc7dbc5, type: 3}
+  - {fileID: 2800000, guid: 7c6273ffaa26c3845ac62447e559ce5a, type: 3}
+  - {fileID: 2800000, guid: 592d652e6eebf8542af27462d4e560c9, type: 3}
+  - {fileID: 2800000, guid: 9597e6dfd32fe1a4ebdc660d3bffe0fe, type: 3}
+  - {fileID: 2800000, guid: 5062799f752ad4c4c94bd305e1311e80, type: 3}
+  - {fileID: 2800000, guid: 4a5f7cce39aaf7a4db32719b7dde1be8, type: 3}
+  generatedGenEmissiveTextures:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  ores: []

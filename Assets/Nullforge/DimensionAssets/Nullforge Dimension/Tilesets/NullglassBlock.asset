@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8bec0386b819e0d46af87b04ddbc1631, type: 3}
+  m_Name: NullglassBlock
+  m_EditorClassIdentifier: 
+  blockName: Nullglass
+  modPrefix: Nullforge
+  tilesetTexture: {fileID: 2800000, guid: 10bfe9686f620a741aa7b993157f765e, type: 3}
+  isEmissive: 0
+  emissiveTexture: {fileID: 0}
+  enabled: 1
+  circuitFloor: 0
+  rigidSurface: 0
+  circuitFloorMaterial: {fileID: 0}
+  groundMapColor:
+    serializedVersion: 2
+    rgba: 4283113519
+  wallMapColor:
+    serializedVersion: 2
+    rgba: 4281668380
+  blockType: terrain
+  itemMode: 0
+  reskinTilesetIndex: -1
+  layers:
+  - key: surface
+    enabled: 1
+    texture: {fileID: 0}
+  - key: wall
+    enabled: 1
+    texture: {fileID: 0}
+  generatedGenLayers: 080000000300000010000000110000000a00000012000000180000000f00000015000000020000002f00000039000000
+  generatedGenTextures:
+  - {fileID: 2800000, guid: 9852b914b5a9d884a8924309379c49ba, type: 3}
+  - {fileID: 2800000, guid: 41734bb8547bbfc44bab90a6a6fbd359, type: 3}
+  - {fileID: 2800000, guid: 52b643b84a472624eb329a8b476cfbf3, type: 3}
+  - {fileID: 2800000, guid: e1105e1f75ef52a428b7147865d16fbf, type: 3}
+  - {fileID: 2800000, guid: 1c188287298003b45a388f594657b6b4, type: 3}
+  - {fileID: 2800000, guid: 510603c8ad65ba84480715900185171d, type: 3}
+  - {fileID: 2800000, guid: 333ebe12d621c244f8250a43a605c4bd, type: 3}
+  - {fileID: 2800000, guid: a5b35d5d0a8ee1b428a2df374e011d64, type: 3}
+  - {fileID: 2800000, guid: fa063450e5b6142499511fdfdfe473b2, type: 3}
+  - {fileID: 2800000, guid: 72252cbcd1e74b243a2646d40049dc54, type: 3}
+  - {fileID: 2800000, guid: 8b10a335f252faf4abee37d69f00407a, type: 3}
+  - {fileID: 2800000, guid: fffc1980b6bbd8f40ba0d6efa5462130, type: 3}
+  generatedGenEmissiveTextures:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  ores: []
