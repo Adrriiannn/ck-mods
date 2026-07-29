@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: ModPaths
   m_EditorClassIdentifier: 
   latestBuildOrInstallPaths:
-  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\nullforgetest
   - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\NullforgeTest
   - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\Nullforge
   - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\Nullforge3
   - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\ExpandNullforge
+  - E:\Steam\steamapps\common\Core Keeper\CoreKeeper_Data\StreamingAssets\Mods\MPTest
