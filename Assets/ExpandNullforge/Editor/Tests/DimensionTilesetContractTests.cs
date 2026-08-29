@@ -10,6 +10,13 @@ namespace ExpandNullforge.EditorTools
     /// generator, the validator, and the authoring UI all read these rules. If a role's defaults
     /// drift, a creator's floor could become solid or a wall could stop dropping resources.
     /// </summary>
+    /// <remarks>
+    /// THE SUBJECT HAS NO PRODUCTION CALLER TODAY. <c>DimensionTileRoleRules</c> is declared in
+    /// <c>API/Scripts/DimensionTileset.cs</c> and nothing outside these tests calls it — the
+    /// sentence above describes what the rules are FOR, not what currently reads them. Kept because
+    /// it is a published offer to another mod author and these tests are the only proof it works;
+    /// do not take the coverage as evidence the surface is wired.
+    /// </remarks>
     internal sealed class DimensionTilesetContractTests
     {
         [Test]

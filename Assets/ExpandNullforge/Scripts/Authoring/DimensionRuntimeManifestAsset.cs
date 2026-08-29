@@ -22,10 +22,7 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private int zoneCount;
         [SerializeField] private int portalCount;
         [SerializeField] private int sceneCount;
-        [SerializeField] private int resourceNodeCount;
-        [SerializeField] private int spawnRuleCount;
         [SerializeField] private int generationPassCount;
-        [SerializeField] private int generationTableCount;
         [SerializeField] private int ownershipBindingCount;
         [SerializeField] private int assetReferenceCount;
 
@@ -170,10 +167,7 @@ namespace ExpandNullforge.Authoring
             zoneCount = preview.ZoneCount;
             portalCount = preview.Manifest.Portals == null ? 0 : preview.Manifest.Portals.Count;
             sceneCount = preview.SceneCount;
-            resourceNodeCount = preview.ResourceNodeCount;
-            spawnRuleCount = preview.SpawnRuleCount;
             generationPassCount = preview.GenerationPassCount;
-            generationTableCount = preview.GenerationTableCount;
             ownershipBindingCount = preview.OwnershipBindingCount;
             assetReferenceCount = preview.AssetReferenceCount;
         }

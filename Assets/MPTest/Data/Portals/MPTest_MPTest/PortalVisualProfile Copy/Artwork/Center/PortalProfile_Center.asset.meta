@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: a61147fae97c415498a49a1729deebba
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: ExpandNullforge.PortalArtwork:{"schemaVersion":1,"owner":"Dimensions
+    API","profileGuid":"1f77868c1c7667e4895bae3c0f6d146b","layer":"center","sourceAssetGuid":"76ce812d60a387ba5872a65c865b964c","sourceAddressLow":5570163353262010590,"sourceAddressHigh":-2439472303744231237,"managedAssetGuid":"a61147fae97c415498a49a1729deebba","managedAddressLow":377992148780385305,"managedAddressHigh":2458367088881097223,"palette":[{"r":0.0784313753247261,"g":0.16862745583057404,"b":0.3607843220233917,"a":1.0},{"r":0.11372549086809159,"g":0.1882352977991104,"b":0.5372549295425415,"a":1.0},{"r":0.0784313753247261,"g":0.24313725531101228,"b":0.6705882549285889,"a":1.0},{"r":0.08627451211214066,"g":0.364705890417099,"b":0.8509804010391235,"a":1.0},{"r":0.09803921729326248,"g":0.7411764860153198,"b":0.7764706015586853,"a":1.0},{"r":1.0,"g":1.0,"b":1.0,"a":1.0}],"directTextureOverride":false}
+  assetBundleName: 
+  assetBundleVariant: 

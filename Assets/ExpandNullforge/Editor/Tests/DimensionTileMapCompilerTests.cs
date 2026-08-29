@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ExpandNullforge.Api;
 using ExpandNullforge.Authoring;
 using ExpandNullforge.Generation;
+using ExpandNullforge.Tilesets;
 using NUnit.Framework;
 using PugTilemap;
 using Unity.Mathematics;
@@ -90,8 +91,15 @@ namespace ExpandNullforge.EditorTools
             Assert.That(TypeAt(writes, new int2(1, 0)), Is.EqualTo(TileType.pit));
         }
 
+        /// <summary>
+        /// A named custom tileset generates even when nothing has registered it. Its id is derived
+        /// from the name, so the terrain is right and only the appearance waits on the mod —
+        /// whereas refusing to write would leave holes (missing ground is a pit) that outlive the
+        /// missing mod. This previously asserted the opposite, back when a name could not be turned
+        /// into an id at all.
+        /// </summary>
         [Test]
-        public void UnresolvedCustomTileset_IsSkippedAndReportedOnce()
+        public void AnUninstalledCustomTileset_StillGeneratesAndIsNotedOnce()
         {
             DimensionBounds bounds = Bounds(0, 0, 3, 1);
             DimensionTileMapModel map = new DimensionTileMapModel(int2.zero, 3, 1);
@@ -106,12 +114,45 @@ namespace ExpandNullforge.EditorTools
             DimensionTileMapCompileResult result =
                 DimensionTileMapCompiler.Compile(map.EnumeratePlacements(), bounds, bounds);
 
-            Assert.That(result.WriteCount, Is.EqualTo(0), "Unresolved tiles must not be written.");
+            Assert.That(result.WriteCount, Is.EqualTo(3), "The terrain must not be left with holes.");
+            Assert.That(result.Skipped, Is.Empty, "Nothing failed — this is a note, not a skip.");
             Assert.That(
-                result.Skipped.Count,
+                result.Notes.Count,
                 Is.EqualTo(1),
-                "Three tiles of one missing tileset should report once, not three times.");
-            Assert.That(result.Skipped[0], Does.Contain("mod:crystal"));
+                "Three tiles of one uninstalled tileset should report once, not three times.");
+            Assert.That(result.Notes[0], Does.Contain("mod:crystal"));
+
+            // Every tile carries the id the name derives to, so installing the mod later fixes all
+            // of them at once with no migration.
+            int expected = DimensionTilesetRegistry.ComputeTilesetId("mod:crystal");
+            foreach (DimensionResolvedTileWrite write in result.Writes)
+            {
+                Assert.That(write.Tileset, Is.EqualTo(expected));
+            }
+        }
+
+        /// <summary>
+        /// The one case that must still refuse: a block flagged custom that names no tileset. There
+        /// is no identity to be correct about, and falling back to tileset 0 would quietly generate
+        /// dirt where the author asked for something else.
+        /// </summary>
+        [Test]
+        public void ACustomBlockNamingNoTileset_IsSkippedAndReported()
+        {
+            DimensionBounds bounds = Bounds(0, 0, 2, 1);
+            DimensionTileMapModel map = new DimensionTileMapModel(int2.zero, 2, 1);
+            DimensionMapBlock broken = new DimensionMapBlock(
+                "broken", "Broken", DimensionTileRole.Ground,
+                DimensionBlockTilesetSource.Custom, 0, string.Empty);
+            int index = map.AddBlock(broken);
+            map.SetBlock(new int2(0, 0), index);
+            map.SetBlock(new int2(1, 0), index);
+
+            DimensionTileMapCompileResult result =
+                DimensionTileMapCompiler.Compile(map.EnumeratePlacements(), bounds, bounds);
+
+            Assert.That(result.WriteCount, Is.EqualTo(0));
+            Assert.That(result.Skipped.Count, Is.EqualTo(1));
         }
 
         [Test]
@@ -121,6 +162,73 @@ namespace ExpandNullforge.EditorTools
                 DimensionTileMapCompiler.Compile(null, Bounds(0, 0, 1, 1), Bounds(0, 0, 1, 1));
             Assert.That(result.WriteCount, Is.EqualTo(0));
             Assert.That(result.Skipped, Is.Empty);
+        }
+
+        /// <summary>
+        /// A cell carrying a wall grows nothing.
+        /// </summary>
+        /// <remarks>
+        /// The overlay pass used to test only the write in front of it, and a painted cell can hold
+        /// a ground AND a wall — with the wall written EARLIER in the same list, so the grass landed
+        /// on top of the wall. The pass's own comment said grass on a wall would be nonsense while
+        /// the code produced exactly that.
+        /// </remarks>
+        [Test]
+        public void OverlaysSkipACellThatAlsoTookAWall()
+        {
+            const int Tileset = 7;
+            DimensionOverlayRuleRegistry.Clear();
+            try
+            {
+                // Density 1 means every eligible cell, so anything skipped was skipped on purpose.
+                DimensionOverlayRuleRegistry.Register(Tileset, new List<DimensionOverlayRule>
+                {
+                    new DimensionOverlayRule(LayerName.smallGrass, TileType.smallGrass, 1f)
+                });
+
+                DimensionBounds area = Bounds(0, 0, 4, 4);
+                DimensionTileMapModel map = new DimensionTileMapModel(int2.zero, 4, 4);
+                int ground = map.AddBlock(Block(DimensionTileRole.Ground, Tileset));
+                int wall = map.AddBlock(Block(DimensionTileRole.Wall, Tileset));
+
+                map.SetBlock(new int2(1, 1), ground);   // open floor
+                map.SetBlock(new int2(2, 2), ground);   // floor with a wall standing on it
+                map.SetBlock(new int2(2, 2), wall);
+
+                DimensionTileMapCompileResult result =
+                    DimensionTileMapCompiler.Compile(map.EnumeratePlacements(), area, area);
+                DimensionTileMapGenerationProvider.AppendScatteredOverlays("mod:cavern", result.Writes);
+
+                Assert.That(
+                    CountWrites(result.Writes, new int2(1, 1), TileType.smallGrass),
+                    Is.EqualTo(1),
+                    "Open floor should grow its block's grass.");
+                Assert.That(
+                    CountWrites(result.Writes, new int2(2, 2), TileType.smallGrass),
+                    Is.EqualTo(0),
+                    "A cell with a wall on it should grow nothing.");
+            }
+            finally
+            {
+                DimensionOverlayRuleRegistry.Clear();
+            }
+        }
+
+        private static int CountWrites(
+            List<DimensionResolvedTileWrite> writes,
+            int2 position,
+            TileType tileType)
+        {
+            int count = 0;
+            for (int i = 0; i < writes.Count; i++)
+            {
+                if (writes[i].AbsolutePosition.Equals(position) && writes[i].TileType == tileType)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static DimensionBounds Bounds(int minX, int minY, int maxX, int maxY)

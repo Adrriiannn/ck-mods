@@ -16,8 +16,6 @@ namespace ExpandNullforge.Authoring
             List<DimensionAuthoringIssue> issues = new List<DimensionAuthoringIssue>();
             List<DimensionCompiledBiomeRegion> biomeRegions = new List<DimensionCompiledBiomeRegion>();
             List<DimensionCompiledScenePlacement> scenePlacements = new List<DimensionCompiledScenePlacement>();
-            List<DimensionResourceNodeDefinition> resourceNodes = new List<DimensionResourceNodeDefinition>();
-            List<DimensionSpawnRule> spawnRules = new List<DimensionSpawnRule>();
             List<DimensionGenerationPassDefinition> generationPasses = new List<DimensionGenerationPassDefinition>();
 
             if (template == null)
@@ -41,8 +39,6 @@ namespace ExpandNullforge.Authoring
                     MinimumShellPaddingTiles,
                     biomeRegions,
                     scenePlacements,
-                    resourceNodes,
-                    spawnRules,
                     generationPasses,
                     issues);
             }
@@ -75,22 +71,15 @@ namespace ExpandNullforge.Authoring
             BuildBiomeRegions(template, dimensionId, biomeRegions, issues);
             ValidateBiomeRegionDiagnostics(biomeRegions, issues);
             BuildScenePlacements(template, dimensionId, biomeRegions, scenePlacements, issues);
-            BuildResourceNodes(template, dimensionId, biomeRegions, resourceNodes, issues);
-            BuildSpawnRules(template, dimensionId, biomeRegions, spawnRules, issues);
             BuildGenerationPasses(template, dimensionId, biomeRegions, generationPasses, issues);
-            ValidateBiomeContentPresets(template, issues);
             ValidateBiomeSemanticObjectIds(template, issues);
-            ValidateEnvironmentProfileTemplates(template, dimensionId, issues);
-            ValidateGenerationTables(template, dimensionId, issues);
-            ValidateBiomePaletteTemplates(template, dimensionId, issues);
+            ValidateBiomeTerrainMaterials(template, biomeRegions, issues);
             ValidateExactSceneOverlaps(scenePlacements, issues);
 
             DimensionBounds playableBounds;
             if (!TryResolvePlayableBounds(
                     biomeRegions,
                     scenePlacements,
-                    resourceNodes,
-                    spawnRules,
                     generationPasses,
                     out playableBounds))
             {
@@ -98,7 +87,7 @@ namespace ExpandNullforge.Authoring
                 issues.Add(CreateIssue(
                     DimensionAuthoringSeverity.Error,
                     "dimension-empty-playable-area",
-                    "No enabled biome region, scene, resource node, or spawn rule contributes a playable area.",
+                    "No enabled biome region or scene contributes a playable area.",
                     "DimensionTemplate",
                     dimensionId));
             }
@@ -137,8 +126,6 @@ namespace ExpandNullforge.Authoring
                 shellPadding,
                 biomeRegions,
                 scenePlacements,
-                resourceNodes,
-                spawnRules,
                 generationPasses,
                 issues);
         }
@@ -586,7 +573,6 @@ namespace ExpandNullforge.Authoring
                     ringId,
                     minRadius,
                     maxRadius,
-                    bandSize,
                     regions,
                     ref regionIndex,
                     ref added);
@@ -613,7 +599,10 @@ namespace ExpandNullforge.Authoring
             string ringId,
             int minRadius,
             int maxRadius,
-            int bandSize,
+            // There was an int bandSize here. It was read, threaded through and never used again:
+            // the scanline walk below emits one region per run and produces an exact circle, so
+            // there is no band to size. The stored field is still read above for its guard and is
+            // still part of the layout fingerprint, so no pinned world moves.
             List<DimensionCompiledBiomeRegion> regions,
             ref int regionIndex,
             ref bool added)
@@ -1171,7 +1160,7 @@ namespace ExpandNullforge.Authoring
                     continue;
                 }
 
-                AddScenePlacements(biome.GetScenePoolWithPresets(), dimensionId, biomeRegions, placements, issues);
+                AddScenePlacements(biome.ScenePool, dimensionId, biomeRegions, placements, issues);
             }
         }
 
@@ -1284,198 +1273,6 @@ namespace ExpandNullforge.Authoring
             }
         }
 
-        private static void BuildResourceNodes(
-            DimensionTemplateAsset template,
-            string dimensionId,
-            List<DimensionCompiledBiomeRegion> biomeRegions,
-            List<DimensionResourceNodeDefinition> resourceNodes,
-            List<DimensionAuthoringIssue> issues)
-        {
-            AddResourceNodes(template.GlobalResourceNodes, dimensionId, string.Empty, biomeRegions, resourceNodes, issues);
-
-            BiomeTemplateAsset[] biomes = template.Biomes;
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomes[i];
-                if (biome == null || !biome.Enabled)
-                {
-                    continue;
-                }
-
-                AddResourceNodes(biome.GetResourceNodesWithPresets(), dimensionId, biome.BiomeId, biomeRegions, resourceNodes, issues);
-            }
-        }
-
-        private static void AddResourceNodes(
-            ResourceNodeTemplateAsset[] nodes,
-            string dimensionId,
-            string fallbackZoneId,
-            List<DimensionCompiledBiomeRegion> biomeRegions,
-            List<DimensionResourceNodeDefinition> resourceNodes,
-            List<DimensionAuthoringIssue> issues)
-        {
-            if (nodes == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                ResourceNodeTemplateAsset node = nodes[i];
-                if (node == null || !node.Enabled)
-                {
-                    continue;
-                }
-
-                DimensionResourceNodeDefinition definition = node.ToDefinition(dimensionId, fallbackZoneId);
-                if (string.IsNullOrEmpty(definition.NodeId))
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Error,
-                        "resource-node-id-empty",
-                        "Resource node id is required.",
-                        "ResourceNodeTemplate",
-                        node.name));
-                }
-
-                if (string.IsNullOrEmpty(definition.ResourceId))
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Warning,
-                        "resource-node-resource-empty",
-                        "Resource node has no resource id yet. The generation solver will need a provider-specific fallback.",
-                        "ResourceNodeTemplate",
-                        definition.NodeId));
-                }
-
-                if (definition.HasLocalBounds)
-                {
-                    if (!IsValidBounds(definition.LocalBounds))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Error,
-                            "resource-node-bounds-invalid",
-                            "Resource node bounds must have positive width and height.",
-                            "ResourceNodeTemplate",
-                            definition.NodeId,
-                            true,
-                            definition.LocalBounds));
-                        continue;
-                    }
-
-                    if (!IntersectsAnyBiome(biomeRegions, definition.LocalBounds, definition.ZoneId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "resource-node-outside-biome",
-                            "Resource node explicit bounds do not overlap any matching biome region.",
-                            "ResourceNodeTemplate",
-                            definition.NodeId,
-                            true,
-                            definition.LocalBounds));
-                    }
-                }
-
-                resourceNodes.Add(definition);
-            }
-        }
-
-        private static void BuildSpawnRules(
-            DimensionTemplateAsset template,
-            string dimensionId,
-            List<DimensionCompiledBiomeRegion> biomeRegions,
-            List<DimensionSpawnRule> spawnRules,
-            List<DimensionAuthoringIssue> issues)
-        {
-            AddSpawnRules(template.GlobalSpawnRules, dimensionId, string.Empty, biomeRegions, spawnRules, issues);
-
-            BiomeTemplateAsset[] biomes = template.Biomes;
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomes[i];
-                if (biome == null || !biome.Enabled)
-                {
-                    continue;
-                }
-
-                AddSpawnRules(biome.GetSpawnRulesWithPresets(), dimensionId, biome.BiomeId, biomeRegions, spawnRules, issues);
-            }
-        }
-
-        private static void AddSpawnRules(
-            SpawnRuleTemplateAsset[] rules,
-            string dimensionId,
-            string fallbackZoneId,
-            List<DimensionCompiledBiomeRegion> biomeRegions,
-            List<DimensionSpawnRule> spawnRules,
-            List<DimensionAuthoringIssue> issues)
-        {
-            if (rules == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < rules.Length; i++)
-            {
-                SpawnRuleTemplateAsset rule = rules[i];
-                if (rule == null || !rule.Enabled)
-                {
-                    continue;
-                }
-
-                DimensionSpawnRule definition = rule.ToRule(dimensionId, fallbackZoneId);
-                if (string.IsNullOrEmpty(definition.RuleId))
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Error,
-                        "spawn-rule-id-empty",
-                        "Spawn rule id is required.",
-                        "SpawnRuleTemplate",
-                        rule.name));
-                }
-
-                if (string.IsNullOrEmpty(definition.SubjectId))
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Warning,
-                        "spawn-rule-subject-empty",
-                        "Spawn rule has no subject id yet. The generation solver will need a provider-specific fallback.",
-                        "SpawnRuleTemplate",
-                        definition.RuleId));
-                }
-
-                if (definition.HasLocalBounds)
-                {
-                    if (!IsValidBounds(definition.LocalBounds))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Error,
-                            "spawn-rule-bounds-invalid",
-                            "Spawn rule bounds must have positive width and height.",
-                            "SpawnRuleTemplate",
-                            definition.RuleId,
-                            true,
-                            definition.LocalBounds));
-                        continue;
-                    }
-
-                    if (!IntersectsAnyBiome(biomeRegions, definition.LocalBounds, definition.ZoneId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "spawn-rule-outside-biome",
-                            "Spawn rule explicit bounds do not overlap any matching biome region.",
-                            "SpawnRuleTemplate",
-                            definition.RuleId,
-                            true,
-                            definition.LocalBounds));
-                    }
-                }
-
-                spawnRules.Add(definition);
-            }
-        }
-
         private static void BuildGenerationPasses(
             DimensionTemplateAsset template,
             string dimensionId,
@@ -1501,7 +1298,7 @@ namespace ExpandNullforge.Authoring
                 }
 
                 AddBiomeGenerationPasses(
-                    biome.GetGenerationPassesWithProfile(),
+                    biome.GenerationPasses,
                     dimensionId,
                     biome.BiomeId,
                     biomeRegions,
@@ -1685,6 +1482,22 @@ namespace ExpandNullforge.Authoring
                     "GenerationPassTemplate",
                     definition.PassId));
             }
+            else if (!IsKnownGenerationProviderId(definition.ProviderId))
+            {
+                // A misspelled id compiles clean, registers, appears in the plan and is skipped at
+                // runtime without a word. It is a warning rather than an error because a third
+                // party's provider is a legitimate thing to name and this compiler cannot know
+                // about it.
+                issues.Add(CreateIssue(
+                    DimensionAuthoringSeverity.Warning,
+                    "generation-pass-provider-unknown",
+                    "Generation pass '" + definition.PassId + "' names the step '" +
+                    definition.ProviderId + "', which is not one this framework runs. If it is " +
+                    "not a step another mod adds, the pass is registered and then skipped every " +
+                    "time the world generates.",
+                    "GenerationPassTemplate",
+                    definition.PassId));
+            }
 
             if (definition.HasLocalBounds && !IsValidBounds(definition.LocalBounds))
             {
@@ -1701,135 +1514,6 @@ namespace ExpandNullforge.Authoring
 
             passIds.Add(definition.PassId, true);
             generationPasses.Add(definition);
-        }
-
-        private static void ValidateGenerationTables(
-            DimensionTemplateAsset template,
-            string dimensionId,
-            List<DimensionAuthoringIssue> issues)
-        {
-            Dictionary<string, bool> biomeIds = BuildBiomeIdSet(template);
-            Dictionary<string, GenerationTableTemplateAsset> tableIds =
-                new Dictionary<string, GenerationTableTemplateAsset>();
-            Dictionary<string, bool> entryIds = new Dictionary<string, bool>();
-
-            ValidateGenerationTableAssets(
-                template.GlobalGenerationTables,
-                dimensionId,
-                string.Empty,
-                biomeIds,
-                tableIds,
-                entryIds,
-                issues);
-
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                ValidateGenerationTableAssets(
-                    biome.GetGenerationTablesWithProfile(),
-                    dimensionId,
-                    biome.BiomeId,
-                    biomeIds,
-                    tableIds,
-                    entryIds,
-                    issues);
-            }
-        }
-
-        private static void ValidateBiomeContentPresets(
-            DimensionTemplateAsset template,
-            List<DimensionAuthoringIssue> issues)
-        {
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int biomeIndex = 0; biomeIndex < biomeAssets.Length; biomeIndex++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[biomeIndex];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                Dictionary<string, bool> presetIds = new Dictionary<string, bool>();
-                BiomeContentPresetAsset[] presets = biome.ContentPresets;
-                for (int presetIndex = 0; presetIndex < presets.Length; presetIndex++)
-                {
-                    BiomeContentPresetAsset preset = presets[presetIndex];
-                    if (preset == null)
-                    {
-                        continue;
-                    }
-
-                    if (string.IsNullOrEmpty(preset.PresetId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-content-preset-id-empty",
-                            "Biome content preset has no stable preset id. This is allowed for local iteration, but named presets are easier to diagnose.",
-                            "BiomeContentPreset",
-                            preset.name));
-                    }
-                    else if (presetIds.ContainsKey(preset.PresetId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-content-preset-id-duplicate",
-                            "Biome references multiple content presets with the same preset id. The contents are still composed, but diagnostics will be ambiguous.",
-                            "BiomeContentPreset",
-                            preset.PresetId));
-                    }
-                    else
-                    {
-                        presetIds.Add(preset.PresetId, true);
-                    }
-
-                    if (!preset.Enabled)
-                    {
-                        continue;
-                    }
-
-                    if (!preset.HasAnyContent)
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-content-preset-empty",
-                            "Enabled biome content preset does not currently define environment, palette, generation, scene, resource, spawn, or object defaults.",
-                            "BiomeContentPreset",
-                            string.IsNullOrEmpty(preset.PresetId) ? preset.name : preset.PresetId));
-                    }
-
-                    EnvironmentProfileTemplateAsset profile = preset.EnvironmentProfileTemplate;
-                    if (profile != null &&
-                        !string.IsNullOrEmpty(preset.EnvironmentProfileId) &&
-                        !string.Equals(preset.EnvironmentProfileId, profile.ProfileId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-content-preset-environment-overridden",
-                            "Preset has both an explicit environment profile id and an environment profile template. The explicit profile id wins for biome resolution.",
-                            "BiomeContentPreset",
-                            preset.PresetId));
-                    }
-
-                    BiomePaletteTemplateAsset palette = preset.PaletteTemplate;
-                    if (palette != null &&
-                        !string.IsNullOrEmpty(preset.PaletteAssetId) &&
-                        !string.Equals(preset.PaletteAssetId, palette.PaletteId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-content-preset-palette-overridden",
-                            "Preset has both an explicit palette asset id and a palette template. The explicit palette asset id wins for biome resolution.",
-                            "BiomeContentPreset",
-                            preset.PresetId));
-                    }
-                }
-            }
         }
 
         private static void ValidateBiomeSemanticObjectIds(
@@ -1855,31 +1539,206 @@ namespace ExpandNullforge.Authoring
                     biome,
                     "floor object",
                     DimensionGenerationSubjectKind.FloorObject,
-                    biome.GetFloorObjectIdsWithPresets(),
+                    biome.FloorObjectIds,
                     objectKindsById,
                     issues);
                 ValidateSemanticObjectIds(
                     biome,
                     "wall object",
                     DimensionGenerationSubjectKind.WallObject,
-                    biome.GetWallObjectIdsWithPresets(),
+                    biome.WallObjectIds,
                     objectKindsById,
                     issues);
                 ValidateSemanticObjectIds(
                     biome,
                     "ore object",
                     DimensionGenerationSubjectKind.OreObject,
-                    biome.GetOreObjectIdsWithPresets(),
-                    objectKindsById,
-                    issues);
-                ValidateSemanticObjectIds(
-                    biome,
-                    "water object",
-                    DimensionGenerationSubjectKind.WaterObject,
-                    biome.GetWaterObjectIdsWithPresets(),
+                    biome.OreObjectIds,
                     objectKindsById,
                     issues);
             }
+        }
+
+        /// <summary>
+        /// Says out loud what each biome's ground and walls will actually be made of, and the four
+        /// ways that can go wrong.
+        /// </summary>
+        /// <remarks>
+        /// The world builds terrain from the FIRST entry of each list. That was true the moment the
+        /// terrain material registry shipped, and nothing on the page said so, so the checks here
+        /// are the other half of the feature rather than decoration on it.
+        /// </remarks>
+        /// <summary>The five steps this framework can actually run.</summary>
+        private static bool IsKnownGenerationProviderId(string providerId)
+        {
+            return string.Equals(providerId, DimensionGenerationProviderIds.SafePlatform, System.StringComparison.Ordinal) ||
+                   string.Equals(providerId, DimensionGenerationProviderIds.TileMap, System.StringComparison.Ordinal) ||
+                   string.Equals(providerId, DimensionGenerationProviderIds.ScenePlacement, System.StringComparison.Ordinal) ||
+                   string.Equals(providerId, DimensionGenerationProviderIds.OreScatter, System.StringComparison.Ordinal) ||
+                   string.Equals(providerId, DimensionGenerationProviderIds.DungeonPlacement, System.StringComparison.Ordinal);
+        }
+
+        private static void ValidateBiomeTerrainMaterials(
+            DimensionTemplateAsset template,
+            List<DimensionCompiledBiomeRegion> biomeRegions,
+            List<DimensionAuthoringIssue> issues)
+        {
+            if (template == null)
+            {
+                return;
+            }
+
+            DimensionTilesetAsset[] tilesets = template.Tilesets;
+            BiomeTemplateAsset[] biomeAssets = template.Biomes;
+            for (int i = 0; i < biomeAssets.Length; i++)
+            {
+                BiomeTemplateAsset biome = biomeAssets[i];
+                if (biome == null || !biome.Enabled)
+                {
+                    continue;
+                }
+
+                ValidateBiomeTerrainHalf(biome, biome.FloorObjectIds, tilesets, true, issues);
+                ValidateBiomeTerrainHalf(biome, biome.WallObjectIds, tilesets, false, issues);
+            }
+
+            ValidateBiomeRegionMaterialOverlaps(biomeRegions, issues);
+        }
+
+        private static void ValidateBiomeTerrainHalf(
+            BiomeTemplateAsset biome,
+            string[] objectIds,
+            DimensionTilesetAsset[] tilesets,
+            bool isGround,
+            List<DimensionAuthoringIssue> issues)
+        {
+            string half = isGround ? "Ground" : "Walls";
+
+            int tilesetId;
+            string named;
+            bool hasGround;
+            DimensionBiomeTerrainSource source = DimensionBiomeTerrainMaterial.ResolveFirst(
+                objectIds, tilesets, out tilesetId, out named, out hasGround);
+
+            if (source == DimensionBiomeTerrainSource.Unknown)
+            {
+                // A warning, not a blocker. The dimension still generates — it generates dirt —
+                // and turning this into an export blocker would stop every project that still
+                // carries the placeholder ids the framework itself used to write into new biomes.
+                issues.Add(CreateIssue(
+                    DimensionAuthoringSeverity.Warning,
+                    "biome-terrain-block-unresolved",
+                    "Biome '" + biome.BiomeId + "' names '" + named + "' as its " + half +
+                    ", and that is not one of this dimension's blocks or one of the game's. The " +
+                    "world will lay plain dirt there. Pick the block from the " + half +
+                    " row on the Biome page.",
+                    "BiomeTemplate",
+                    biome.BiomeId));
+                return;
+            }
+
+            if (source == DimensionBiomeTerrainSource.Empty)
+            {
+                return;
+            }
+
+            if (isGround && !hasGround)
+            {
+                issues.Add(CreateIssue(
+                    DimensionAuthoringSeverity.Warning,
+                    "biome-terrain-block-not-ground",
+                    "Biome '" + biome.BiomeId + "' uses '" + named + "' as its Ground, and that " +
+                    "block has no ground surface — it is walls only. The floor of this biome will " +
+                    "not look like anything you drew.",
+                    "BiomeTemplate",
+                    biome.BiomeId));
+            }
+
+            int count = 0;
+            for (int i = 0; i < objectIds.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(objectIds[i]))
+                {
+                    count++;
+                }
+            }
+
+            if (count > 1)
+            {
+                issues.Add(CreateIssue(
+                    DimensionAuthoringSeverity.Info,
+                    "biome-terrain-extra-blocks",
+                    "Biome '" + biome.BiomeId + "' lists " + count + " blocks under " + half +
+                    ". The world builds terrain from the first one, '" + named +
+                    "'; the rest say what the biome is made of and are not built from.",
+                    "BiomeTemplate",
+                    biome.BiomeId));
+            }
+        }
+
+        /// <summary>
+        /// Two biomes claiming the same ground.
+        /// </summary>
+        /// <remarks>
+        /// A cell has exactly one ground, so an overlap has to resolve to one of the two and the
+        /// author cannot see which from here. Reported once per pair of biomes rather than once per
+        /// overlapping rectangle — a radial layout compiles one region per scanline row, and a pair
+        /// of overlapping rings would otherwise report hundreds of times.
+        /// </remarks>
+        private static void ValidateBiomeRegionMaterialOverlaps(
+            List<DimensionCompiledBiomeRegion> biomeRegions,
+            List<DimensionAuthoringIssue> issues)
+        {
+            if (biomeRegions == null || biomeRegions.Count < 2)
+            {
+                return;
+            }
+
+            Dictionary<string, bool> reportedPairs = new Dictionary<string, bool>();
+            for (int a = 0; a < biomeRegions.Count; a++)
+            {
+                for (int b = a + 1; b < biomeRegions.Count; b++)
+                {
+                    string biomeA = biomeRegions[a].BiomeId;
+                    string biomeB = biomeRegions[b].BiomeId;
+                    if (string.Equals(biomeA, biomeB, System.StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (!BoundsOverlap(biomeRegions[a].LocalBounds, biomeRegions[b].LocalBounds))
+                    {
+                        continue;
+                    }
+
+                    string pair = string.CompareOrdinal(biomeA, biomeB) <= 0
+                        ? biomeA + "|" + biomeB
+                        : biomeB + "|" + biomeA;
+                    if (reportedPairs.ContainsKey(pair))
+                    {
+                        continue;
+                    }
+
+                    reportedPairs.Add(pair, true);
+                    issues.Add(CreateIssue(
+                        DimensionAuthoringSeverity.Warning,
+                        "biome-terrain-regions-overlap",
+                        "Biomes '" + biomeA + "' and '" + biomeB + "' cover some of the same " +
+                        "ground. A tile can only be made of one block, so whichever of the two the " +
+                        "world registers last wins there — which is not something you can read off " +
+                        "this page. Move one of them so they do not overlap.",
+                        "BiomeTemplate",
+                        biomeA));
+                }
+            }
+        }
+
+        private static bool BoundsOverlap(DimensionBounds a, DimensionBounds b)
+        {
+            return a.Min.x < b.MaxExclusive.x &&
+                   b.Min.x < a.MaxExclusive.x &&
+                   a.Min.y < b.MaxExclusive.y &&
+                   b.Min.y < a.MaxExclusive.y;
         }
 
         private static void ValidateSemanticObjectIds(
@@ -1935,437 +1794,6 @@ namespace ExpandNullforge.Authoring
 
                 objectKindsById.Add(objectId, subjectKind);
             }
-        }
-
-        private static void ValidateBiomePaletteTemplates(
-            DimensionTemplateAsset template,
-            string dimensionId,
-            List<DimensionAuthoringIssue> issues)
-        {
-            Dictionary<string, bool> assetReferenceIds = new Dictionary<string, bool>();
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                BiomePaletteTemplateAsset[] palettes = biome.GetPaletteTemplatesWithPresets();
-                for (int paletteIndex = 0; paletteIndex < palettes.Length; paletteIndex++)
-                {
-                    BiomePaletteTemplateAsset palette = palettes[paletteIndex];
-                    if (palette == null)
-                    {
-                        continue;
-                    }
-
-                    if (!palette.Enabled)
-                    {
-                        if (string.IsNullOrEmpty(biome.PaletteAssetId))
-                        {
-                            issues.Add(CreateIssue(
-                                DimensionAuthoringSeverity.Warning,
-                                "biome-palette-template-disabled",
-                                "Biome has a disabled palette template and no explicit palette asset id. It will compile without that palette.",
-                                "BiomePaletteTemplate",
-                                palette.name));
-                        }
-
-                        continue;
-                    }
-
-                    if (string.IsNullOrEmpty(template.ContentPackId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-palette-content-pack-empty",
-                            "Biome palette references require a content pack id. The biome can compile, but palette asset references will not be exported or applied until the Dimension Asset has a content pack id.",
-                            "BiomePaletteTemplate",
-                            palette.name));
-                    }
-
-                    if (!string.IsNullOrEmpty(biome.PaletteAssetId) &&
-                        !string.Equals(biome.PaletteAssetId, palette.PaletteId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-palette-template-overridden",
-                            "Biome has both an explicit palette asset id and one or more palette templates. The explicit palette asset id wins for biome resolution.",
-                            "BiomeTemplate",
-                            biome.BiomeId));
-                    }
-
-                    List<DimensionAssetReferenceDefinition> references =
-                        new List<DimensionAssetReferenceDefinition>();
-                    palette.AddAssetReferencesTo(template.ContentPackId, dimensionId, references);
-                    for (int referenceIndex = 0; referenceIndex < references.Count; referenceIndex++)
-                    {
-                        ValidatePaletteAssetReference(
-                            references[referenceIndex],
-                            palette.name,
-                            assetReferenceIds,
-                            issues);
-                    }
-                }
-            }
-        }
-
-        private static void ValidateEnvironmentProfileTemplates(
-            DimensionTemplateAsset template,
-            string dimensionId,
-            List<DimensionAuthoringIssue> issues)
-        {
-            Dictionary<string, EnvironmentProfileTemplateAsset> profileIds =
-                new Dictionary<string, EnvironmentProfileTemplateAsset>();
-            EnvironmentProfileTemplateAsset[] templateProfiles = template.EnvironmentProfiles;
-            for (int i = 0; i < templateProfiles.Length; i++)
-            {
-                EnvironmentProfileTemplateAsset profile = templateProfiles[i];
-                ValidateEnvironmentProfileTemplate(
-                    profile,
-                    dimensionId,
-                    "DimensionTemplate",
-                    template.name,
-                    profileIds,
-                    issues);
-            }
-
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                EnvironmentProfileTemplateAsset[] profiles =
-                    biome.GetEnvironmentProfileTemplatesWithPresets();
-                for (int profileIndex = 0; profileIndex < profiles.Length; profileIndex++)
-                {
-                    EnvironmentProfileTemplateAsset profile = profiles[profileIndex];
-                    if (profile == null)
-                    {
-                        continue;
-                    }
-
-                    if (!profile.Enabled && string.IsNullOrEmpty(biome.EnvironmentProfileId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-environment-profile-template-disabled",
-                            "Biome has a disabled environment profile template and no explicit environment profile id. It will compile without that biome-specific environment profile.",
-                            "EnvironmentProfileTemplate",
-                            profile.name));
-                    }
-
-                    if (!string.IsNullOrEmpty(biome.EnvironmentProfileId) &&
-                        !string.Equals(biome.EnvironmentProfileId, profile.ProfileId))
-                    {
-                        issues.Add(CreateIssue(
-                            DimensionAuthoringSeverity.Warning,
-                            "biome-environment-profile-template-overridden",
-                            "Biome has both an explicit environment profile id and one or more environment profile templates. The explicit environment profile id wins for biome resolution.",
-                            "BiomeTemplate",
-                            biome.BiomeId));
-                    }
-
-                    ValidateEnvironmentProfileTemplate(
-                        profile,
-                        dimensionId,
-                        "BiomeTemplate",
-                        biome.BiomeId,
-                        profileIds,
-                        issues);
-                }
-            }
-        }
-
-        private static void ValidateEnvironmentProfileTemplate(
-            EnvironmentProfileTemplateAsset profile,
-            string dimensionId,
-            string sourceKind,
-            string sourceName,
-            Dictionary<string, EnvironmentProfileTemplateAsset> profileIds,
-            List<DimensionAuthoringIssue> issues)
-        {
-            if (profile == null)
-            {
-                return;
-            }
-
-            if (string.IsNullOrEmpty(profile.ProfileId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "environment-profile-id-empty",
-                    "Environment profile templates need a stable profile id.",
-                    sourceKind,
-                    sourceName));
-                return;
-            }
-
-            EnvironmentProfileTemplateAsset existingProfile;
-            if (profileIds.TryGetValue(profile.ProfileId, out existingProfile))
-            {
-                if (existingProfile == profile)
-                {
-                    return;
-                }
-
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "environment-profile-id-duplicate",
-                    "Environment profile id is duplicated in this Dimension Asset.",
-                    "EnvironmentProfileTemplate",
-                    profile.ProfileId));
-                return;
-            }
-
-            profileIds.Add(profile.ProfileId, profile);
-
-            if (string.IsNullOrEmpty(dimensionId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Warning,
-                    "environment-profile-dimension-empty",
-                    "Environment profile will not be usable until the Dimension Asset has a dimension id.",
-                    "EnvironmentProfileTemplate",
-                    profile.ProfileId));
-            }
-        }
-
-        private static void ValidatePaletteAssetReference(
-            DimensionAssetReferenceDefinition reference,
-            string sourceName,
-            Dictionary<string, bool> assetReferenceIds,
-            List<DimensionAuthoringIssue> issues)
-        {
-            if (string.IsNullOrEmpty(reference.AssetId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "biome-palette-asset-id-empty",
-                    "Palette asset references need a stable asset id.",
-                    "BiomePaletteTemplate",
-                    sourceName));
-                return;
-            }
-
-            if (assetReferenceIds.ContainsKey(reference.AssetId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "biome-palette-asset-id-duplicate",
-                    "Palette asset reference id is duplicated in this Dimension Asset.",
-                    "BiomePaletteTemplate",
-                    reference.AssetId));
-                return;
-            }
-
-            assetReferenceIds.Add(reference.AssetId, true);
-
-            if (reference.Kind == DimensionAssetReferenceKind.Any)
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "biome-palette-asset-kind-any",
-                    "Palette asset references must use a concrete asset kind, not Any.",
-                    "BiomePaletteTemplate",
-                    reference.AssetId));
-            }
-
-            if (string.IsNullOrEmpty(reference.ResourceKey))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "biome-palette-resource-key-empty",
-                    "Palette asset references need a resource key so the runtime can resolve the referenced asset.",
-                    "BiomePaletteTemplate",
-                    reference.AssetId));
-            }
-        }
-
-        private static void ValidateGenerationTableAssets(
-            GenerationTableTemplateAsset[] tables,
-            string dimensionId,
-            string fallbackBiomeId,
-            Dictionary<string, bool> biomeIds,
-            Dictionary<string, GenerationTableTemplateAsset> tableIds,
-            Dictionary<string, bool> entryIds,
-            List<DimensionAuthoringIssue> issues)
-        {
-            if (tables == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < tables.Length; i++)
-            {
-                GenerationTableTemplateAsset tableAsset = tables[i];
-                if (tableAsset == null || !tableAsset.Enabled)
-                {
-                    continue;
-                }
-
-                string tableId = BuildScopedId(dimensionId, fallbackBiomeId, tableAsset.TableId);
-                DimensionGenerationTableDefinition table =
-                    tableAsset.ToTableDefinition(tableId, dimensionId, fallbackBiomeId);
-                string sourceName = tableAsset.name;
-
-                if (string.IsNullOrEmpty(table.TableId))
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Error,
-                        "generation-table-id-empty",
-                        "Generation table id is required.",
-                        "GenerationTableTemplate",
-                        sourceName));
-                    continue;
-                }
-
-                if (table.Kind == DimensionGenerationTableKind.Any)
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Error,
-                        "generation-table-kind-any",
-                        "Generation table templates must use a concrete table kind, not Any.",
-                        "GenerationTableTemplate",
-                        table.TableId));
-                }
-
-                GenerationTableTemplateAsset existingTable;
-                if (tableIds.TryGetValue(table.TableId, out existingTable))
-                {
-                    if (existingTable == tableAsset)
-                    {
-                        continue;
-                    }
-
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Error,
-                        "generation-table-id-duplicate",
-                        "Generation table id is duplicated in this Dimension Asset.",
-                        "GenerationTableTemplate",
-                        table.TableId));
-                    continue;
-                }
-
-                tableIds.Add(table.TableId, tableAsset);
-
-                if (!string.IsNullOrEmpty(table.BiomeId) && !biomeIds.ContainsKey(table.BiomeId))
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Error,
-                        "generation-table-biome-missing",
-                        "Generation table references a biome that is not present in the Dimension Asset.",
-                        "GenerationTableTemplate",
-                        table.TableId));
-                }
-
-                List<DimensionGenerationTableEntryDefinition> entries =
-                    new List<DimensionGenerationTableEntryDefinition>();
-                tableAsset.AddEntryDefinitions(table.TableId, entries);
-                if (entries.Count == 0)
-                {
-                    issues.Add(CreateIssue(
-                        DimensionAuthoringSeverity.Warning,
-                        "generation-table-empty",
-                        "Generation table has no entries.",
-                        "GenerationTableTemplate",
-                        table.TableId));
-                    continue;
-                }
-
-                for (int entryIndex = 0; entryIndex < entries.Count; entryIndex++)
-                {
-                    DimensionGenerationTableEntryDefinition entry = entries[entryIndex];
-                    ValidateGenerationTableEntry(entry, entryIds, issues);
-                }
-            }
-        }
-
-        private static void ValidateGenerationTableEntry(
-            DimensionGenerationTableEntryDefinition entry,
-            Dictionary<string, bool> entryIds,
-            List<DimensionAuthoringIssue> issues)
-        {
-            if (string.IsNullOrEmpty(entry.EntryId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "generation-table-entry-id-empty",
-                    "Generation table entry id is required.",
-                    "GenerationTableEntry",
-                    entry.TableId));
-                return;
-            }
-
-            if (entryIds.ContainsKey(entry.EntryId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "generation-table-entry-id-duplicate",
-                    "Generation table entry id is duplicated in this Dimension Asset.",
-                    "GenerationTableEntry",
-                    entry.EntryId));
-                return;
-            }
-
-            entryIds.Add(entry.EntryId, true);
-
-            if (string.IsNullOrEmpty(entry.SubjectId))
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "generation-table-entry-subject-empty",
-                    "Generation table entry subject id is required.",
-                    "GenerationTableEntry",
-                    entry.EntryId));
-            }
-
-            if (entry.Weight <= 0)
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "generation-table-entry-weight-invalid",
-                    "Generation table entry weight must be greater than zero.",
-                    "GenerationTableEntry",
-                    entry.EntryId));
-            }
-
-            if (entry.MinCount < 0 || entry.MaxCount < entry.MinCount)
-            {
-                issues.Add(CreateIssue(
-                    DimensionAuthoringSeverity.Error,
-                    "generation-table-entry-count-invalid",
-                    "Generation table entry count range is invalid.",
-                    "GenerationTableEntry",
-                    entry.EntryId));
-            }
-        }
-
-        private static Dictionary<string, bool> BuildBiomeIdSet(DimensionTemplateAsset template)
-        {
-            Dictionary<string, bool> biomeIds = new Dictionary<string, bool>();
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null || string.IsNullOrEmpty(biome.BiomeId))
-                {
-                    continue;
-                }
-
-                if (!biomeIds.ContainsKey(biome.BiomeId))
-                {
-                    biomeIds.Add(biome.BiomeId, true);
-                }
-            }
-
-            return biomeIds;
         }
 
         private static Dictionary<string, BiomeTemplateAsset> BuildBiomeLookup(
@@ -2594,8 +2022,6 @@ namespace ExpandNullforge.Authoring
         private static bool TryResolvePlayableBounds(
             List<DimensionCompiledBiomeRegion> biomeRegions,
             List<DimensionCompiledScenePlacement> scenePlacements,
-            List<DimensionResourceNodeDefinition> resourceNodes,
-            List<DimensionSpawnRule> spawnRules,
             List<DimensionGenerationPassDefinition> generationPasses,
             out DimensionBounds bounds)
         {
@@ -2613,24 +2039,6 @@ namespace ExpandNullforge.Authoring
                 if (scene.HasLocalBounds)
                 {
                     Merge(ref found, ref result, scene.LocalBounds);
-                }
-            }
-
-            for (int i = 0; i < resourceNodes.Count; i++)
-            {
-                DimensionResourceNodeDefinition node = resourceNodes[i];
-                if (node.HasLocalBounds)
-                {
-                    Merge(ref found, ref result, node.LocalBounds);
-                }
-            }
-
-            for (int i = 0; i < spawnRules.Count; i++)
-            {
-                DimensionSpawnRule rule = spawnRules[i];
-                if (rule.HasLocalBounds)
-                {
-                    Merge(ref found, ref result, rule.LocalBounds);
                 }
             }
 
@@ -2836,18 +2244,13 @@ namespace ExpandNullforge.Authoring
             return value < 0 ? value - alignment - remainder : value - remainder;
         }
 
-        private static int CeilToMultiple(int value, int alignment)
-        {
-            if (alignment <= 1)
-            {
-                return value;
-            }
-
-            int floored = FloorToMultiple(value, alignment);
-            return floored == value ? value : floored + alignment;
-        }
-
-        private static string ResolveCompiledZoneId(DimensionCompiledBiomeRegion region)
+        /// <summary>The zone a compiled region belongs to, whether it named one or not.</summary>
+        /// <remarks>
+        /// ONE COPY, BECAUSE THE ANSWER IS AN ID. The compiler, the manifest builder and the
+        /// service all have to name the same region the same way; if two of them ever disagreed, a
+        /// compiled zone and its manifest entry would sit at different ids and nothing would say so.
+        /// </remarks>
+        internal static string ResolveCompiledZoneId(DimensionCompiledBiomeRegion region)
         {
             if (!string.IsNullOrEmpty(region.ZoneId))
             {
@@ -2862,7 +2265,9 @@ namespace ExpandNullforge.Authoring
             return region.DimensionId + "." + region.BiomeId;
         }
 
-        private static string BuildScopedId(string dimensionId, string zoneId, string id)
+        /// <summary>An id qualified by the dimension, and by the zone when there is one.</summary>
+        /// <remarks>Same rule, same reason as <see cref="ResolveCompiledZoneId"/>: one copy.</remarks>
+        internal static string BuildScopedId(string dimensionId, string zoneId, string id)
         {
             string resolvedId = id ?? string.Empty;
             if (string.IsNullOrEmpty(resolvedId))

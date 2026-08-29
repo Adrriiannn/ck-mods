@@ -12,7 +12,11 @@ namespace ExpandNullforge.Generation
       IDimensionGenerationProvider,
       IDimensionGenerationPassProvider
   {
-    private const int Tileset = 0;
+    // Dirt, and only when nothing says otherwise. This used to be the ONLY tileset the whole file
+    // named, which is why every generated dimension came out a dirt platform however carefully its
+    // biomes were authored. DimensionTerrainMaterialRegistry answers first now; this is what a cell
+    // no biome covers still gets, so an unauthored dimension generates exactly what it always did.
+    private const int FallbackTileset = DimensionTerrainMaterialRegistry.DefaultTileset;
     private const int MaxTilesPerTick = 384;
     private const int ReadyDelayFrames = 2;
 
@@ -74,7 +78,13 @@ namespace ExpandNullforge.Generation
       }
 
       bool waitForTileUpdate = context.PassIndex + 1 >= context.PassCount;
-      return TickSafePlatform(context.GenerationContext, paintBounds, false, waitForTileUpdate);
+      // A full-area pass is the single-provider behavior wearing a pass id, so it keeps the
+      // border walls; only an authored, scoped pass paints an open-edged patch.
+      return TickSafePlatform(
+          context.GenerationContext,
+          paintBounds,
+          !context.Pass.HasLocalBounds,
+          waitForTileUpdate);
     }
 
     private DimensionGenerationProviderResult TickSafePlatform(
@@ -104,7 +114,11 @@ namespace ExpandNullforge.Generation
       GenerationJob job;
       if (!jobs.TryGetValue(key, out job))
       {
-        job = new GenerationJob(paintBounds, addBorderWalls, waitForTileUpdate);
+        job = new GenerationJob(
+            context.Dimension.Id,
+            paintBounds,
+            addBorderWalls,
+            waitForTileUpdate);
       }
 
       if (job.WaitingForTileUpdate)
@@ -132,12 +146,19 @@ namespace ExpandNullforge.Generation
             "Waiting for the tile update buffer.");
       }
 
+      // Asked once per tick rather than per cell: it is a dictionary-count read, and nothing can
+      // register a tileset between two cells of one loop.
+      bool scatterCover = DimensionOverlayRuleRegistry.Any;
+
+      // The budget counts TILE WRITES, not cells, and it is only tested between cells. A cell's
+      // ground and the cover growing on it have to reach the game in the same flush: a ground
+      // write emits a Remove for smallGrass / smallStones / debris / debris2 / wallGrass at its
+      // own cell, so cover queued in an earlier flush than its ground is deleted by that ground.
       int painted = 0;
       while (job.NextIndex < job.TotalTileCount && painted < MaxTilesPerTick)
       {
-        PaintTile(context.Area, job, tileUpdates);
+        painted += PaintTile(context.Area, job, scatterCover, tileUpdates);
         job.NextIndex++;
-        painted++;
       }
 
       if (job.NextIndex >= job.TotalTileCount)
@@ -165,9 +186,20 @@ namespace ExpandNullforge.Generation
           "Generating safe-platform terrain.");
     }
 
-    private static void PaintTile(
+    /// <summary>
+    /// Lays one cell, and returns how many tile writes it queued so the caller's per-tick budget
+    /// can count them.
+    /// </summary>
+    /// <remarks>
+    /// Order inside a cell is ground, then either the border wall or the cover — never both, and
+    /// never cover first. A wall write strips smallGrass and smallStones at its own cell, so
+    /// decorating a cell that is about to take a wall would queue grass that the very next write
+    /// deletes.
+    /// </remarks>
+    private static int PaintTile(
         DimensionArea area,
         GenerationJob job,
+        bool scatterCover,
         DynamicBuffer<TileUpdateBuffer> tileUpdates)
     {
       int width = job.Width;
@@ -176,22 +208,63 @@ namespace ExpandNullforge.Generation
       int2 local = new int2(localX, localY);
       int2 absolute = area.AbsoluteBounds.Min + (local - area.LocalBounds.Min);
 
+      // What this cell's biome says its ground and walls are made of. False means no biome covers
+      // the cell, and dirt is the answer — which is what this provider did for every cell before
+      // the registry existed.
+      int groundTileset;
+      int wallTileset;
+      if (!DimensionTerrainMaterialRegistry.TryResolve(
+              job.DimensionId, local, out groundTileset, out wallTileset))
+      {
+        groundTileset = FallbackTileset;
+        wallTileset = FallbackTileset;
+      }
+
       EntityUtility.AddTile(
-          Tileset,
+          groundTileset,
           TileType.ground,
           absolute,
           true,
           tileUpdates);
+      int written = 1;
 
       if (job.AddBorderWalls && IsBorderTile(local, job.LocalBounds))
       {
         EntityUtility.AddTile(
-            Tileset,
+            wallTileset,
             TileType.wall,
             absolute,
             true,
             tileUpdates);
+        return written + 1;
       }
+
+      if (!scatterCover)
+      {
+        return written;
+      }
+
+      // Grow this block's own decoration on the ground just laid, in the same flush as that
+      // ground. The rules are keyed by the tileset a tile carries, which is why this asks about
+      // groundTileset rather than about the dimension.
+      IReadOnlyList<DimensionOverlayRule> rules = DimensionOverlayRuleRegistry.For(groundTileset);
+      for (int r = 0; r < rules.Count; r++)
+      {
+        if (!DimensionOverlayScatter.ShouldPlace(job.OverlaySeed, absolute, rules[r]))
+        {
+          continue;
+        }
+
+        EntityUtility.AddTile(
+            groundTileset,
+            rules[r].TileType,
+            absolute,
+            true,
+            tileUpdates);
+        written++;
+      }
+
+      return written;
     }
 
     private static bool IsBorderTile(int2 local, DimensionBounds bounds)
@@ -295,6 +368,20 @@ namespace ExpandNullforge.Generation
 
     private struct GenerationJob
     {
+      public readonly string DimensionId;
+
+      /// <summary>
+      /// The scatter seed, taken from the DIMENSION rather than the save.
+      /// </summary>
+      /// <remarks>
+      /// The same choice the painted-map provider makes, for the same reason: an authored
+      /// dimension's decoration is part of its design, and a host and a joining client generate
+      /// terrain independently, so a seed either of them could compute differently would grow
+      /// different grass on the two screens. Both providers hash the id through the one shared
+      /// <see cref="DimensionOverlayScatter.StableHash"/>, so a dimension that has some of its
+      /// ground painted and some of it generated grows one continuous carpet.
+      /// </remarks>
+      public readonly ulong OverlaySeed;
       public readonly DimensionBounds LocalBounds;
       public readonly int Width;
       public readonly int TotalTileCount;
@@ -305,10 +392,14 @@ namespace ExpandNullforge.Generation
       public int ReadyAfterFrame;
 
       public GenerationJob(
+          string dimensionId,
           DimensionBounds localBounds,
           bool addBorderWalls,
           bool waitForTileUpdate)
       {
+        DimensionId = dimensionId ?? string.Empty;
+        OverlaySeed = DimensionOverlayScatter.Hash(
+            0UL, default(int2), DimensionOverlayScatter.StableHash(DimensionId));
         LocalBounds = localBounds;
         int2 size = localBounds.Size;
         Width = math.max(1, size.x);

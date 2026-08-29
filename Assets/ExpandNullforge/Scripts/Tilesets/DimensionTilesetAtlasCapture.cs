@@ -15,8 +15,12 @@ namespace ExpandNullforge.Tilesets
     /// roots/debris/cracks/roof-holes/sun-beam/etc.), each with its full geometry, faces, fill type,
     /// per-state sprite lists and adaptive tables. The mod SDK can't see this at edit time because the
     /// <c>MapWorkshopTilesetBank</c> asset isn't shipped; in-game the bank is loaded, so we enumerate
-    /// <c>PugMapTileset.layers</c> directly (no guess-list) and dump it. Marker <c>[NF_ATLAS]</c>; the mod
-    /// sandbox forbids System.IO, so this uses Debug.Log rather than writing a file. One-time.
+    /// <c>PugMapTileset.layers</c> directly (no guess-list) and dump it. Marker <c>[NF_ATLAS]</c>. It prints
+    /// rather than writing a file because the dump has to be copied out of a player log by hand
+    /// anyway; the sandbox does NOT forbid writing it — <c>API.ConfigFilesystem.Write</c> is the
+    /// game's own sanctioned door and this framework already writes save files through it. One-time,
+    /// and only when the baked atlas is missing, which is why it prints unconditionally: a half dump
+    /// is no use to the person who needs it.
     ///
     /// Line formats (all after the <c>[NF_ATLAS]</c> marker):
     ///   TEX name:WxH        — the bank's packed tileset texture
@@ -72,8 +76,18 @@ namespace ExpandNullforge.Tilesets
                 // Dirt (index 0) is the primary donor; oasis (index 66) is the richest vanilla
                 // tileset (multi-slime/ore/grass states) and becomes the second donor. Each block is
                 // bracketed by TSET markers so the bake tooling can split them.
-                DumpTileset(bank, 0);
-                DumpTileset(bank, 66);
+                HashSet<string> covered = new HashSet<string>(StringComparer.Ordinal);
+                DumpTileset(bank, 0, null, covered);
+                DumpTileset(bank, 66, null, covered);
+
+                // Then everything those two do not have. The BUILT tile types — floor, litFloor,
+                // looseFlooring, rug, bridge, rail, fence, thinWall, greatWall, circuitPlate — are not
+                // terrain, so no terrain tileset carries them; their art and tables live on other
+                // tilesets entirely (offline analysis of the shipped GEN sheets identifies the donors
+                // as the paintable_* family). Sweeping for uncovered layers rather than naming indices
+                // means one run collects them all, and a Core Keeper update that moves a layer to a
+                // different tileset is picked up instead of silently dropping it.
+                DumpUncoveredLayers(bank, covered);
 
                 // Which vanilla tilesets are rigid, and on which layers. Compact on purpose — the
                 // full per-tileset dump above is enormous, and all this question needs is the flag.
@@ -117,7 +131,54 @@ namespace ExpandNullforge.Tilesets
         // EVERY state (0..2 — the runtime indexes all of them by the tile's state; dumping only
         // state 0 was the root of the missing-art gap). State 0 keeps the bare prefix for
         // backward-compatible parsing; states 1+ get a numeric suffix (STD1, SUB2, ...).
-        private static void DumpTileset(MapWorkshopTilesetBank bank, int index)
+        /// <summary>
+        /// Walks the whole bank and dumps, once each, every layer the donor tilesets did not have.
+        /// </summary>
+        /// <remarks>
+        /// The first tileset found carrying a layer wins. That is deliberate: the goal is one complete
+        /// set of layer definitions, not a per-tileset matrix, and dumping every tileset's copy of
+        /// <c>floor</c> would multiply an already enormous log for no extra information.
+        /// </remarks>
+        private static void DumpUncoveredLayers(MapWorkshopTilesetBank bank, HashSet<string> covered)
+        {
+            for (int i = 0; i < bank.tilesets.Count; i++)
+            {
+                MapWorkshopTilesetBank.Tileset entry = bank.tilesets[i];
+                PugMapTileset set = entry != null ? entry.layers : null;
+                if (set == null || set.layers == null || set.layers.Count == 0)
+                {
+                    continue;
+                }
+
+                HashSet<string> missing = null;
+                for (int l = 0; l < set.layers.Count; l++)
+                {
+                    QuadGenerator def = set.layers[l];
+                    if (def == null || covered.Contains(def.layerName.ToString()))
+                    {
+                        continue;
+                    }
+
+                    if (missing == null)
+                    {
+                        missing = new HashSet<string>(StringComparer.Ordinal);
+                    }
+
+                    missing.Add(def.layerName.ToString());
+                }
+
+                if (missing != null)
+                {
+                    DumpTileset(bank, i, missing, covered);
+                }
+            }
+        }
+
+        private static void DumpTileset(
+            MapWorkshopTilesetBank bank,
+            int index,
+            HashSet<string> only,
+            HashSet<string> covered)
         {
             if (bank.tilesets == null || index < 0 || index >= bank.tilesets.Count || bank.tilesets[index] == null)
             {
@@ -134,13 +195,37 @@ namespace ExpandNullforge.Tilesets
             Texture2D packed = bank.tilesets[index].tilesetTextures != null ? bank.tilesets[index].tilesetTextures.texture : null;
             Debug.Log(Marker + "TEX " + TexInfo(packed));
             Debug.Log(Marker + "MAINTEX " + TexInfo(set.tilesetTexture));
-            Debug.Log(Marker + "LAYERS " + set.layers.Count);
+            // The count of layers this block actually emits, not the tileset's total — a filtered
+            // sweep block carries only the layers no earlier tileset covered, and a parser that
+            // trusted the total would wait for layers that never arrive.
+            int emitted = 0;
+            for (int l = 0; l < set.layers.Count; l++)
+            {
+                QuadGenerator candidate = set.layers[l];
+                if (candidate != null && (only == null || only.Contains(candidate.layerName.ToString())))
+                {
+                    emitted++;
+                }
+            }
+
+            Debug.Log(Marker + "LAYERS " + emitted);
 
             foreach (QuadGenerator def in set.layers)
             {
                 if (def == null)
                 {
                     continue;
+                }
+
+                string layerKey = def.layerName.ToString();
+                if (only != null && !only.Contains(layerKey))
+                {
+                    continue;
+                }
+
+                if (covered != null)
+                {
+                    covered.Add(layerKey);
                 }
 
                 Debug.Log(Marker + "LAYER " + LayerConfig(def));

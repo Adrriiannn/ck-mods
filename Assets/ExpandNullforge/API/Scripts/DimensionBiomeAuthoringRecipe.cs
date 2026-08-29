@@ -314,8 +314,7 @@ namespace ExpandNullforge.Api
 
             if (sectionKind == DimensionBiomeAuthoringRecipeSectionKind.GenerationFlow)
             {
-                return contentKind == DimensionAuthoringContentSummaryKind.BiomeGenerationProfile ||
-                    contentKind == DimensionAuthoringContentSummaryKind.GenerationPass ||
+                return contentKind == DimensionAuthoringContentSummaryKind.GenerationPass ||
                     contentKind == DimensionAuthoringContentSummaryKind.GenerationTable ||
                     contentKind == DimensionAuthoringContentSummaryKind.GenerationTableEntry;
             }

@@ -196,7 +196,7 @@ namespace ExpandNullforge.Foundation
       {
         AddDiagnostic(DimensionDiagnosticSeverity.Info, dimensionId, "Generation status changed to " + status.State + ".");
         DimensionFrameworkLog.Verbose(
-            "[ExpandNullforge] Generation status changed. dimension=" +
+            "Generation status changed. dimension=" +
             dimensionId +
             " bounds=(" +
             localBounds.Min.x +
@@ -718,6 +718,63 @@ namespace ExpandNullforge.Foundation
       return true;
     }
 
+    /// <summary>
+    /// The arena reset's forget: every generated-area record of one dimension, starter
+    /// protection bypassed.
+    /// </summary>
+    /// <remarks>
+    /// The public forget refuses starter areas because forgetting one under a live dimension
+    /// strands its entry. The arena reset is the one caller that MEANS it — it forgets so the
+    /// starter re-queues and regenerates a clean floor. Terrain and entity clearing are the
+    /// reset system's job; this only clears the bookkeeping that would otherwise make
+    /// RequestGeneration return Ready without doing anything.
+    /// </remarks>
+    internal void ForgetGeneratedAreasForReset(string dimensionId)
+    {
+      if (string.IsNullOrEmpty(dimensionId))
+      {
+        return;
+      }
+
+      string prefix = dimensionId + "|";
+      List<string> keys = new List<string>();
+      List<DimensionGenerationStatus> statuses = new List<DimensionGenerationStatus>();
+      foreach (KeyValuePair<string, DimensionGenerationStatus> entry in generationStatuses)
+      {
+        if (entry.Key.StartsWith(prefix, StringComparison.Ordinal))
+        {
+          keys.Add(entry.Key);
+          statuses.Add(entry.Value);
+        }
+      }
+
+      for (int i = 0; i < keys.Count; i++)
+      {
+        RuntimeGenerationRecord record;
+        if (runtimeGenerationRecords.TryGetValue(keys[i], out record))
+        {
+          CancelRuntimeGenerationRecord(record, "Arena reset forgot this generated area.", false, null);
+        }
+
+        generationStatuses.Remove(keys[i]);
+        RemovePersistedGeneratedAreaIfWorldRegistryLoaded(dimensionId, statuses[i].LocalBounds);
+      }
+
+      if (keys.Count > 0)
+      {
+        // Once, not per area: the lifecycle refresh walks the starter state and re-queues
+        // the entry area, and doing that per forgotten record is quadratic noise.
+        RefreshStarterLifecycleForGeneratedArea(
+            dimensionId,
+            statuses[0].LocalBounds,
+            "arena reset");
+        AddDiagnostic(
+            DimensionDiagnosticSeverity.Info,
+            dimensionId,
+            "Arena reset forgot " + keys.Count + " generated area(s); the starter will regenerate.");
+      }
+    }
+
     public bool TryGetGenerationReservation(
         string reservationId,
         out DimensionGenerationReservation reservation)
@@ -959,6 +1016,21 @@ namespace ExpandNullforge.Foundation
       }
 
       generationPasses[generationPass.PassId] = generationPass;
+
+      // A type that promises "the authored stamp is the whole place" is contradicted by a
+      // procedural pass. Registered anyway — the author may know something — but said aloud.
+      DimensionDefinition passDimension;
+      if (TryGetDimension(generationPass.DimensionId, out passDimension) &&
+          DimensionTypePolicy.For(passDimension.Type).WarnOnProceduralContent)
+      {
+        AddDiagnostic(
+            DimensionDiagnosticSeverity.Warning,
+            generationPass.DimensionId,
+            "Generation pass '" + generationPass.PassId + "' targets a " +
+            passDimension.Type + "-type dimension, which is meant to stay exactly as " +
+            "authored. The pass will run; make sure that is what you want.");
+      }
+
       RaiseGenerationPassChanged(
           generationPass,
           DimensionGenerationPassChangeKind.Registered,

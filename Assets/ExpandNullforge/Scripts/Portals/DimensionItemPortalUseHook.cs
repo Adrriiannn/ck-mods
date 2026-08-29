@@ -68,11 +68,42 @@ namespace ExpandNullforge.Portals
     }
 
     /// <summary>
-    /// Reliability companion to disabling Burst for <see cref="EquipmentUpdateSystem"/>: the update job
-    /// can start after <c>OnUpdate</c> returns (when Burst would already be re-enabled), so we force the
-    /// job to complete at the end of <c>OnUpdate</c> while Burst is still off. High priority ensures we
-    /// run before Burst is turned back on. Mirrors the ModSDK TeleportAfterEating example.
+    /// Forces <see cref="EquipmentUpdateSystem"/>'s update job to finish before <c>OnUpdate</c>
+    /// returns. Without this the item-use hook's work is scheduled and never joined here.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// WHY THE JOB IS THE THING THAT MATTERS. The slot handlers we hook —
+    /// <c>PlaceObjectSlot.UpdateEquipment</c> and friends — are not called from <c>OnUpdate</c>. They
+    /// run inside <c>EquipmentUpdateSystem.UpdateJob</c>, which <c>OnUpdate</c> schedules into
+    /// <c>state.Dependency</c> and does not complete. So every side effect our hook produces (the
+    /// portal spawn enqueue, tile writes through the lifted <c>AddTile</c> guard) is still in flight
+    /// when the system returns.
+    /// </para>
+    /// <para>
+    /// DO NOT DELETE THIS ON THE ASSUMPTION THAT BurstDisabler COVERS IT. It does not, for the plain
+    /// call we make. <c>EquipmentUpdateSystem</c> is a <c>struct : ISystem</c>, i.e. unmanaged, and
+    /// for unmanaged systems <c>DisableBurstForSystemInternal</c> disables Burst through
+    /// <c>SystemBaseRegistry.SetBurstEnabledForSystem</c> and then calls <c>PatchSystem</c> — which
+    /// adds <b>no patches whatsoever</b> unless <c>addCompleteDependencyPatch</c> is set. The only
+    /// thing that flag adds is a postfix on <c>OnUpdate</c> that completes the dependency: exactly
+    /// what this class does. So <c>DisableBurstForSystemAndJobs</c> and this patch are two spellings
+    /// of one mechanism, and using both would just complete an already-complete handle.
+    /// </para>
+    /// <para>
+    /// THE PRIORITY IS LOAD-BEARING AFTER ALL, and the reason matters. An earlier revision of this
+    /// comment claimed Burst is "switched off once at the registry level rather than toggled around
+    /// each update". That is false, and it is worth being exact about because the whole hook rests on
+    /// it: <c>DisableBurstForSystemPatch</c> is a prefix and postfix on
+    /// <c>Unity.Entities.WorldUnmanagedImpl.UpdateSystem</c>, and the prefix sets the PROCESS-GLOBAL
+    /// <c>BurstCompiler.Options.EnableBurstCompilation</c> to false while the postfix puts it back.
+    /// Burst really is toggled around every single update, and that toggle is the only reason the
+    /// managed bodies of <c>EquipmentSlot.UpdateEquipment</c> and <c>EntityUtility.AddTile</c> run at
+    /// all — they are called from inside the Bursted <c>UpdateJob</c>, where a Harmony patch would
+    /// otherwise never be reached. So this postfix has to join the job before Burst is switched back
+    /// on, and High is what puts it there.
+    /// </para>
+    /// </remarks>
     [HarmonyPatch(typeof(EquipmentUpdateSystem), "OnUpdate")]
     internal static class DimensionEquipmentUpdateForceJobCompletePatch
     {

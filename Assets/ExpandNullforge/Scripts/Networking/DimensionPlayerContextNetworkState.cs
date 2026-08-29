@@ -5,6 +5,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.NetCode;
 using UnityEngine;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Networking
 {
@@ -91,7 +92,7 @@ namespace ExpandNullforge.Networking
           {
             RequestId = requestId,
             IncludePersistedFallback = includePersistedFallback ? (byte)1 : (byte)0,
-            Reason = ToFixed128(reason)
+            Reason = DimensionFixedStrings.ToFixed128(reason)
           });
 
       Action<uint> startedHandler = ContextRequestStarted;
@@ -242,26 +243,6 @@ namespace ExpandNullforge.Networking
       }
 
       return nextRequestId;
-    }
-
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = Math.Min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
     }
 
     private static bool TryGetClientEntityManager(out EntityManager entityManager)

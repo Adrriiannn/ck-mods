@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace ExpandNullforge.Authoring
 {
-    [CreateAssetMenu(menuName = "Dimension Framework/Scene Template")]
+    [CreateAssetMenu(menuName = "Dimensions API/Scene Template")]
     public sealed class SceneTemplateAsset : ScriptableObject
     {
         [SerializeField] private string sceneId = "scene";
@@ -19,19 +19,46 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private Vector2Int exactLocalPosition;
         [SerializeField] private Vector2Int preferredLocalMin = new Vector2Int(-64, -64);
         [SerializeField] private Vector2Int preferredLocalMaxExclusive = new Vector2Int(64, 64);
+
+        [Tooltip("Nearest this may appear to the dimension's centre, in tiles.")]
+        [Min(0)]
+        [SerializeField] private int minRadiusTiles;
+
+        [Tooltip("Furthest out it may appear, in tiles.")]
+        [Min(1)]
+        [SerializeField] private int maxRadiusTiles = 256;
+
+        [Tooltip("Only place it where this biome reaches. Empty means anywhere in the band.")]
+        [SerializeField] private string radialBiomeId = string.Empty;
         [SerializeField] private int weight = 1;
         [SerializeField] private int priority;
         [SerializeField] private bool enabled = true;
         [SerializeField] private bool required;
         [SerializeField] private bool unique = true;
-        [SerializeField] private DimensionScenePropTemplate[] props =
-            new DimensionScenePropTemplate[0];
-        [SerializeField] private DimensionSceneLootContainerTemplate[] lootContainers =
-            new DimensionSceneLootContainerTemplate[0];
-        [SerializeField] private DimensionSceneSpawnPointTemplate[] spawnPoints =
-            new DimensionSceneSpawnPointTemplate[0];
+
+        [Tooltip("Let Core Keeper's own Overworld generation grow this scene naturally, the way " +
+                 "vanilla ruins appear. Off means the scene only exists where this dimension " +
+                 "places it.")]
+        [SerializeField] private bool spawnInOverworld;
+
+        [Tooltip("Vanilla biome names this may grow in (Forest, Stone, Nature, Sea, Desert, " +
+                 "Crystal). Custom biomes cannot go here: the Overworld only ever samples " +
+                 "vanilla biomes, so a custom name would be configuration that does nothing.")]
+        [SerializeField] private string[] overworldBiomeNames = new string[0];
+
+        [Tooltip("How many the Overworld may grow per world.")]
+        [Min(1)]
+        [SerializeField] private int overworldMaxOccurrences = 1;
+
+        [Tooltip("Nearest to the Core it may grow, in tiles. Classic worlds only.")]
+        [Min(0)]
+        [SerializeField] private int minDistanceFromCore;
         [SerializeField] private DimensionSceneTriggerTemplate[] triggers =
             new DimensionSceneTriggerTemplate[0];
+        [SerializeField] private DimensionSceneTileTemplate[] tiles =
+            new DimensionSceneTileTemplate[0];
+        [SerializeField] private DimensionSceneObjectTemplate[] sceneObjects =
+            new DimensionSceneObjectTemplate[0];
 
         public string SceneId
         {
@@ -63,6 +90,36 @@ namespace ExpandNullforge.Authoring
             get { return placementMode; }
         }
 
+        /// <summary>Nearest this scene may appear to the dimension's centre.</summary>
+        public int MinRadiusTiles
+        {
+            get { return minRadiusTiles < 0 ? 0 : minRadiusTiles; }
+        }
+
+        /// <summary>
+        /// Furthest out it may appear, never inside the minimum.
+        /// </summary>
+        /// <remarks>
+        /// Clamped rather than validated because an inverted band produces no placement at all, and a
+        /// landmark that silently never appears is the hardest kind of authoring mistake to notice.
+        /// </remarks>
+        public int MaxRadiusTiles
+        {
+            get { return maxRadiusTiles <= MinRadiusTiles ? MinRadiusTiles + 1 : maxRadiusTiles; }
+        }
+
+        /// <summary>The biome the band is restricted to, or empty for the whole ring.</summary>
+        public string RadialBiomeId
+        {
+            get { return radialBiomeId ?? string.Empty; }
+        }
+
+        /// <summary>Whether this scene is placed by distance from the centre.</summary>
+        public bool UsesRadialPlacement
+        {
+            get { return placementMode == DimensionScenePlacementMode.RadialBand; }
+        }
+
         public Vector2Int FootprintSize
         {
             get { return footprintSize; }
@@ -83,24 +140,42 @@ namespace ExpandNullforge.Authoring
             get { return unique; }
         }
 
+        /// <summary>Relative frequency among repeatable scenes competing for the same ground.</summary>
+        public int Weight
+        {
+            get { return weight < 1 ? 1 : weight; }
+        }
+
+        public Vector2Int ExactLocalPosition
+        {
+            get { return exactLocalPosition; }
+        }
+
+        /// <summary>Whether vanilla Overworld generation may grow this scene naturally.</summary>
+        public bool SpawnInOverworld
+        {
+            get { return spawnInOverworld; }
+        }
+
+        /// <summary>Vanilla biome NAMES only — resolved against the game's Biome enum at build.</summary>
+        public string[] OverworldBiomeNames
+        {
+            get { return overworldBiomeNames ?? new string[0]; }
+        }
+
+        public int OverworldMaxOccurrences
+        {
+            get { return overworldMaxOccurrences < 1 ? 1 : overworldMaxOccurrences; }
+        }
+
+        public int MinDistanceFromCore
+        {
+            get { return minDistanceFromCore < 0 ? 0 : minDistanceFromCore; }
+        }
+
         public int Priority
         {
             get { return priority; }
-        }
-
-        public DimensionScenePropTemplate[] Props
-        {
-            get { return props ?? new DimensionScenePropTemplate[0]; }
-        }
-
-        public DimensionSceneLootContainerTemplate[] LootContainers
-        {
-            get { return lootContainers ?? new DimensionSceneLootContainerTemplate[0]; }
-        }
-
-        public DimensionSceneSpawnPointTemplate[] SpawnPoints
-        {
-            get { return spawnPoints ?? new DimensionSceneSpawnPointTemplate[0]; }
         }
 
         public DimensionSceneTriggerTemplate[] Triggers
@@ -108,15 +183,45 @@ namespace ExpandNullforge.Authoring
             get { return triggers ?? new DimensionSceneTriggerTemplate[0]; }
         }
 
-        public int AuthoredContentCount
+        /// <summary>
+        /// The terrain this scene stamps: the walls, floors and water that make it a place rather than
+        /// a scattering of props.
+        /// </summary>
+        /// <remarks>
+        /// Kept as its own list rather than folded into <see cref="SceneObjects"/> because the two
+        /// travel together but mean different things: tiles are the terrain, objects the furniture.
+        /// Both are handed to Core Keeper's scene table so the engine stamps them itself — which is
+        /// what lets a scene be embedded in a generated dungeon room rather than only dropped at a
+        /// coordinate we choose.
+        /// </remarks>
+        public DimensionSceneTileTemplate[] Tiles
         {
-            get
-            {
-                return CountEnabled(Props) +
-                    CountEnabled(LootContainers) +
-                    CountEnabled(SpawnPoints) +
-                    CountEnabled(Triggers);
-            }
+            get { return tiles ?? new DimensionSceneTileTemplate[0]; }
+        }
+
+        /// <summary>Whether this scene stamps terrain of its own.</summary>
+        public bool HasTiles
+        {
+            get { return tiles != null && tiles.Length > 0; }
+        }
+
+        /// <summary>
+        /// The chests, statues, torches and other objects this scene brings with it.
+        /// </summary>
+        /// <remarks>
+        /// Travels with the tiles into Core Keeper's own scene table, rather than being placed by the
+        /// framework afterwards — so a dungeon room built from this scene arrives complete, in one
+        /// stamp, the way a hand-authored vanilla room does.
+        /// </remarks>
+        public DimensionSceneObjectTemplate[] SceneObjects
+        {
+            get { return sceneObjects ?? new DimensionSceneObjectTemplate[0]; }
+        }
+
+        /// <summary>Whether this scene places anything beyond terrain.</summary>
+        public bool HasSceneObjects
+        {
+            get { return sceneObjects != null && sceneObjects.Length > 0; }
         }
 
         public void ConfigureIdentity(
@@ -165,47 +270,9 @@ namespace ExpandNullforge.Authoring
             allowedBiomeIds = values.ToArray();
         }
 
-        public void SetProps(IReadOnlyList<DimensionScenePropTemplate> values)
-        {
-            props = CopyValues(values);
-        }
-
-        public void SetLootContainers(IReadOnlyList<DimensionSceneLootContainerTemplate> values)
-        {
-            lootContainers = CopyValues(values);
-        }
-
-        public void SetSpawnPoints(IReadOnlyList<DimensionSceneSpawnPointTemplate> values)
-        {
-            spawnPoints = CopyValues(values);
-        }
-
-        public void SetTriggers(IReadOnlyList<DimensionSceneTriggerTemplate> values)
-        {
-            triggers = CopyValues(values);
-        }
-
         public void ApplyAutomaticPlacement(Vector2Int newFootprintSize)
         {
             placementMode = DimensionScenePlacementMode.Automatic;
-            footprintSize = EnsurePositiveSize(newFootprintSize);
-        }
-
-        public void ApplyExactPlacement(Vector2Int newExactLocalPosition, Vector2Int newFootprintSize)
-        {
-            placementMode = DimensionScenePlacementMode.ExactLocalPosition;
-            exactLocalPosition = newExactLocalPosition;
-            footprintSize = EnsurePositiveSize(newFootprintSize);
-        }
-
-        public void ApplyPreferredPlacement(
-            Vector2Int newPreferredLocalMin,
-            Vector2Int newPreferredLocalMaxExclusive,
-            Vector2Int newFootprintSize)
-        {
-            placementMode = DimensionScenePlacementMode.PreferredBounds;
-            preferredLocalMin = newPreferredLocalMin;
-            preferredLocalMaxExclusive = EnsureExclusiveMax(newPreferredLocalMin, newPreferredLocalMaxExclusive);
             footprintSize = EnsurePositiveSize(newFootprintSize);
         }
 
@@ -242,18 +309,6 @@ namespace ExpandNullforge.Authoring
                 enabled);
         }
 
-        public DimensionSceneDefinition ToSceneDefinition(string dimensionId, DimensionBounds localBounds)
-        {
-            return new DimensionSceneDefinition(
-                sceneId,
-                displayName,
-                dimensionId,
-                localBounds,
-                kind,
-                priority,
-                enabled ? DimensionSceneState.Planned : DimensionSceneState.Disabled);
-        }
-
         public void AddAssetReferencesTo(
             string contentPackId,
             string dimensionId,
@@ -274,26 +329,6 @@ namespace ExpandNullforge.Authoring
                 priority,
                 enabled,
                 "Scene template source.");
-
-            DimensionScenePropTemplate[] propValues = Props;
-            for (int i = 0; i < propValues.Length; i++)
-            {
-                DimensionScenePropTemplate prop = propValues[i];
-                if (prop != null && prop.Enabled)
-                {
-                    prop.AddAssetReferencesTo(contentPackId, dimensionId, zoneId, sceneId, references);
-                }
-            }
-
-            DimensionSceneLootContainerTemplate[] containerValues = LootContainers;
-            for (int i = 0; i < containerValues.Length; i++)
-            {
-                DimensionSceneLootContainerTemplate container = containerValues[i];
-                if (container != null && container.Enabled)
-                {
-                    container.AddAssetReferencesTo(contentPackId, dimensionId, zoneId, sceneId, references);
-                }
-            }
         }
 
         private static DimensionBounds BoundsFromPositionAndSize(Vector2Int position, Vector2Int size)
@@ -306,13 +341,6 @@ namespace ExpandNullforge.Authoring
         private static Vector2Int EnsurePositiveSize(Vector2Int size)
         {
             return new Vector2Int(Mathf.Max(1, size.x), Mathf.Max(1, size.y));
-        }
-
-        private static Vector2Int EnsureExclusiveMax(Vector2Int localMin, Vector2Int localMaxExclusive)
-        {
-            return new Vector2Int(
-                Mathf.Max(localMin.x + 1, localMaxExclusive.x),
-                Mathf.Max(localMin.y + 1, localMaxExclusive.y));
         }
 
         private static bool ContainsString(List<string> values, string value)
@@ -333,101 +361,5 @@ namespace ExpandNullforge.Authoring
             return false;
         }
 
-        private static T[] CopyValues<T>(IReadOnlyList<T> source)
-            where T : class
-        {
-            if (source == null || source.Count == 0)
-            {
-                return new T[0];
-            }
-
-            List<T> values = new List<T>();
-            for (int i = 0; i < source.Count; i++)
-            {
-                T value = source[i];
-                if (value != null)
-                {
-                    values.Add(value);
-                }
-            }
-
-            return values.ToArray();
-        }
-
-        private static int CountEnabled(DimensionScenePropTemplate[] values)
-        {
-            if (values == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            for (int i = 0; i < values.Length; i++)
-            {
-                if (values[i] != null && values[i].Enabled)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static int CountEnabled(DimensionSceneLootContainerTemplate[] values)
-        {
-            if (values == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            for (int i = 0; i < values.Length; i++)
-            {
-                if (values[i] != null && values[i].Enabled)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static int CountEnabled(DimensionSceneSpawnPointTemplate[] values)
-        {
-            if (values == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            for (int i = 0; i < values.Length; i++)
-            {
-                if (values[i] != null && values[i].Enabled)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static int CountEnabled(DimensionSceneTriggerTemplate[] values)
-        {
-            if (values == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            for (int i = 0; i < values.Length; i++)
-            {
-                if (values[i] != null && values[i].Enabled)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
     }
 }

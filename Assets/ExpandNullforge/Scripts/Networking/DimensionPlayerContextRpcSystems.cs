@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.NetCode;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Networking
 {
@@ -277,9 +278,9 @@ namespace ExpandNullforge.Networking
         RequestId = requestId,
         Known = (byte)1,
         PersistedFallback = persistedFallback ? (byte)1 : (byte)0,
-        Code = ToFixed64(code),
-        Message = ToFixed128(message),
-        DimensionId = ToFixed64(context.DimensionId),
+        Code = DimensionFixedStrings.ToFixed64(code),
+        Message = DimensionFixedStrings.ToFixed128(message),
+        DimensionId = DimensionFixedStrings.ToFixed64(context.DimensionId),
         AbsoluteX = context.AbsolutePosition.x,
         AbsoluteY = context.AbsolutePosition.y,
         LocalX = context.LocalPosition.x,
@@ -297,8 +298,8 @@ namespace ExpandNullforge.Networking
         RequestId = requestId,
         Known = 0,
         PersistedFallback = 0,
-        Code = ToFixed64(code),
-        Message = ToFixed128(message),
+        Code = DimensionFixedStrings.ToFixed64(code),
+        Message = DimensionFixedStrings.ToFixed128(message),
         DimensionId = default,
         AbsoluteX = 0f,
         AbsoluteY = 0f,
@@ -353,45 +354,6 @@ namespace ExpandNullforge.Networking
       }
     }
 
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
-
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 
   [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]

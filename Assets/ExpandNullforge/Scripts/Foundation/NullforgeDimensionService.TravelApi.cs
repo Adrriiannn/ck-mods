@@ -313,6 +313,12 @@ namespace ExpandNullforge.Foundation
       };
 
       pendingTravelByPlayerId[playerId] = record;
+
+      // The departure is committed, so the portal's offering is taken now. The ledger no-ops for
+      // portals without offering slots, and the server system removes only the entries flagged to
+      // be consumed — a museum-piece requirement ("show me the crown") keeps its crown.
+      Portals.DimensionPortalOfferingLedger.QueueConsumption(request.PortalId);
+
       if (preloadDestination)
       {
         RaiseTravelUpdated(record);

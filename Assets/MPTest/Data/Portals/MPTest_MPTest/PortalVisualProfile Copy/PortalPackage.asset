@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b6485d7a9ca4cbfb292b785671ac4f2, type: 3}
+  m_Name: PortalPackage
+  m_EditorClassIdentifier: 
+  schemaVersion: 2
+  packageId: 8ae70649d21e4d14a8d32ad0e9433bf6
+  displayName: PortalVisualProfile Copy
+  dimensionId: MPTest:MPTest
+  profile: {fileID: 11400000, guid: 1f77868c1c7667e4895bae3c0f6d146b, type: 2}
+  artwork:
+  - role: Frame
+    assetGuid: da7f4745ad3df5d43b08d991fabe9f77
+    relativePath: Artwork/Frame/PortalProfile_Frame.asset
+    addressLow: -57607262143730119
+    addressHigh: -2193520227579395433
+  - role: Charge
+    assetGuid: a9580de1a8b09e440bf97cb965e98564
+    relativePath: Artwork/Charge/PortalProfile_ChargeSweep.asset
+    addressLow: -9033933330393976299
+    addressHigh: 4874208067012417103
+  - role: Milestones
+    assetGuid: 385bfcaf86b857540b2f23a2d37eec41
+    relativePath: Artwork/Milestones/PortalProfile_Milestones.asset
+    addressLow: 8075902707644486961
+    addressHigh: -6121222969425063441
+  - role: Center
+    assetGuid: a61147fae97c415498a49a1729deebba
+    relativePath: Artwork/Center/PortalProfile_Center.asset
+    addressLow: 377992148780385305
+    addressHigh: 2458367088881097223
+  dependencies: []

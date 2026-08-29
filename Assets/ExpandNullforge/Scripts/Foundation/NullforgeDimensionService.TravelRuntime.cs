@@ -1,6 +1,7 @@
 using System;
 using ExpandNullforge.Api;
 using ExpandNullforge.Persistence;
+using ExpandNullforge.Portals;
 using Pug.UnityExtensions;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -331,6 +332,12 @@ namespace ExpandNullforge.Foundation
         return;
       }
 
+      // Vanilla writes the requested position through untouched — a portal aimed at solid rock lands
+      // the player inside it. Every teleport this framework issues passes through here, so this is
+      // the one place that has to care. A destination whose chunk has not streamed in yet is left
+      // alone and re-examined on the next retry, 1.5s later.
+      EnsureArrivalIsStandable(record);
+
       DynamicBuffer<UIActionBuffer> actionBuffer = entityManager.GetBuffer<UIActionBuffer>(record.Player);
       actionBuffer.Add(new UIActionBuffer
       {
@@ -356,6 +363,48 @@ namespace ExpandNullforge.Foundation
           DimensionDiagnosticSeverity.Info,
           record.TargetDimensionId,
           "Vanilla teleport queued for dimension travel " + record.TravelId + " attempt " + record.TeleportAttemptCount + ".");
+    }
+
+    /// <summary>
+    /// Moves a travel's arrival point onto a tile the player can stand on, when the one it asked for
+    /// is solid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs on every queue attempt rather than once per travel, and that is deliberate: the first
+    /// attempt often fires before the destination chunk has streamed in, when the tiles are simply not
+    /// there to read. Re-checking on each retry means a late-loading destination still gets corrected,
+    /// and a destination that was already fine costs one lookup and changes nothing.
+    /// </para>
+    /// <para>
+    /// The local position is kept in step with the absolute one so anything that later reads the
+    /// record — diagnostics, the arrival check in <c>ProcessPendingTravel</c>, a fallback retarget —
+    /// sees where the player actually went, not where they were originally aimed.
+    /// </para>
+    /// </remarks>
+    private void EnsureArrivalIsStandable(PendingTravelRecord record)
+    {
+      float2 corrected;
+      if (!DimensionArrivalTile.TryResolveStandable(serverWorld, record.TargetAbsolutePosition, out corrected))
+      {
+        return;
+      }
+
+      float2 requested = record.TargetAbsolutePosition;
+      record.TargetAbsolutePosition = corrected;
+
+      float2 correctedLocal;
+      if (TryToLocal(record.TargetDimensionId, corrected, out correctedLocal))
+      {
+        record.TargetLocalPosition = correctedLocal;
+      }
+
+      AddDiagnostic(
+          DimensionDiagnosticSeverity.Warning,
+          record.TargetDimensionId,
+          "Travel " + record.TravelId + " was aimed at " + requested +
+          ", which is not standable; the player was moved to the nearest open tile at " + corrected +
+          ". Check the portal's destination so players arrive where you intended.");
     }
 
     private bool TryRetargetPendingTravelToFallback(

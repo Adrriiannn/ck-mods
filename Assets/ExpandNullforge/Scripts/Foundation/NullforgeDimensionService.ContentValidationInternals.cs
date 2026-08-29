@@ -257,19 +257,6 @@ namespace ExpandNullforge.Foundation
             "scene");
       }
 
-      foreach (DimensionSpawnRule rule in spawnRules.Values)
-      {
-        AddUnownedContentValidationWarning(
-            issues,
-            request,
-            ref errorCount,
-            ref warningCount,
-            rule.Enabled,
-            DimensionContentRecordKind.SpawnRule,
-            rule.RuleId,
-            "spawn rule");
-      }
-
       foreach (DimensionEncounterDefinition encounter in encounters.Values)
       {
         AddUnownedContentValidationWarning(
@@ -296,19 +283,6 @@ namespace ExpandNullforge.Foundation
             "generation pass");
       }
 
-      foreach (DimensionResourceNodeDefinition node in resourceNodes.Values)
-      {
-        AddUnownedContentValidationWarning(
-            issues,
-            request,
-            ref errorCount,
-            ref warningCount,
-            node.Enabled,
-            DimensionContentRecordKind.ResourceNode,
-            node.NodeId,
-            "resource node");
-      }
-
       foreach (DimensionWorldEventDefinition worldEvent in worldEvents.Values)
       {
         AddUnownedContentValidationWarning(
@@ -320,19 +294,6 @@ namespace ExpandNullforge.Foundation
             DimensionContentRecordKind.WorldEvent,
             worldEvent.EventId,
             "world event");
-      }
-
-      foreach (DimensionEnvironmentProfile profile in environmentProfiles.Values)
-      {
-        AddUnownedContentValidationWarning(
-            issues,
-            request,
-            ref errorCount,
-            ref warningCount,
-            profile.Enabled,
-            DimensionContentRecordKind.EnvironmentProfile,
-            profile.ProfileId,
-            "environment profile");
       }
 
       foreach (DimensionBiomeDefinition biome in biomes.Values)
@@ -348,31 +309,6 @@ namespace ExpandNullforge.Foundation
             "biome");
       }
 
-      foreach (DimensionGenerationTableDefinition table in generationTables.Values)
-      {
-        AddUnownedContentValidationWarning(
-            issues,
-            request,
-            ref errorCount,
-            ref warningCount,
-            table.Enabled,
-            DimensionContentRecordKind.GenerationTable,
-            table.TableId,
-            "generation table");
-      }
-
-      foreach (DimensionGenerationTableEntryDefinition entry in generationTableEntries.Values)
-      {
-        AddUnownedContentValidationWarning(
-            issues,
-            request,
-            ref errorCount,
-            ref warningCount,
-            entry.Enabled,
-            DimensionContentRecordKind.GenerationTableEntry,
-            entry.EntryId,
-            "generation table entry");
-      }
     }
 
     private void AddUnownedContentValidationWarning(
@@ -812,26 +748,16 @@ namespace ExpandNullforge.Foundation
           return anchors.ContainsKey(recordId);
         case DimensionContentRecordKind.Biome:
           return biomes.ContainsKey(recordId);
-        case DimensionContentRecordKind.GenerationTable:
-          return generationTables.ContainsKey(recordId);
-        case DimensionContentRecordKind.GenerationTableEntry:
-          return generationTableEntries.ContainsKey(recordId);
         case DimensionContentRecordKind.ZoneDefinition:
           return zoneDefinitions.ContainsKey(recordId);
         case DimensionContentRecordKind.ZoneProvider:
           return zoneProviders.ContainsKey(recordId);
-        case DimensionContentRecordKind.EnvironmentProfile:
-          return environmentProfiles.ContainsKey(recordId);
         case DimensionContentRecordKind.Scene:
           return scenes.ContainsKey(recordId);
         case DimensionContentRecordKind.SceneTemplate:
           return sceneTemplates.ContainsKey(recordId);
         case DimensionContentRecordKind.Encounter:
           return encounters.ContainsKey(recordId);
-        case DimensionContentRecordKind.ResourceNode:
-          return resourceNodes.ContainsKey(recordId);
-        case DimensionContentRecordKind.SpawnRule:
-          return spawnRules.ContainsKey(recordId);
         case DimensionContentRecordKind.WorldEvent:
           return worldEvents.ContainsKey(recordId);
         case DimensionContentRecordKind.ProgressFlag:

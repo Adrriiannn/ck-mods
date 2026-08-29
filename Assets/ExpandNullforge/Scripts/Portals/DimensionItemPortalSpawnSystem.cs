@@ -9,6 +9,7 @@ using Unity.Mathematics;
 using Unity.NetCode;
 using Unity.Transforms;
 using UnityEngine;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Portals
 {
@@ -158,7 +159,7 @@ namespace ExpandNullforge.Portals
                 if (now - request.RequestedAt > ReopenTimeoutSeconds)
                 {
                     DimensionFrameworkLog.Verbose(
-                        "[ExpandNullforge] Dropped item-portal reopen at (" +
+                        "Dropped item-portal reopen at (" +
                         request.Tile.x + ", " + request.Tile.y +
                         ") — the area never loaded.");
                     continue;
@@ -271,7 +272,7 @@ namespace ExpandNullforge.Portals
             if (portalObjectId == ObjectID.None)
             {
                 DimensionFrameworkLog.Warning(
-                    "[ExpandNullforge] Item portal could not resolve portal object '" +
+                    "Item portal could not resolve portal object '" +
                     config.PortalObjectName + "'.");
                 return false;
             }
@@ -354,8 +355,8 @@ namespace ExpandNullforge.Portals
 
             DimensionPortalCD portal = new DimensionPortalCD
             {
-                PortalId = ToFixed64(portalId),
-                TargetDimensionId = ToFixed64(targetDimensionId),
+                PortalId = DimensionFixedStrings.ToFixed64(portalId),
+                TargetDimensionId = DimensionFixedStrings.ToFixed64(targetDimensionId),
                 TargetLocalX = 0f,
                 TargetLocalY = 0f,
                 ActivationCooldownSeconds = 0f,
@@ -461,15 +462,5 @@ namespace ExpandNullforge.Portals
             ecb.Dispose();
         }
 
-        private static FixedString64Bytes ToFixed64(string value)
-        {
-            FixedString64Bytes result = default(FixedString64Bytes);
-            if (!string.IsNullOrEmpty(value))
-            {
-                result.CopyFromTruncated(value);
-            }
-
-            return result;
-        }
     }
 }

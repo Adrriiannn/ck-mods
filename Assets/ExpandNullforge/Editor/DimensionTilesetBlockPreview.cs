@@ -180,6 +180,11 @@ namespace ExpandNullforge.EditorTools
         private bool jitterOn = true;
         private bool seeded;
 
+        // Whether the canvas paints its own row of controls. True for the panel that has always
+        // drawn them; a page that carries those controls in its own design turns it off around the
+        // one draw it owns, so the same state is driven from one place either way.
+        private bool drawsOwnToolbar = true;
+
         private Vector2Int hoverCell;
         private bool hoverValid;
         private Vector2 pressPos;
@@ -295,6 +300,51 @@ namespace ExpandNullforge.EditorTools
             sceneDirty = true;
         }
 
+        // ---- driven from outside: the same state the canvas toolbar edits ----
+
+        /// <summary>
+        /// Whether the canvas draws the row of controls along its top edge. Off while a page that
+        /// carries those controls in its own design is doing the drawing.
+        /// </summary>
+        internal bool DrawsOwnToolbar
+        {
+            get { return drawsOwnToolbar; }
+            set { drawsOwnToolbar = value; }
+        }
+
+        /// <summary>Which block the canvas adds when someone paints in it: ground or wall.</summary>
+        internal BlockKind PaintKind
+        {
+            get { return palette; }
+            set { palette = value; }
+        }
+
+        /// <summary>True while painting is on; false while clicks select a block instead.</summary>
+        internal bool Painting
+        {
+            get { return tool == Tool.Edit; }
+            set { tool = value ? Tool.Edit : Tool.View; }
+        }
+
+        /// <summary>
+        /// Shifts the whole grid's position hash, so the pattern lands in a different but equally
+        /// coherent arrangement. Every tile is still the piece the tileset intended for it.
+        /// </summary>
+        internal void ShufflePattern()
+        {
+            patternShift++;
+            sceneDirty = true;
+        }
+
+        /// <summary>Puts the camera, the zoom and the pattern back where they started.</summary>
+        internal void ResetView()
+        {
+            orthoSize = DefaultOrthoSize;
+            pivot = DefaultPivot;
+            patternShift = 0;
+            sceneDirty = true;
+        }
+
         /// <summary>
         /// Mirrors the block's "Rigid surface" switch into the preview: a rigid block renders straight,
         /// anything else takes Core Keeper's vertex wobble, so what you see here is what the game will
@@ -318,20 +368,24 @@ namespace ExpandNullforge.EditorTools
             SyncGeneratedGen(tilesetAsset);
             SyncJitter(tilesetAsset);
 
-            // Recorded for the debug export (Dimensions API/Debug/Export Preview Render), which
+            // Recorded for the debug export (Dimensions API/Developer/Export Preview Render), which
             // re-renders THIS instance's exact scene state off-screen.
             lastDrawn = this;
             lastDrawRect = rect;
             lastSheet = texture;
 
-            Rect topStrip = new Rect(rect.x, rect.y, rect.width, 28f);
+            // The strip the canvas keeps for its own controls is only dead to the mouse while those
+            // controls are actually there; a page that carries them itself gets the whole canvas.
+            Rect topStrip = drawsOwnToolbar
+                ? new Rect(rect.x, rect.y, rect.width, 28f)
+                : new Rect(rect.x, rect.y, 0f, 0f);
             HandleInput(rect, topStrip);
             ValidateSelection();
             UpdateHover(rect);
 
             if (texture == null)
             {
-                EditorGUI.DrawRect(rect, new Color(0.13f, 0.14f, 0.16f, 1f));
+                EditorGUI.DrawRect(rect, new Color(0.027f, 0.035f, 0.045f, 1f));
                 GUI.Label(rect, "no sheet", CenteredFaint());
                 DrawBorder(rect);
                 return;
@@ -346,7 +400,11 @@ namespace ExpandNullforge.EditorTools
             }
 
             DrawBorder(rect);
-            DrawToolbar(rect);
+            if (drawsOwnToolbar)
+            {
+                DrawToolbar(rect);
+            }
+
             DrawBottomText(rect);
         }
 
@@ -683,7 +741,10 @@ namespace ExpandNullforge.EditorTools
             // lines this preview must never invent. PreviewRenderUtility's camera allows MSAA by
             // default; the game's does not.
             cam.allowMSAA = false;
-            cam.backgroundColor = new Color(0.13f, 0.14f, 0.16f, 1f);
+            // The same near-black the Portal Studio floor uses: the two previews are rooms in
+            // one building, and a block's own colours read truest against the dark the game
+            // actually shows around them.
+            cam.backgroundColor = new Color(0.027f, 0.035f, 0.045f, 1f);
             cam.targetTexture = pixelRT;
 
             // The game's outputSkew (PugRP.cs:801-805): stretch the projection's vertical scale by
@@ -849,7 +910,7 @@ namespace ExpandNullforge.EditorTools
             Rect blit = BlitRect(rect, rtW, rtH);
             if (blit != rect)
             {
-                EditorGUI.DrawRect(rect, new Color(0.13f, 0.14f, 0.16f, 1f)); // letterbox borders
+                EditorGUI.DrawRect(rect, new Color(0.027f, 0.035f, 0.045f, 1f)); // letterbox borders
             }
 
             // DrawPreviewTexture is the editor's colorspace-correct path for showing an sRGB RT in
@@ -2049,8 +2110,12 @@ namespace ExpandNullforge.EditorTools
         /// preview instance (the Tileset Studio's, with its live edit state); if none exists yet,
         /// builds the default seeded scene from the selected tileset asset.
         /// </summary>
-        [MenuItem("Dimensions API/Debug/Export Preview Render")]
-        private static void ExportPreviewRender()
+        // Under Developer, not in the creator's flow — this is a tool for building the framework
+        // itself. It sat with no menu item and no caller at all, which made the only written-down
+        // way to diff Unity's real render against the offline simulator unreachable; the recipe is
+        // written up in Docs/tileset-preview-export-recipe.md and this is what runs it.
+        [MenuItem("Dimensions API/Developer/Export Preview Render")]
+        internal static void ExportPreviewRender()
         {
             DimensionTilesetBlockPreview p = lastDrawn;
             bool temporary = false;
@@ -2307,17 +2372,13 @@ namespace ExpandNullforge.EditorTools
             // arrangement (every tile still its intended piece), instead of rolling each block on its own.
             if (PlainButton(shuffle, "Shuffle"))
             {
-                patternShift++;
-                sceneDirty = true;
+                ShufflePattern();
                 GUI.FocusControl(null);
             }
 
             if (PlainButton(reset, "⟲ Reset"))
             {
-                orthoSize = DefaultOrthoSize;
-                pivot = DefaultPivot;
-                patternShift = 0;
-                sceneDirty = true;
+                ResetView();
                 GUI.FocusControl(null);
             }
         }
@@ -2343,8 +2404,8 @@ namespace ExpandNullforge.EditorTools
         private void DrawBottomText(Rect rect)
         {
             string txt = tool == Tool.Edit
-                ? "left-click place · right-click remove · drag pan"
-                : "click to select · drag pan · scroll zoom";
+                ? "left button adds · right button removes · drag to move around"
+                : "click to select · drag to move around · scroll to zoom";
             GUI.Label(new Rect(rect.x, rect.yMax - 18f, rect.width, 16f), txt, BottomFaint());
         }
 

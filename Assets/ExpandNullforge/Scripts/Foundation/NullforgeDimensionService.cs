@@ -30,12 +30,6 @@ namespace ExpandNullforge.Foundation
     private readonly Dictionary<string, DimensionBiomeDefinition> biomes =
         new Dictionary<string, DimensionBiomeDefinition>(StringComparer.Ordinal);
 
-    private readonly Dictionary<string, DimensionGenerationTableDefinition> generationTables =
-        new Dictionary<string, DimensionGenerationTableDefinition>(StringComparer.Ordinal);
-
-    private readonly Dictionary<string, DimensionGenerationTableEntryDefinition> generationTableEntries =
-        new Dictionary<string, DimensionGenerationTableEntryDefinition>(StringComparer.Ordinal);
-
     private readonly List<DimensionDefinition> definitionSnapshot =
         new List<DimensionDefinition>();
 
@@ -75,12 +69,6 @@ namespace ExpandNullforge.Foundation
     private readonly Dictionary<string, DimensionEncounterDefinition> encounters =
         new Dictionary<string, DimensionEncounterDefinition>(StringComparer.Ordinal);
 
-    private readonly Dictionary<string, DimensionResourceNodeDefinition> resourceNodes =
-        new Dictionary<string, DimensionResourceNodeDefinition>(StringComparer.Ordinal);
-
-    private readonly Dictionary<string, DimensionSpawnRule> spawnRules =
-        new Dictionary<string, DimensionSpawnRule>(StringComparer.Ordinal);
-
     private readonly Dictionary<string, DimensionWorldEventDefinition> worldEvents =
         new Dictionary<string, DimensionWorldEventDefinition>(StringComparer.Ordinal);
 
@@ -89,9 +77,6 @@ namespace ExpandNullforge.Foundation
 
     private readonly Dictionary<string, DimensionZoneDefinition> zoneDefinitions =
         new Dictionary<string, DimensionZoneDefinition>(StringComparer.Ordinal);
-
-    private readonly Dictionary<string, DimensionEnvironmentProfile> environmentProfiles =
-        new Dictionary<string, DimensionEnvironmentProfile>(StringComparer.Ordinal);
 
     private readonly Dictionary<string, DimensionGenerationStatus> generationStatuses =
         new Dictionary<string, DimensionGenerationStatus>(StringComparer.Ordinal);
@@ -208,10 +193,6 @@ namespace ExpandNullforge.Foundation
 
     public event Action<DimensionBiomeChangedEvent> BiomeChanged;
 
-    public event Action<DimensionGenerationTableChangedEvent> GenerationTableChanged;
-
-    public event Action<DimensionGenerationTableEntryChangedEvent> GenerationTableEntryChanged;
-
     public event Action<DimensionPlayerVisitChangedEvent> PlayerVisitChanged;
 
     public event Action<DimensionLifecycleEvent> DimensionLifecycleChanged;
@@ -238,17 +219,11 @@ namespace ExpandNullforge.Foundation
 
     public event Action<DimensionZoneChangedEvent> ZoneChanged;
 
-    public event Action<DimensionEnvironmentProfileChangedEvent> EnvironmentProfileChanged;
-
     public event Action<DimensionSceneChangedEvent> SceneChanged;
 
     public event Action<DimensionSceneTemplateChangedEvent> SceneTemplateChanged;
 
     public event Action<DimensionEncounterChangedEvent> EncounterChanged;
-
-    public event Action<DimensionResourceNodeChangedEvent> ResourceNodeChanged;
-
-    public event Action<DimensionSpawnRuleChangedEvent> SpawnRuleChanged;
 
     public event Action<DimensionWorldEventChangedEvent> WorldEventChanged;
 
@@ -265,9 +240,6 @@ namespace ExpandNullforge.Foundation
     {
       get { return true; }
     }
-
-
-
 
   }
 }

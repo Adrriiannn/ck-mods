@@ -7,8 +7,37 @@ using ExpandNullforge.Foundation;
 
 namespace ExpandNullforge.Portals
 {
+  /// <summary>
+  /// Puts every registered framework recipe onto the station that offers it, as the game converts
+  /// that station's object.
+  /// </summary>
+  /// <remarks>
+  /// Named for portals because portals were the first thing that needed it, but it carries every
+  /// recipe the framework registers — a mod's items at a mod's own Workbench, and the by-hand list
+  /// on the player, which Core Keeper models as a crafting station like any other
+  /// (<c>ObjectID.Player</c>). The one moment this can happen is while an object type is being
+  /// added: a station's recipe buffer only exists on the converted entity, and a mod object has no
+  /// number before then.
+  /// <para>
+  /// Appending is safe even on a station whose recipes are filtered by world progress.
+  /// <c>AvailableRecipesFromContentBundlesSystem</c> rewrites a recipe buffer from the station's
+  /// stored unfiltered list, but only for as many entries as that list holds — everything added
+  /// here sits past its end and is left alone.
+  /// </para>
+  /// </remarks>
   public static class DimensionPortalRecipeInjector
   {
+    /// <summary>
+    /// How many recipes a station can show without being split into categories.
+    /// </summary>
+    /// <remarks>
+    /// Three side-by-side windows of six: the game's own UI prefab holds exactly three
+    /// <c>SimpleCraftingUI</c>s and each walks six recipes. Past this the game logs
+    /// "Not enough SimpleCraftingUIs" and shows nothing, which is the whole reason categories are
+    /// written at all.
+    /// </remarks>
+    private const int UncategorizedRecipeCapacity = 18;
+
     private static readonly List<PendingCraftingTarget> PendingCraftingTargets =
         new List<PendingCraftingTarget>();
 
@@ -21,11 +50,31 @@ namespace ExpandNullforge.Portals
     {
       RefreshRegisteredPortalObjectIds();
 
+      // A recipe may name a crafting station belonging to another mod, and that station has no
+      // number until the game gives it one — which is happening right now, for one object at a
+      // time. Resolving here is what lets a portal be craftable at a modded bench at all.
+      DimensionCraftingRegistry.TryResolveStationNames();
+
+      string modObjectName = GetModObjectName(authoringData);
       ObjectID objectID = GetObjectID(authoringData);
-      if (DimensionPortalCraftingRegistry.HasRecipeForCraftingStation(objectID) &&
+      if (objectID == ObjectID.None && !string.IsNullOrEmpty(modObjectName))
+      {
+        // A mod's own object carries no EntityMonoBehaviourData — only ObjectAuthoring — so the
+        // game's own way of reading an object id off the prefab comes back empty for every bench
+        // this framework generates. Without this fall-back a recipe could name one of the mod's
+        // Workbenches and the bench would never be recognised as a crafting station at all, which
+        // is exactly why custom-station injection used to stop at a warning.
+        DimensionPortalObjectIdCache.TryResolve(modObjectName, out objectID);
+      }
+
+      // The station being added may BE the one a recipe is waiting for, and on this pass its name
+      // may still not resolve. Remembering it now means the retry pass can reach it later instead
+      // of the recipe waiting forever for a station the game already built.
+      bool awaitedStation = DimensionCraftingRegistry.IsWaitingForCraftingStationName(modObjectName);
+      if ((DimensionCraftingRegistry.HasRecipeForCraftingStation(objectID) || awaitedStation) &&
           EntityStillExists(entity, entityManager))
       {
-        RememberCraftingTarget(entity, entityManager, objectID);
+        RememberCraftingTarget(entity, entityManager, objectID, modObjectName);
         TryAddRecipes(entity, entityManager, objectID);
       }
 
@@ -61,7 +110,7 @@ namespace ExpandNullforge.Portals
 
       if (!entityManager.HasBuffer<CanCraftObjectsBuffer>(entity))
       {
-        Debug.LogWarning("[ExpandNullforge] Registered portal crafting station has no crafting recipe buffer.");
+        DimensionLog.Problem(DimensionLogChannels.Portal, null, "Registered portal crafting station has no crafting recipe buffer.");
         return false;
       }
 
@@ -72,10 +121,10 @@ namespace ExpandNullforge.Portals
       // time — objects resolve at different moments during conversion, and adding them piecemeal is
       // what used to scatter them across separate pages.
       ResolvedRecipes.Clear();
-      for (int definitionIndex = 0; definitionIndex < DimensionPortalCraftingRegistry.Count; definitionIndex++)
+      for (int definitionIndex = 0; definitionIndex < DimensionCraftingRegistry.Count; definitionIndex++)
       {
-        DimensionPortalCraftingRecipeDefinition definition;
-        if (!DimensionPortalCraftingRegistry.TryGetRecipe(definitionIndex, out definition) ||
+        DimensionCraftingRecipeDefinition definition;
+        if (!DimensionCraftingRegistry.TryGetRecipe(definitionIndex, out definition) ||
             definition.CraftingStationObjectID != craftingStationObjectID)
         {
           continue;
@@ -83,7 +132,7 @@ namespace ExpandNullforge.Portals
 
         ObjectID craftedObjectID;
         if (!DimensionPortalObjectIdCache.TryResolve(
-            definition.PortalObjectName,
+            definition.CraftedObjectName,
             out craftedObjectID))
         {
           continue;
@@ -110,7 +159,7 @@ namespace ExpandNullforge.Portals
           recipes.Add(CreatePortalRecipe(resolved.ObjectID, resolved.Definition));
           addedAnyRecipe = true;
           DimensionFrameworkLog.Verbose(
-              "[ExpandNullforge] Added " +
+              "Added " +
               resolved.Definition.DisplayName +
               " recipe to registered crafting station " +
               (int)craftingStationObjectID +
@@ -134,7 +183,8 @@ namespace ExpandNullforge.Portals
           craftingStationObjectID,
           ResolvedRecipes[0].ObjectID,
           firstRecipeIndex,
-          lastRecipeIndex - firstRecipeIndex + 1))
+          lastRecipeIndex - firstRecipeIndex + 1,
+          recipes.Length))
       {
         addedAnyRecipe = true;
       }
@@ -145,21 +195,22 @@ namespace ExpandNullforge.Portals
     private static void RememberCraftingTarget(
         Entity entity,
         EntityManager entityManager,
-        ObjectID craftingStationObjectID)
+        ObjectID craftingStationObjectID,
+        string craftingStationObjectName)
     {
       for (int i = 0; i < PendingCraftingTargets.Count; i++)
       {
         PendingCraftingTarget existing = PendingCraftingTargets[i];
         if (existing.Entity == entity)
         {
-          PendingCraftingTargets[i] =
-              new PendingCraftingTarget(entity, entityManager, craftingStationObjectID);
+          PendingCraftingTargets[i] = new PendingCraftingTarget(
+              entity, entityManager, craftingStationObjectID, craftingStationObjectName);
           return;
         }
       }
 
-      PendingCraftingTargets.Add(
-          new PendingCraftingTarget(entity, entityManager, craftingStationObjectID));
+      PendingCraftingTargets.Add(new PendingCraftingTarget(
+          entity, entityManager, craftingStationObjectID, craftingStationObjectName));
     }
 
     private static void TryInjectPendingCraftingTargets()
@@ -178,11 +229,31 @@ namespace ExpandNullforge.Portals
           continue;
         }
 
+        // A station remembered before its own number existed is still only a name. Resolving it
+        // here is what lets a mod's Workbench be filled at all: the pass that remembered it had
+        // nothing but the name, and a target left holding None matches no recipe forever.
+        ObjectID stationObjectID = target.CraftingStationObjectID;
+        if (stationObjectID == ObjectID.None &&
+            !string.IsNullOrEmpty(target.CraftingStationObjectName) &&
+            DimensionPortalObjectIdCache.TryResolve(
+                target.CraftingStationObjectName,
+                out stationObjectID))
+        {
+          target = new PendingCraftingTarget(
+              target.Entity,
+              target.EntityManager,
+              stationObjectID,
+              target.CraftingStationObjectName);
+          PendingCraftingTargets[i] = target;
+        }
+
         TryAddRecipes(
             target.Entity,
             target.EntityManager,
             target.CraftingStationObjectID);
-        if (!HasUnresolvedPortalRecipeForStation(target.CraftingStationObjectID))
+        if (!HasUnresolvedPortalRecipeForStation(target.CraftingStationObjectID) &&
+            !DimensionCraftingRegistry.IsWaitingForCraftingStationName(
+                target.CraftingStationObjectName))
         {
           PendingCraftingTargets.RemoveAt(i);
         }
@@ -218,13 +289,13 @@ namespace ExpandNullforge.Portals
       catch (NullReferenceException)
       {
         DimensionFrameworkLog.Warning(
-            "[ExpandNullforge] Dropped stale pending dimension portal recipe target after its conversion world was unloaded.");
+            "Dropped stale pending dimension portal recipe target after its conversion world was unloaded.");
         return false;
       }
       catch (InvalidOperationException)
       {
         DimensionFrameworkLog.Warning(
-            "[ExpandNullforge] Dropped invalid pending dimension portal recipe target after a world transition.");
+            "Dropped invalid pending dimension portal recipe target after a world transition.");
         return false;
       }
     }
@@ -238,7 +309,7 @@ namespace ExpandNullforge.Portals
 
       PendingCraftingTargets.Clear();
       DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Cleared pending dimension portal recipe targets (" +
+          "Cleared pending dimension portal recipe targets (" +
           reason +
           ").");
     }
@@ -259,6 +330,20 @@ namespace ExpandNullforge.Portals
       return entityData.objectInfo.objectID;
     }
 
+    /// <summary>The name a mod-defined object carries, or empty for one of the game's own.</summary>
+    private static string GetModObjectName(GameObject authoringData)
+    {
+      if (authoringData == null)
+      {
+        return string.Empty;
+      }
+
+      ObjectAuthoring objectAuthoring = authoringData.GetComponent<ObjectAuthoring>();
+      return objectAuthoring == null || objectAuthoring.objectName == null
+          ? string.Empty
+          : objectAuthoring.objectName;
+    }
+
     private static bool IsRegisteredPortalObject(GameObject authoringData)
     {
       if (authoringData == null)
@@ -268,22 +353,22 @@ namespace ExpandNullforge.Portals
 
       ObjectAuthoring objectAuthoring = authoringData.GetComponent<ObjectAuthoring>();
       return objectAuthoring != null &&
-             DimensionPortalCraftingRegistry.IsRegisteredPortalObjectName(objectAuthoring.objectName);
+             DimensionCraftingRegistry.IsRegisteredCraftedObjectName(objectAuthoring.objectName);
     }
 
     private static bool AnyRegisteredPortalObjectResolved()
     {
-      for (int i = 0; i < DimensionPortalCraftingRegistry.Count; i++)
+      for (int i = 0; i < DimensionCraftingRegistry.Count; i++)
       {
-        DimensionPortalCraftingRecipeDefinition definition;
-        if (!DimensionPortalCraftingRegistry.TryGetRecipe(i, out definition))
+        DimensionCraftingRecipeDefinition definition;
+        if (!DimensionCraftingRegistry.TryGetRecipe(i, out definition))
         {
           continue;
         }
 
         ObjectID objectID;
         if (DimensionPortalObjectIdCache.TryResolve(
-            definition.PortalObjectName,
+            definition.CraftedObjectName,
             out objectID))
         {
           return true;
@@ -295,10 +380,10 @@ namespace ExpandNullforge.Portals
 
     private static bool HasUnresolvedPortalRecipeForStation(ObjectID craftingStationObjectID)
     {
-      for (int i = 0; i < DimensionPortalCraftingRegistry.Count; i++)
+      for (int i = 0; i < DimensionCraftingRegistry.Count; i++)
       {
-        DimensionPortalCraftingRecipeDefinition definition;
-        if (!DimensionPortalCraftingRegistry.TryGetRecipe(i, out definition) ||
+        DimensionCraftingRecipeDefinition definition;
+        if (!DimensionCraftingRegistry.TryGetRecipe(i, out definition) ||
             definition.CraftingStationObjectID != craftingStationObjectID)
         {
           continue;
@@ -306,7 +391,7 @@ namespace ExpandNullforge.Portals
 
         ObjectID objectID;
         if (!DimensionPortalObjectIdCache.TryResolve(
-            definition.PortalObjectName,
+            definition.CraftedObjectName,
             out objectID))
         {
           return true;
@@ -318,15 +403,15 @@ namespace ExpandNullforge.Portals
 
     private static void RefreshRegisteredPortalObjectIds()
     {
-      for (int i = 0; i < DimensionPortalCraftingRegistry.Count; i++)
+      for (int i = 0; i < DimensionCraftingRegistry.Count; i++)
       {
-        DimensionPortalCraftingRecipeDefinition definition;
-        if (!DimensionPortalCraftingRegistry.TryGetRecipe(i, out definition))
+        DimensionCraftingRecipeDefinition definition;
+        if (!DimensionCraftingRegistry.TryGetRecipe(i, out definition))
         {
           continue;
         }
 
-        DimensionPortalObjectIdCache.Refresh(definition.PortalObjectName);
+        DimensionPortalObjectIdCache.Refresh(definition.CraftedObjectName);
       }
     }
 
@@ -347,7 +432,7 @@ namespace ExpandNullforge.Portals
 
     private static CanCraftObjectsBuffer CreatePortalRecipe(
         ObjectID portalObjectID,
-        DimensionPortalCraftingRecipeDefinition definition)
+        DimensionCraftingRecipeDefinition definition)
     {
       return new CanCraftObjectsBuffer
       {
@@ -369,6 +454,12 @@ namespace ExpandNullforge.Portals
     /// recipes one category and ours another keeps both within the limit, and ours all land on the
     /// same page because they share a category. Ours is always added last, so if its icon object
     /// ever fails to resolve, the game drops our page without shifting anyone else's.
+    /// <para>
+    /// It is only done when a station needs it. A station with no categories shows every recipe it
+    /// has, so inventing the first category on one that still fits would HIDE whatever falls
+    /// outside our block — which is what a small custom bench looks like, and what a bench that
+    /// already lists the same recipe itself looks like.
+    /// </para>
     /// </remarks>
     private static bool EnsureSharedCategory(
         Entity entity,
@@ -376,10 +467,29 @@ namespace ExpandNullforge.Portals
         ObjectID craftingStationObjectID,
         ObjectID categoryObjectID,
         int firstRecipeIndex,
-        int recipeCount)
+        int recipeCount,
+        int stationRecipeCount)
     {
       if (recipeCount < 1 || firstRecipeIndex < 0)
       {
+        return false;
+      }
+
+      if (craftingStationObjectID == ObjectID.Player)
+      {
+        // Made-by-hand recipes live on the player, and the by-hand window never pages: categories
+        // are read by CraftingBuilding, which is a placed object and not the player. Writing a
+        // category here would add a buffer nothing consults, so the by-hand list simply appends —
+        // and that is why the generator caps how many recipes may be made by hand.
+        return false;
+      }
+
+      if (stationRecipeCount <= UncategorizedRecipeCapacity &&
+          !entityManager.HasBuffer<IncludedCraftingBuildingsBuffer>(entity))
+      {
+        // Still fits in the three windows the UI draws, and the station has no categories of its
+        // own, so every recipe is already visible. Adding one now would narrow the station down to
+        // our slice.
         return false;
       }
 
@@ -489,9 +599,9 @@ namespace ExpandNullforge.Portals
     private readonly struct ResolvedRecipe
     {
       public readonly ObjectID ObjectID;
-      public readonly DimensionPortalCraftingRecipeDefinition Definition;
+      public readonly DimensionCraftingRecipeDefinition Definition;
 
-      public ResolvedRecipe(ObjectID objectID, DimensionPortalCraftingRecipeDefinition definition)
+      public ResolvedRecipe(ObjectID objectID, DimensionCraftingRecipeDefinition definition)
       {
         ObjectID = objectID;
         Definition = definition;
@@ -504,14 +614,22 @@ namespace ExpandNullforge.Portals
       public readonly EntityManager EntityManager;
       public readonly ObjectID CraftingStationObjectID;
 
+      /// <summary>
+      /// The station's own name, kept so a target stays remembered while a recipe is still
+      /// waiting for that name rather than for its number.
+      /// </summary>
+      public readonly string CraftingStationObjectName;
+
       public PendingCraftingTarget(
           Entity entity,
           EntityManager entityManager,
-          ObjectID craftingStationObjectID)
+          ObjectID craftingStationObjectID,
+          string craftingStationObjectName)
       {
         Entity = entity;
         EntityManager = entityManager;
         CraftingStationObjectID = craftingStationObjectID;
+        CraftingStationObjectName = craftingStationObjectName ?? string.Empty;
       }
     }
   }

@@ -27,8 +27,8 @@ MonoBehaviour:
   frameFlipY: 0
   chargeWaveSpriteAsset:
     m_address:
-      m_low: 7016284293423569344
-      m_high: 7926038299096422560
+      m_low: 1696484674832548873
+      m_high: 4517466551124115603
   chargeWaveDarkColor: {r: 0.078431375, g: 0.16862746, b: 0.36078432, a: 1}
   chargeWaveDeepColor: {r: 0.078431375, g: 0.24313726, b: 0.67058825, a: 1}
   chargeWaveMidColor: {r: 0.08627451, g: 0.3647059, b: 0.8509804, a: 1}
@@ -45,8 +45,8 @@ MonoBehaviour:
   chargeWaveFlipY: 0
   milestoneSpriteAsset:
     m_address:
-      m_low: 4724424159173606565
-      m_high: 2046921296165717419
+      m_low: -2914042960099981387
+      m_high: 7524477700071802923
   milestoneDarkColor: {r: 0.078431375, g: 0.16862746, b: 0.36078432, a: 1}
   milestoneDeepColor: {r: 0.078431375, g: 0.24313726, b: 0.67058825, a: 1}
   milestoneMidColor: {r: 0.08627451, g: 0.3647059, b: 0.8509804, a: 1}
@@ -65,8 +65,8 @@ MonoBehaviour:
   milestoneFlipY: 0
   centerEffectSpriteAsset:
     m_address:
-      m_low: 5570163353262010590
-      m_high: -2439472303744231237
+      m_low: -5630747452050787979
+      m_high: -5864206885114931925
   centerDarkColor: {r: 0.078431375, g: 0.16862746, b: 0.36078432, a: 1}
   centerDeepColor: {r: 0.11372549, g: 0.1882353, b: 0.5372549, a: 1}
   centerMidColor: {r: 0.078431375, g: 0.24313726, b: 0.67058825, a: 1}

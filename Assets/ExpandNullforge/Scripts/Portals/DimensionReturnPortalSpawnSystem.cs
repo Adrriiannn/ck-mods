@@ -10,6 +10,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Portals
 {
@@ -156,6 +157,14 @@ namespace ExpandNullforge.Portals
         IDimensionService service,
         DimensionReturnPortalSpawnDefinition definition)
     {
+      // An arena's exit appears when the fight is won, not before. Everything else keeps the
+      // always-on guarantee — a dimension that can trap a player is a bug, not a mode.
+      if (definition.ArmedByVictory &&
+          !DimensionReturnPortalSpawnRegistry.IsArmed(definition.PortalId))
+      {
+        return false;
+      }
+
       IDimensionRuntimeStateService runtimeState = service as IDimensionRuntimeStateService;
       if (runtimeState == null)
       {
@@ -213,8 +222,8 @@ namespace ExpandNullforge.Portals
 
       if (duplicates.Length > 0)
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Removed " +
+        DimensionLog.Problem(DimensionLogChannels.Portal, null, 
+            "Removed " +
             duplicates.Length +
             " duplicate return portal entities for portalId=" +
             definition.PortalId +
@@ -279,8 +288,8 @@ namespace ExpandNullforge.Portals
           definition.SpawnLocalPosition,
           out absolutePosition))
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Could not resolve return portal spawn position for portalId=" +
+        DimensionLog.Problem(DimensionLogChannels.Portal, null, 
+            "Could not resolve return portal spawn position for portalId=" +
             definition.PortalId +
             ".");
         return false;
@@ -298,8 +307,8 @@ namespace ExpandNullforge.Portals
 
       if (portalEntity == Entity.Null || !EntityManager.Exists(portalEntity))
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Could not create return portal entity for portalId=" +
+        DimensionLog.Problem(DimensionLogChannels.Portal, null, 
+            "Could not create return portal entity for portalId=" +
             definition.PortalId +
             ".");
         return false;
@@ -308,7 +317,7 @@ namespace ExpandNullforge.Portals
       EnsurePortalComponents(portalEntity, definition);
       observedReturnPortalIds.Add(definition.PortalId);
       DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Spawned " +
+          "Spawned " +
           definition.DisplayName +
           " at local=(" +
           definition.SpawnLocalPosition.x +
@@ -328,8 +337,8 @@ namespace ExpandNullforge.Portals
     {
       DimensionPortalCD portal = new DimensionPortalCD
       {
-        PortalId = ToFixed64(definition.PortalId),
-        TargetDimensionId = ToFixed64(definition.TargetDimensionId),
+        PortalId = DimensionFixedStrings.ToFixed64(definition.PortalId),
+        TargetDimensionId = DimensionFixedStrings.ToFixed64(definition.TargetDimensionId),
         TargetLocalX = definition.TargetLocalPosition.x,
         TargetLocalY = definition.TargetLocalPosition.y,
         ActivationCooldownSeconds = definition.ActivationCooldownSeconds,
@@ -456,7 +465,7 @@ namespace ExpandNullforge.Portals
 
       loggedWaitingForObject = true;
       DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Waiting for return portal ObjectID before spawning " +
+          "Waiting for return portal ObjectID before spawning " +
           definition.DisplayName +
           ".");
     }
@@ -469,7 +478,7 @@ namespace ExpandNullforge.Portals
       }
 
       loggedWaitingForService = true;
-      DimensionFrameworkLog.Verbose("[ExpandNullforge] Waiting for the dimension service before spawning return portals.");
+      DimensionFrameworkLog.Verbose("Waiting for the dimension service before spawning return portals.");
     }
 
     private void LogWaitingForEntryAreaOnce(
@@ -486,7 +495,7 @@ namespace ExpandNullforge.Portals
           ? "unknown"
           : status.State.ToString();
       DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Waiting for " +
+          "Waiting for " +
           definition.SourceDimensionId +
           " entry area to finish generation before spawning " +
           definition.DisplayName +
@@ -495,24 +504,5 @@ namespace ExpandNullforge.Portals
           ".");
     }
 
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 }

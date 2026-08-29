@@ -20,18 +20,13 @@ namespace ExpandNullforge.Authoring
         public StarterSnapshot[] starters = new StarterSnapshot[0];
         public SceneTemplateSnapshot[] sceneTemplates = new SceneTemplateSnapshot[0];
         public SceneSnapshot[] scenes = new SceneSnapshot[0];
-        public SpawnRuleSnapshot[] spawnRules = new SpawnRuleSnapshot[0];
         public EncounterSnapshot[] encounters = new EncounterSnapshot[0];
         public GenerationPassSnapshot[] generationPasses = new GenerationPassSnapshot[0];
-        public ResourceNodeSnapshot[] resourceNodes = new ResourceNodeSnapshot[0];
         public ProgressFlagSnapshot[] progressFlags = new ProgressFlagSnapshot[0];
         public WorldEventSnapshot[] worldEvents = new WorldEventSnapshot[0];
         public OwnershipBindingSnapshot[] ownershipBindings = new OwnershipBindingSnapshot[0];
         public AssetReferenceSnapshot[] assetReferences = new AssetReferenceSnapshot[0];
-        public EnvironmentProfileSnapshot[] environmentProfiles = new EnvironmentProfileSnapshot[0];
         public BiomeSnapshot[] biomes = new BiomeSnapshot[0];
-        public GenerationTableSnapshot[] generationTables = new GenerationTableSnapshot[0];
-        public GenerationTableEntrySnapshot[] generationTableEntries = new GenerationTableEntrySnapshot[0];
 
         public static DimensionRuntimeManifestSnapshot FromManifest(DimensionContentManifest manifest)
         {
@@ -49,18 +44,13 @@ namespace ExpandNullforge.Authoring
                 starters = Convert(manifest.Starters, StarterSnapshot.From),
                 sceneTemplates = Convert(manifest.SceneTemplates, SceneTemplateSnapshot.From),
                 scenes = Convert(manifest.Scenes, SceneSnapshot.From),
-                spawnRules = Convert(manifest.SpawnRules, SpawnRuleSnapshot.From),
                 encounters = Convert(manifest.Encounters, EncounterSnapshot.From),
                 generationPasses = Convert(manifest.GenerationPasses, GenerationPassSnapshot.From),
-                resourceNodes = Convert(manifest.ResourceNodes, ResourceNodeSnapshot.From),
                 progressFlags = Convert(manifest.ProgressFlags, ProgressFlagSnapshot.From),
                 worldEvents = Convert(manifest.WorldEvents, WorldEventSnapshot.From),
                 ownershipBindings = Convert(manifest.OwnershipBindings, OwnershipBindingSnapshot.From),
                 assetReferences = Convert(manifest.AssetReferences, AssetReferenceSnapshot.From),
-                environmentProfiles = Convert(manifest.EnvironmentProfiles, EnvironmentProfileSnapshot.From),
-                biomes = Convert(manifest.Biomes, BiomeSnapshot.From),
-                generationTables = Convert(manifest.GenerationTables, GenerationTableSnapshot.From),
-                generationTableEntries = Convert(manifest.GenerationTableEntries, GenerationTableEntrySnapshot.From)
+                biomes = Convert(manifest.Biomes, BiomeSnapshot.From)
             };
         }
 
@@ -79,18 +69,13 @@ namespace ExpandNullforge.Authoring
                     Convert(travelRequirements, record => record.ToDefinition()),
                     Convert(sceneTemplates, record => record.ToDefinition()),
                     Convert(scenes, record => record.ToDefinition()),
-                    Convert(spawnRules, record => record.ToDefinition()),
                     Convert(encounters, record => record.ToDefinition()),
                     Convert(generationPasses, record => record.ToDefinition()),
-                    Convert(resourceNodes, record => record.ToDefinition()),
                     Convert(progressFlags, record => record.ToDefinition()),
                     Convert(worldEvents, record => record.ToDefinition()),
                     Convert(ownershipBindings, record => record.ToDefinition()),
                     Convert(assetReferences, record => record.ToDefinition()),
-                    Convert(environmentProfiles, record => record.ToDefinition()),
-                    Convert(biomes, record => record.ToDefinition()),
-                    Convert(generationTables, record => record.ToDefinition()),
-                    Convert(generationTableEntries, record => record.ToDefinition()));
+                    Convert(biomes, record => record.ToDefinition()));
 
             return new DimensionContentManifest(
                 baseManifest,
@@ -260,7 +245,7 @@ namespace ExpandNullforge.Authoring
                     absoluteOrigin = Int2Snapshot.From(value.AbsoluteOrigin),
                     localBounds = BoundsSnapshot.From(value.LocalBounds),
                     generationVersion = value.GenerationVersion,
-                    spaceKind = (int)value.SpaceKind,
+                    spaceKind = (int)value.Type,
                     capabilities = (int)value.Capabilities,
                     lifecycleState = (int)value.LifecycleState
                 };
@@ -274,7 +259,7 @@ namespace ExpandNullforge.Authoring
                     ToInt2(absoluteOrigin),
                     ToBounds(localBounds),
                     generationVersion,
-                    (DimensionSpaceKind)spaceKind,
+                    DimensionTypeMigration.Normalize(spaceKind),
                     (DimensionCapabilityFlags)capabilities,
                     (DimensionLifecycleState)lifecycleState);
             }
@@ -877,56 +862,6 @@ namespace ExpandNullforge.Authoring
         }
 
         [Serializable]
-        internal sealed class SpawnRuleSnapshot
-        {
-            public string id;
-            public string displayName;
-            public string dimensionId;
-            public string zoneId;
-            public bool hasLocalBounds;
-            public BoundsSnapshot localBounds;
-            public string subjectId;
-            public int subjectKind;
-            public int weight;
-            public int priority;
-            public bool enabled;
-
-            public static SpawnRuleSnapshot From(DimensionSpawnRule value)
-            {
-                return new SpawnRuleSnapshot
-                {
-                    id = value.RuleId,
-                    displayName = value.DisplayName,
-                    dimensionId = value.DimensionId,
-                    zoneId = value.ZoneId,
-                    hasLocalBounds = value.HasLocalBounds,
-                    localBounds = BoundsSnapshot.From(value.LocalBounds),
-                    subjectId = value.SubjectId,
-                    subjectKind = (int)value.SubjectKind,
-                    weight = value.Weight,
-                    priority = value.Priority,
-                    enabled = value.Enabled
-                };
-            }
-
-            public DimensionSpawnRule ToDefinition()
-            {
-                return new DimensionSpawnRule(
-                    id,
-                    displayName,
-                    dimensionId,
-                    zoneId,
-                    hasLocalBounds,
-                    ToBounds(localBounds),
-                    subjectId,
-                    (DimensionSpawnSubjectKind)subjectKind,
-                    weight,
-                    priority,
-                    enabled);
-            }
-        }
-
-        [Serializable]
         internal sealed class EncounterSnapshot
         {
             public string id;
@@ -934,7 +869,6 @@ namespace ExpandNullforge.Authoring
             public string dimensionId;
             public string zoneId;
             public string sceneId;
-            public string spawnRuleId;
             public string markerId;
             public string defeatFlagId;
             public int kind;
@@ -950,7 +884,6 @@ namespace ExpandNullforge.Authoring
                     dimensionId = value.DimensionId,
                     zoneId = value.ZoneId,
                     sceneId = value.SceneId,
-                    spawnRuleId = value.SpawnRuleId,
                     markerId = value.MarkerId,
                     defeatFlagId = value.DefeatFlagId,
                     kind = (int)value.Kind,
@@ -967,7 +900,6 @@ namespace ExpandNullforge.Authoring
                     dimensionId,
                     zoneId,
                     sceneId,
-                    spawnRuleId,
                     markerId,
                     defeatFlagId,
                     (DimensionEncounterKind)kind,
@@ -1019,62 +951,6 @@ namespace ExpandNullforge.Authoring
                     (DimensionGenerationPassPhase)phase,
                     priority,
                     providerId,
-                    enabled);
-            }
-        }
-
-        [Serializable]
-        internal sealed class ResourceNodeSnapshot
-        {
-            public string id;
-            public string displayName;
-            public string dimensionId;
-            public string zoneId;
-            public bool hasLocalBounds;
-            public BoundsSnapshot localBounds;
-            public string resourceId;
-            public int kind;
-            public string providerId;
-            public string generationPassId;
-            public int weight;
-            public int priority;
-            public bool enabled;
-
-            public static ResourceNodeSnapshot From(DimensionResourceNodeDefinition value)
-            {
-                return new ResourceNodeSnapshot
-                {
-                    id = value.NodeId,
-                    displayName = value.DisplayName,
-                    dimensionId = value.DimensionId,
-                    zoneId = value.ZoneId,
-                    hasLocalBounds = value.HasLocalBounds,
-                    localBounds = BoundsSnapshot.From(value.LocalBounds),
-                    resourceId = value.ResourceId,
-                    kind = (int)value.Kind,
-                    providerId = value.ProviderId,
-                    generationPassId = value.GenerationPassId,
-                    weight = value.Weight,
-                    priority = value.Priority,
-                    enabled = value.Enabled
-                };
-            }
-
-            public DimensionResourceNodeDefinition ToDefinition()
-            {
-                return new DimensionResourceNodeDefinition(
-                    id,
-                    displayName,
-                    dimensionId,
-                    zoneId,
-                    hasLocalBounds,
-                    ToBounds(localBounds),
-                    resourceId,
-                    (DimensionResourceNodeKind)kind,
-                    providerId,
-                    generationPassId,
-                    weight,
-                    priority,
                     enabled);
             }
         }
@@ -1250,59 +1126,6 @@ namespace ExpandNullforge.Authoring
         }
 
         [Serializable]
-        internal sealed class EnvironmentProfileSnapshot
-        {
-            public string id;
-            public string displayName;
-            public string dimensionId;
-            public string zoneId;
-            public string musicCueId;
-            public string ambientCueId;
-            public string lightingProfileId;
-            public string fogProfileId;
-            public bool hasMapColor;
-            public uint mapColorRgba;
-            public int priority;
-            public bool enabled;
-
-            public static EnvironmentProfileSnapshot From(DimensionEnvironmentProfile value)
-            {
-                return new EnvironmentProfileSnapshot
-                {
-                    id = value.ProfileId,
-                    displayName = value.DisplayName,
-                    dimensionId = value.DimensionId,
-                    zoneId = value.ZoneId,
-                    musicCueId = value.MusicCueId,
-                    ambientCueId = value.AmbientCueId,
-                    lightingProfileId = value.LightingProfileId,
-                    fogProfileId = value.FogProfileId,
-                    hasMapColor = value.HasMapColor,
-                    mapColorRgba = value.MapColorRgba,
-                    priority = value.Priority,
-                    enabled = value.Enabled
-                };
-            }
-
-            public DimensionEnvironmentProfile ToDefinition()
-            {
-                return new DimensionEnvironmentProfile(
-                    id,
-                    displayName,
-                    dimensionId,
-                    zoneId,
-                    musicCueId,
-                    ambientCueId,
-                    lightingProfileId,
-                    fogProfileId,
-                    hasMapColor,
-                    mapColorRgba,
-                    priority,
-                    enabled);
-            }
-        }
-
-        [Serializable]
         internal sealed class BiomeSnapshot
         {
             public string id;
@@ -1355,93 +1178,6 @@ namespace ExpandNullforge.Authoring
             }
         }
 
-        [Serializable]
-        internal sealed class GenerationTableSnapshot
-        {
-            public string id;
-            public string displayName;
-            public string dimensionId;
-            public string biomeId;
-            public int kind;
-            public int priority;
-            public bool enabled;
-            public string notes;
-
-            public static GenerationTableSnapshot From(DimensionGenerationTableDefinition value)
-            {
-                return new GenerationTableSnapshot
-                {
-                    id = value.TableId,
-                    displayName = value.DisplayName,
-                    dimensionId = value.DimensionId,
-                    biomeId = value.BiomeId,
-                    kind = (int)value.Kind,
-                    priority = value.Priority,
-                    enabled = value.Enabled,
-                    notes = value.Notes
-                };
-            }
-
-            public DimensionGenerationTableDefinition ToDefinition()
-            {
-                return new DimensionGenerationTableDefinition(
-                    id,
-                    displayName,
-                    dimensionId,
-                    biomeId,
-                    (DimensionGenerationTableKind)kind,
-                    priority,
-                    enabled,
-                    notes);
-            }
-        }
-
-        [Serializable]
-        internal sealed class GenerationTableEntrySnapshot
-        {
-            public string id;
-            public string tableId;
-            public string subjectId;
-            public string subjectKind;
-            public int weight;
-            public int minCount;
-            public int maxCount;
-            public int priority;
-            public bool enabled;
-            public string notes;
-
-            public static GenerationTableEntrySnapshot From(DimensionGenerationTableEntryDefinition value)
-            {
-                return new GenerationTableEntrySnapshot
-                {
-                    id = value.EntryId,
-                    tableId = value.TableId,
-                    subjectId = value.SubjectId,
-                    subjectKind = value.SubjectKind,
-                    weight = value.Weight,
-                    minCount = value.MinCount,
-                    maxCount = value.MaxCount,
-                    priority = value.Priority,
-                    enabled = value.Enabled,
-                    notes = value.Notes
-                };
-            }
-
-            public DimensionGenerationTableEntryDefinition ToDefinition()
-            {
-                return new DimensionGenerationTableEntryDefinition(
-                    id,
-                    tableId,
-                    subjectId,
-                    subjectKind,
-                    weight,
-                    minCount,
-                    maxCount,
-                    priority,
-                    enabled,
-                    notes);
-            }
-        }
 
         private static string[] CopyStrings(IReadOnlyList<string> source)
         {

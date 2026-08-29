@@ -170,7 +170,6 @@ namespace ExpandNullforge.Foundation
               encounter.DimensionId,
               encounter.ZoneId,
               encounter.SceneId,
-              encounter.SpawnRuleId,
               encounter.MarkerId,
               encounter.DefeatFlagId,
               encounter.Kind,

@@ -32,12 +32,10 @@ namespace ExpandNullforge.Portals
         return true;
       }
 
-      if (API.Authoring == null)
-      {
-        return false;
-      }
-
-      objectID = API.Authoring.GetObjectID(objectName);
+      // The framework's one resolver: the game's own names off the enum first, then the mod's own
+      // out of the runtime lookup. Asking API.Authoring alone answered None for every vanilla name
+      // a portal rule could legitimately point at.
+      objectID = ExpandNullforge.Foundation.DimensionObjectNames.Resolve(objectName);
       if (objectID == ObjectID.None)
       {
         LogWaitingOnce(objectName);
@@ -64,7 +62,7 @@ namespace ExpandNullforge.Portals
 
       LoggedWaiting.Add(objectName);
       Foundation.DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Waiting for custom portal object '" +
+          "Waiting for custom portal object '" +
           objectName +
           "' to be registered.");
     }

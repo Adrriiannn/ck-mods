@@ -1,0 +1,1239 @@
+/* ============================================================================
+   THE DIMENSIONS API DESIGN SYSTEM
+
+   Every colour below was measured from Core Keeper's own shipped textures,
+   weighted by how many pixels actually carry it. The rule the game follows and
+   this UI keeps: darkness is the default, and colour only exists where
+   something emits. Big dark fields, small saturated glows doing the work.
+
+   USS has no custom properties, so the palette lives here as a comment and is
+   spelled out at each use. Keep these in sync by hand.
+
+     cavern      #091018   the ground everything sits on
+     moss        #0e1c2c   raised panels
+     mossDeep    #0b1826   sunken fields
+     indigo      #142b5c   the game's own inventory slot
+     glowCyan    #19bdc6   live data
+     core blue   #4accf7   the title's own light blue. the primary accent
+     mintPale    #8ce8ff   the Core's hot centre. hover
+     orchid      #a555a4   the portal. reserved for the uncanny
+     ember       #e45001   the torch. errors
+     amber       #ff9400   the torch. warnings
+     slate       #677fae   the game's UI metal. disabled
+     periwinkle  #a1aedd   muted text
+     lavender    #d7dcfb   text
+   ============================================================================ */
+
+/* ---------------------------------------------------------------- shell --- */
+
+.dim-root {
+    flex-grow: 1;
+    background-color: #091018;
+    color: #d7dcfb;
+    font-size: 13px;
+    -unity-font-definition: url("Fonts/Hanken-400.ttf");
+}
+
+.dim-row {
+    flex-direction: row;
+}
+
+.dim-grow {
+    flex-grow: 1;
+}
+
+.dim-fill {
+    flex-grow: 1;
+    min-height: 0;
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------- titlebar --- */
+
+/* Never compresses and never moves: whatever squeezes the layout below, the frame
+   absorbs it further down, not here. */
+.dim-titlebar {
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    height: 34px;
+    padding-left: 14px;
+    padding-right: 14px;
+    background-color: rgba(9, 16, 24, 0.86);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(103, 127, 174, 0.18);
+}
+
+.dim-wordmark {
+    -unity-font-definition: url("Fonts/Bricolage-700.ttf");
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: #a1aedd;
+}
+
+.dim-wordmark-accent {
+    -unity-font-definition: url("Fonts/Bricolage-800.ttf");
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: #4accf7;
+    margin-left: 4px;
+}
+
+.dim-titlebar-spacer {
+    flex-grow: 1;
+}
+
+.dim-titlebar-note {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+}
+
+/* ----------------------------------------------------------------- type --- */
+
+.dim-display {
+    -unity-font-definition: url("Fonts/Bricolage-800.ttf");
+    color: #d7dcfb;
+    font-size: 30px;
+    white-space: normal;
+}
+
+.dim-h2 {
+    -unity-font-definition: url("Fonts/Bricolage-700.ttf");
+    color: #d7dcfb;
+    font-size: 18px;
+    white-space: normal;
+}
+
+.dim-h3 {
+    -unity-font-definition: url("Fonts/Hanken-700.ttf");
+    color: #d7dcfb;
+    font-size: 13px;
+    white-space: normal;
+}
+
+.dim-body {
+    color: #a1aedd;
+    font-size: 12px;
+    white-space: normal;
+}
+
+.dim-index {
+    -unity-font-definition: url("Fonts/SplineMono-600.ttf");
+    font-size: 10px;
+    letter-spacing: 1.4px;
+    color: #677fae;
+    white-space: normal;
+}
+
+.dim-mono {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 11px;
+    color: #a1aedd;
+}
+
+.dim-accent {
+    color: #4accf7;
+}
+
+/* --------------------------------------------------------------- buttons -- */
+
+.dim-button {
+    -unity-font-definition: url("Fonts/Hanken-700.ttf");
+    font-size: 13px;
+    height: 34px;
+    padding-left: 18px;
+    padding-right: 18px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0);
+    background-color: rgba(0, 0, 0, 0);
+    color: #d7dcfb;
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.12s;
+}
+
+.dim-button-primary {
+    background-color: #4accf7;
+    color: #06192b;
+}
+
+.dim-button-primary:hover {
+    background-color: #8ce8ff;
+}
+
+.dim-button-primary:active {
+    background-color: #19bdc6;
+}
+
+.dim-button-ghost {
+    border-color: rgba(103, 127, 174, 0.28);
+    color: #d7dcfb;
+}
+
+.dim-button-ghost:hover {
+    border-color: #a1aedd;
+    background-color: rgba(20, 43, 92, 0.34);
+}
+
+.dim-button:disabled {
+    opacity: 0.4;
+}
+
+/* ------------------------------------------------------------------ home -- */
+
+.dim-home {
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+    padding-top: 56px;
+    padding-bottom: 56px;
+    padding-left: 32px;
+    padding-right: 32px;
+}
+
+.dim-home-eyebrow {
+    margin-bottom: 18px;
+}
+
+.dim-home-title {
+    -unity-font-definition: url("Fonts/Bricolage-800.ttf");
+    font-size: 46px;
+    color: #d7dcfb;
+    -unity-text-align: middle-center;
+}
+
+.dim-home-title-accent {
+    color: #4accf7;
+}
+
+.dim-home-sub {
+    font-size: 13px;
+    color: #a1aedd;
+    -unity-text-align: middle-center;
+    white-space: normal;
+    max-width: 460px;
+    margin-top: 14px;
+    margin-bottom: 22px;
+}
+
+.dim-cta-row {
+    flex-direction: row;
+    justify-content: center;
+}
+
+.dim-cta-row .dim-button {
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+/* the dimension list on Home */
+
+.dim-list {
+    margin-top: 40px;
+    width: 560px;
+    max-width: 90%;
+}
+
+.dim-list-row {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 11px;
+    padding-bottom: 11px;
+    padding-left: 4px;
+    padding-right: 4px;
+    border-top-width: 1px;
+    border-top-color: rgba(103, 127, 174, 0.12);
+    transition-property: background-color;
+    transition-duration: 0.12s;
+}
+
+.dim-list-row:hover {
+    background-color: rgba(14, 28, 44, 0.6);
+}
+
+.dim-list-name {
+    -unity-font-definition: url("Fonts/Bricolage-700.ttf");
+    font-size: 15px;
+    color: #d7dcfb;
+    flex-grow: 1;
+}
+
+.dim-list-meta {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+}
+
+.dim-progress-track {
+    height: 4px;
+    border-radius: 2px;
+    background-color: rgba(103, 127, 174, 0.18);
+    margin-top: 6px;
+    margin-right: 16px;
+    overflow: hidden;
+}
+
+.dim-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background-color: #4accf7;
+}
+
+.dim-list-empty {
+    color: #677fae;
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    white-space: normal;
+    padding-top: 18px;
+    padding-bottom: 18px;
+}
+
+/* ------------------------------------------------------------------ rail -- */
+
+.dim-rail {
+    width: 248px;
+    flex-shrink: 0;
+    background-color: rgba(9, 16, 24, 0.7);
+    border-right-width: 1px;
+    border-right-color: rgba(103, 127, 174, 0.12);
+    padding-top: 14px;
+    padding-bottom: 12px;
+}
+
+.dim-rail-title {
+    -unity-font-definition: url("Fonts/SplineMono-600.ttf");
+    font-size: 10px;
+    letter-spacing: 1.6px;
+    color: #677fae;
+    padding-left: 14px;
+    padding-bottom: 10px;
+}
+
+.dim-stage {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 9px;
+    padding-bottom: 9px;
+    padding-left: 14px;
+    padding-right: 12px;
+    border-left-width: 2px;
+    border-left-color: rgba(0, 0, 0, 0);
+    transition-property: background-color;
+    transition-duration: 0.12s;
+}
+
+.dim-stage:hover {
+    background-color: rgba(14, 28, 44, 0.65);
+}
+
+.dim-stage-current {
+    border-left-color: #4accf7;
+    background-color: rgba(74, 204, 247, 0.07);
+}
+
+.dim-stage-num {
+    -unity-font-definition: url("Fonts/SplineMono-600.ttf");
+    font-size: 12px;
+    color: #677fae;
+    width: 22px;
+    -unity-text-align: middle-center;
+}
+
+.dim-stage-done .dim-stage-num {
+    color: #4accf7;
+}
+
+.dim-stage-labels {
+    flex-grow: 1;
+    margin-left: 8px;
+}
+
+.dim-stage-name {
+    -unity-font-definition: url("Fonts/Hanken-700.ttf");
+    font-size: 14px;
+    color: #a1aedd;
+}
+
+.dim-stage-current .dim-stage-name {
+    color: #8ce8ff;
+}
+
+.dim-stage-sub {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+    margin-top: 2px;
+}
+
+.dim-rail-foot {
+    margin-top: 10px;
+    padding-top: 12px;
+    padding-left: 14px;
+    padding-right: 12px;
+    border-top-width: 1px;
+    border-top-color: rgba(103, 127, 174, 0.12);
+}
+
+.dim-rail-home {
+    width: 100%;
+    height: 32px;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 12px;
+}
+
+/* --------------------------------------------------------------- content -- */
+
+.dim-content {
+    flex-grow: 1;
+    min-width: 0;
+    /* min-height 0 lets the column shrink to the window instead of to its content;
+       overflow hidden makes anything that still cannot fit clip inside this column
+       rather than shoving the rail and the titlebar around. Scrolling is the job of
+       the columns inside, never of the page frame. */
+    min-height: 0;
+    overflow: hidden;
+}
+
+.dim-stage-head {
+    /* The page header holds still whatever the body beneath it wants; squeezes end in the
+       scrolling columns, never up here. */
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    padding-top: 14px;
+    padding-bottom: 12px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(103, 127, 174, 0.12);
+}
+
+.dim-crumb {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+    margin-left: 12px;
+    flex-grow: 1;
+}
+
+.dim-panel-host {
+    flex-grow: 1;
+    min-height: 0;
+}
+
+/* ------------------------------------------------------------------ chip -- */
+
+.dim-chip {
+    -unity-font-definition: url("Fonts/SplineMono-600.ttf");
+    font-size: 9px;
+    letter-spacing: 0.6px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.28);
+    color: #a1aedd;
+    margin-left: 6px;
+}
+
+.dim-chip-ready {
+    color: #4accf7;
+    border-color: rgba(74, 204, 247, 0.4);
+    background-color: rgba(74, 204, 247, 0.07);
+}
+
+.dim-chip-warn {
+    color: #ff9400;
+    border-color: rgba(255, 148, 0, 0.4);
+    background-color: rgba(255, 148, 0, 0.07);
+}
+
+.dim-chip-blocked {
+    color: #e45001;
+    border-color: rgba(228, 80, 1, 0.4);
+    background-color: rgba(228, 80, 1, 0.07);
+}
+
+/* ------------------------------------------------------------ stage page -- */
+
+.dim-stage-page {
+    flex-direction: row;
+    flex-grow: 1;
+    min-height: 0;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+}
+
+/* the biome list column */
+
+.dim-biome-list {
+    width: 210px;
+    flex-shrink: 0;
+    margin-right: 16px;
+}
+
+.dim-item-card {
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.22);
+    border-radius: 10px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-bottom: 8px;
+    background-color: rgba(11, 24, 38, 0.55);
+    transition-property: border-color, background-color;
+    transition-duration: 0.12s;
+}
+
+.dim-item-card:hover {
+    border-color: #a1aedd;
+}
+
+.dim-item-card-selected {
+    border-color: #4accf7;
+    background-color: rgba(74, 204, 247, 0.07);
+}
+
+.dim-card-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-right: 8px;
+    margin-top: 4px;
+}
+
+.dim-item-card-name {
+    -unity-font-definition: url("Fonts/Bricolage-700.ttf");
+    font-size: 14px;
+    color: #d7dcfb;
+    flex-grow: 1;
+    white-space: normal;
+}
+
+.dim-item-card-selected .dim-item-card-name {
+    color: #8ce8ff;
+}
+
+.dim-item-card-sub {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+    margin-top: 4px;
+    white-space: normal;
+}
+
+.dim-add-card {
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.28);
+    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0);
+    color: #677fae;
+    font-size: 12px;
+    height: 34px;
+    transition-property: color, border-color;
+    transition-duration: 0.12s;
+}
+
+.dim-add-card:hover {
+    color: #4accf7;
+    border-color: #4accf7;
+}
+
+/* the detail column */
+
+.dim-biome-detail-scroll {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.dim-biome-detail {
+    padding-right: 6px;
+}
+
+.dim-group {
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.14);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    background-color: rgba(11, 24, 38, 0.35);
+}
+
+.dim-group-head {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-left: 14px;
+    padding-right: 14px;
+    background-color: rgba(9, 16, 24, 0.55);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(103, 127, 174, 0.14);
+}
+
+.dim-group-head .dim-h3 {
+    font-size: 14px;
+}
+
+.dim-group-hint {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+    margin-left: 10px;
+}
+
+.dim-group-body {
+    padding-top: 12px;
+    padding-bottom: 14px;
+    padding-left: 14px;
+    padding-right: 14px;
+}
+
+/* fields inside a group */
+
+.dim-field {
+    margin-bottom: 10px;
+}
+
+.dim-field .unity-base-field__label {
+    -unity-font-definition: url("Fonts/Hanken-600.ttf");
+    font-size: 12px;
+    color: #a1aedd;
+    min-width: 150px;
+}
+
+.dim-field .unity-base-field__input {
+    background-color: rgba(11, 24, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.22);
+    border-radius: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    min-height: 26px;
+    color: #d7dcfb;
+}
+
+.dim-field .unity-base-field__input:focus {
+    border-color: #4accf7;
+}
+
+.dim-field-label {
+    -unity-font-definition: url("Fonts/Hanken-600.ttf");
+    font-size: 12px;
+    color: #a1aedd;
+    margin-bottom: 6px;
+}
+
+/* chips */
+
+.dim-chip-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.dim-chip-row .dim-chip {
+    margin-left: 0;
+    margin-right: 6px;
+    margin-bottom: 6px;
+}
+
+.dim-chip-link {
+    color: #19bdc6;
+    border-color: rgba(25, 189, 198, 0.35);
+}
+
+.dim-chip-removable {
+    background-color: rgba(20, 43, 92, 0.4);
+    color: #d7dcfb;
+    height: 22px;
+    transition-property: border-color, color;
+    transition-duration: 0.12s;
+}
+
+.dim-chip-removable:hover {
+    border-color: #e45001;
+    color: #ff9400;
+}
+
+.dim-inline-add {
+    min-width: 190px;
+    margin-bottom: 6px;
+}
+
+.dim-inline-add .unity-base-field__input {
+    background-color: rgba(11, 24, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.18);
+    border-radius: 6px;
+    min-height: 22px;
+    padding-left: 8px;
+    color: #d7dcfb;
+    font-size: 11px;
+}
+
+/* ------------------------------------------------------- help badge ------- */
+
+.dim-help {
+    width: 15px;
+    height: 15px;
+    border-radius: 8px;
+    background-color: #050d15;
+    border-width: 1px;
+    border-color: rgba(161, 174, 221, 0.45);
+    color: #d7dcfb;
+    font-size: 10px;
+    -unity-font-definition: url("Fonts/Hanken-700.ttf");
+    -unity-text-align: middle-center;
+    margin-left: 6px;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+    transition-property: border-color, color, background-color;
+    transition-duration: 0.12s;
+}
+
+.dim-help:hover {
+    border-color: #4accf7;
+    color: #8ce8ff;
+    background-color: rgba(74, 204, 247, 0.12);
+}
+
+/* ------------------------------------------------------------- tabs ------- */
+
+.dim-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 4px;
+    padding-bottom: 10px;
+}
+
+.dim-tab {
+    -unity-font-definition: url("Fonts/Hanken-600.ttf");
+    font-size: 12px;
+    height: 26px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-right: 6px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.22);
+    background-color: rgba(0, 0, 0, 0);
+    color: #a1aedd;
+    transition-property: border-color, color, background-color;
+    transition-duration: 0.12s;
+}
+
+.dim-tab:hover {
+    color: #d7dcfb;
+    border-color: #a1aedd;
+}
+
+.dim-tab-current {
+    color: #06192b;
+    background-color: #4accf7;
+    border-color: #4accf7;
+}
+
+/* ---------------------------------------------------- page structure ------ */
+
+.dim-stage-page-root {
+    flex-grow: 1;
+    min-height: 0;
+}
+
+.dim-list-column {
+    width: 230px;
+    flex-shrink: 0;
+    margin-right: 16px;
+    min-height: 0;
+}
+
+.dim-detail-column {
+    flex-grow: 1;
+    min-width: 0;
+    /* Without this a ScrollView's minimum height is its CONTENT height, so a page
+       with a taller column pressed the whole window apart instead of scrolling —
+       switching layers made the entire UI shift. */
+    min-height: 0;
+}
+
+.dim-detail {
+    padding-right: 6px;
+}
+
+/* ------------------------------------------------------------ fields ------ */
+
+.dim-field-head {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.dim-field-control {
+    margin-left: 0;
+}
+
+.dim-field-control .unity-base-field__label {
+    min-width: 0;
+    width: 0;
+    display: none;
+}
+
+.dim-field-control .unity-base-field__input {
+    background-color: rgba(11, 24, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.22);
+    border-radius: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    min-height: 26px;
+    color: #d7dcfb;
+}
+
+.dim-field-control .unity-base-field__input:focus {
+    border-color: #4accf7;
+}
+
+.dim-missing {
+    color: #ff9400;
+    font-size: 11px;
+    white-space: normal;
+    margin-bottom: 10px;
+}
+
+/* ------------------------------------------------------ empty states ------ */
+
+.dim-empty {
+    align-items: center;
+    justify-content: center;
+    padding-top: 60px;
+    padding-bottom: 60px;
+    padding-left: 30px;
+    padding-right: 30px;
+}
+
+.dim-empty-title {
+    -unity-font-definition: url("Fonts/Bricolage-700.ttf");
+    font-size: 20px;
+    color: #d7dcfb;
+    margin-bottom: 10px;
+    -unity-text-align: middle-center;
+}
+
+.dim-empty-body {
+    font-size: 12px;
+    color: #a1aedd;
+    white-space: normal;
+    max-width: 460px;
+    -unity-text-align: middle-center;
+    margin-bottom: 18px;
+}
+
+/* ------------------------------------------------- everything else -------- */
+
+.dim-everything-else {
+    margin-top: 6px;
+    margin-bottom: 10px;
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.12);
+    border-radius: 10px;
+    padding-top: 6px;
+    padding-bottom: 8px;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: rgba(11, 24, 38, 0.25);
+}
+
+.dim-everything-else > .unity-foldout__toggle .unity-text-element {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+}
+
+.dim-raw-field {
+    margin-top: 3px;
+}
+
+.dim-raw-field .unity-base-field__label {
+    font-size: 11px;
+    color: #677fae;
+    min-width: 160px;
+}
+
+/* ----------------------------------------------------------- toggles ----- */
+/* A checkbox is not a text box. Without this it inherits the boxed input
+   treatment above and reads as an empty field the creator cannot fill in. */
+
+.dim-field-control.unity-toggle .unity-base-field__input {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    min-height: 0;
+    padding-left: 0;
+    padding-right: 0;
+    flex-grow: 0;
+}
+
+.dim-field-control.unity-toggle .unity-toggle__checkmark {
+    width: 17px;
+    height: 17px;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.4);
+    background-color: rgba(11, 24, 38, 0.9);
+    margin-left: 0;
+}
+
+.dim-field-control.unity-toggle:hover .unity-toggle__checkmark {
+    border-color: #4accf7;
+}
+
+/* --------------------------------------------------------- object rows --- */
+/* Object pickers arrive as a PropertyField wrapping a real field. */
+
+.dim-field-control .unity-object-field__input {
+    background-color: rgba(11, 24, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.22);
+    border-radius: 8px;
+    min-height: 26px;
+}
+
+.dim-field-control .unity-object-field__input:hover {
+    border-color: #a1aedd;
+}
+
+/* Enum and other popups. */
+.dim-field-control .unity-popup-field__input,
+.dim-field-control .unity-enum-field__input {
+    background-color: rgba(11, 24, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.22);
+    border-radius: 8px;
+    min-height: 26px;
+    padding-left: 8px;
+    color: #d7dcfb;
+}
+
+/* A group card should read as a card. */
+.dim-group {
+    border-color: rgba(103, 127, 174, 0.2);
+}
+
+/* --------------------------------------------------- single asset page ---- */
+
+.dim-single-detail {
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 12px;
+    padding-bottom: 20px;
+    max-width: 780px;
+}
+
+.dim-header-toggle {
+    height: 26px;
+    font-size: 11px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-left: 8px;
+}
+
+.dim-readonly-value {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 11px;
+    color: #677fae;
+    background-color: rgba(11, 24, 38, 0.5);
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.14);
+    border-radius: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+/* ------------------------------------------------------------ checks ----- */
+
+.dim-check-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.dim-check-card {
+    width: 48%;
+    min-width: 260px;
+    margin-right: 2%;
+    margin-bottom: 10px;
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.14);
+    border-radius: 10px;
+    padding-top: 10px;
+    padding-bottom: 11px;
+    padding-left: 12px;
+    padding-right: 12px;
+    background-color: rgba(11, 24, 38, 0.4);
+}
+
+.dim-check-head {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.dim-check-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 5px;
+    margin-right: 9px;
+}
+
+.dim-check-good { background-color: #4accf7; }
+.dim-check-warn { background-color: #ff9400; }
+.dim-check-bad  { background-color: #e45001; }
+
+.dim-check-name {
+    -unity-font-definition: url("Fonts/Hanken-700.ttf");
+    font-size: 13px;
+    color: #d7dcfb;
+}
+
+.dim-check-detail {
+    font-size: 11px;
+    color: #a1aedd;
+    white-space: normal;
+}
+
+.dim-build-bar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    margin-bottom: 14px;
+    padding-top: 12px;
+    border-top-width: 1px;
+    border-top-color: rgba(103, 127, 174, 0.14);
+}
+
+.dim-build-text {
+    flex-grow: 1;
+    min-width: 220px;
+    font-size: 12px;
+    color: #a1aedd;
+    white-space: normal;
+    margin-right: 12px;
+}
+
+.dim-build-bar .dim-button {
+    margin-left: 6px;
+    margin-top: 4px;
+}
+
+/* A canvas island: original drawing code, framed by the new design. */
+/* The island is a LAYOUT hook, never a visual layer. It used to carry its own background,
+   border and padding in a third dark tone, which stacked with the trailing layout space into
+   the mystery darker band under every preview. The card frames, the canvas floors — nothing
+   in between paints anything. */
+.dim-canvas-island {
+    flex-grow: 1;
+}
+
+/* ------------------------------------------------------- the blocks stage -- */
+
+/* The column the block canvas lives in: wide enough for the canvas at its
+   drawn size, and never squeezed when the settings beside it grow. */
+.dim-block-canvas {
+    width: 612px;
+    flex-shrink: 0;
+    margin-right: 16px;
+}
+
+.dim-canvas-toolbar {
+    flex-direction: row;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.dim-canvas-paints {
+    flex-grow: 1;
+    min-width: 160px;
+}
+
+/* The paint choice is a normal labelled field, so it carries its own help badge. Inside the
+   toolbar it drops the trailing margin a field would otherwise leave, so the tab strip sits on
+   the same line as the buttons beside it. */
+.dim-canvas-paints .dim-field {
+    margin-bottom: 0;
+}
+
+.dim-canvas-actions {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.dim-canvas-actions .dim-button {
+    height: 26px;
+    font-size: 11px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-left: 6px;
+}
+
+.dim-canvas-caption {
+    -unity-font-definition: url("Fonts/Hanken-400.ttf");
+    font-size: 11px;
+    color: #677fae;
+    white-space: normal;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+/* A chip that answers yes or no rather than just naming something. */
+.dim-chip-toggle {
+    background-color: rgba(20, 43, 92, 0.4);
+    color: #a1aedd;
+    height: 22px;
+    transition-property: background-color, border-color, color;
+    transition-duration: 0.12s;
+}
+
+.dim-chip-toggle:hover {
+    border-color: #a1aedd;
+    color: #8ce8ff;
+}
+
+.dim-chip-toggle-on {
+    background-color: #4accf7;
+    border-color: #4accf7;
+    color: #06192b;
+}
+
+.dim-chip-toggle-on:hover {
+    background-color: #8ce8ff;
+    color: #06192b;
+}
+
+/* A sentence under a control: an explanation, a warning, or a plain fact. */
+.dim-note {
+    -unity-font-definition: url("Fonts/Hanken-400.ttf");
+    font-size: 11px;
+    color: #a1aedd;
+    white-space: normal;
+    margin-bottom: 10px;
+}
+
+.dim-note-warn {
+    color: #ff9400;
+}
+
+/* How much of something grows on a block: the switch, the amount, the reading. */
+.dim-density {
+    flex-direction: row;
+    align-items: center;
+}
+
+.dim-density-toggle {
+    margin-right: 8px;
+}
+
+.dim-density .unity-base-slider {
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+.dim-density-value {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+    width: 128px;
+}
+
+/* ------------------------------------------------------ portal stage ------ */
+/* Three columns: the parts of the portal, the portal, and the part's settings. */
+
+/* The picture is drawn at a fixed size, so its column is sized to fit it exactly and
+   the settings column takes whatever room is left. */
+
+.dim-portal-canvas-column {
+    width: 512px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    margin-right: 16px;
+    min-height: 0;
+}
+
+.dim-portal-settings-column {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 300px;
+    max-width: 460px;
+}
+
+.dim-portal-list-heading {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.dim-portal-toolbar {
+    flex-shrink: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.dim-portal-toolbar .dim-tab {
+    margin-bottom: 6px;
+}
+
+.dim-portal-toolbar-action {
+    height: 26px;
+    font-size: 12px;
+    margin-right: 6px;
+    margin-bottom: 6px;
+    margin-left: 0;
+}
+
+.dim-portal-toolbar-gap {
+    width: 14px;
+    height: 1px;
+}
+
+.dim-portal-zoom {
+    -unity-font-definition: url("Fonts/SplineMono-400.ttf");
+    font-size: 10px;
+    color: #677fae;
+    width: 40px;
+    -unity-text-align: middle-center;
+    margin-bottom: 6px;
+}
+
+/* ------------------------------------------------------------ issues ----- */
+
+.dim-issue-card {
+    border-width: 1px;
+    border-color: rgba(103, 127, 174, 0.14);
+    border-radius: 10px;
+    padding-top: 10px;
+    padding-bottom: 11px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-bottom: 8px;
+    background-color: rgba(11, 24, 38, 0.4);
+}
+
+.dim-issue-card .dim-chip-row {
+    margin-top: 8px;
+}

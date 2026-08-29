@@ -1,0 +1,137 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f48c59a2a9e14e48bff6c6a2a490187b, type: 3}
+  m_Name: PortalProfile
+  m_EditorClassIdentifier: 
+  portalArtworkDefaultsVersion: 6
+  portalFrameSpriteAsset:
+    m_address:
+      m_low: 3521948531861827477
+      m_high: -7671229402547038681
+  frameTint: {r: 1, g: 1, b: 1, a: 1}
+  frameEmissiveColor: {r: 0.47641504, g: 0.7775954, b: 1, a: 1}
+  frameVisible: 0
+  frameOffsetPixels: {x: 0, y: 0}
+  frameScale: {x: 1, y: 1}
+  frameRotationDegrees: 0
+  frameFlipX: 0
+  frameFlipY: 0
+  chargeWaveSpriteAsset:
+    m_address:
+      m_low: 4897473498445244081
+      m_high: 6598117232925981791
+  chargeWaveDarkColor: {r: 0.078431375, g: 0.16862746, b: 0.36078432, a: 1}
+  chargeWaveDeepColor: {r: 0.078431375, g: 0.24313726, b: 0.67058825, a: 1}
+  chargeWaveMidColor: {r: 0.08627451, g: 0.3647059, b: 0.8509804, a: 1}
+  chargeWaveBrightColor: {r: 0.09411765, g: 0.52156866, b: 0.84705883, a: 1}
+  chargeWaveCoreColor: {r: 0.09803922, g: 0.7411765, b: 0.7764706, a: 1}
+  chargeWaveTint: {r: 1, g: 1, b: 1, a: 1}
+  chargeWaveEmissiveColor: {r: 0.47641504, g: 0.7775954, b: 1, a: 1}
+  chargeWaveSpeed: 1
+  chargeWaveVisible: 0
+  chargeWaveOffsetPixels: {x: 0, y: 0}
+  chargeWaveScale: {x: 1, y: 1}
+  chargeWaveRotationDegrees: 0
+  chargeWaveFlipX: 0
+  chargeWaveFlipY: 0
+  milestoneSpriteAsset:
+    m_address:
+      m_low: -4316490460818823715
+      m_high: 6766236091562114303
+  milestoneDarkColor: {r: 0.078431375, g: 0.16862746, b: 0.36078432, a: 1}
+  milestoneDeepColor: {r: 0.078431375, g: 0.24313726, b: 0.67058825, a: 1}
+  milestoneMidColor: {r: 0.08627451, g: 0.3647059, b: 0.8509804, a: 1}
+  milestoneBrightColor: {r: 0.09411765, g: 0.52156866, b: 0.84705883, a: 1}
+  milestoneCoreColor: {r: 0.09803922, g: 0.7411765, b: 0.7764706, a: 1}
+  milestoneTint: {r: 1, g: 1, b: 1, a: 1}
+  milestoneEmissiveColor: {r: 0, g: 2.568409, b: 3.7735853, a: 1}
+  firstMilestone: 0.25
+  secondMilestone: 0.5
+  thirdMilestone: 0.75
+  milestonesVisible: 0
+  milestoneOffsetPixels: {x: 0, y: 0}
+  milestoneScale: {x: 1, y: 1}
+  milestoneRotationDegrees: 0
+  milestoneFlipX: 0
+  milestoneFlipY: 0
+  centerEffectSpriteAsset:
+    m_address:
+      m_low: -7714742478292440774
+      m_high: 1678535244437733732
+  centerDarkColor: {r: 0.078431375, g: 0.16862746, b: 0.36078432, a: 1}
+  centerDeepColor: {r: 0.11372549, g: 0.1882353, b: 0.5372549, a: 1}
+  centerMidColor: {r: 0.078431375, g: 0.24313726, b: 0.67058825, a: 1}
+  centerBrightColor: {r: 0.08627451, g: 0.3647059, b: 0.8509804, a: 1}
+  centerCoreColor: {r: 0.09803922, g: 0.7411765, b: 0.7764706, a: 1}
+  centerHighlightColor: {r: 1, g: 1, b: 1, a: 1}
+  centerTint: {r: 0.6273585, g: 0.9010171, b: 1, a: 1}
+  centerEmissiveColor: {r: 8.884704, g: 11.821176, b: 14.381177, a: 1}
+  centerOffsetPixels: {x: 0, y: 0}
+  centerVisible: 1
+  centerScale: {x: 1, y: 1}
+  centerRotationDegrees: 0
+  centerFlipX: 0
+  centerFlipY: 0
+  centerGlowIntensity: 0.4
+  playReadyFlash: 0
+  centerParticlesEnabled: 1
+  centerParticlesFollowCenterPalette: 0
+  centerParticleTint: {r: 1, g: 1, b: 1, a: 1}
+  centerSwirlSpriteAsset:
+    m_address:
+      m_low: -6475803387308123471
+      m_high: 7342631739284561011
+  centerSwirlOverrideVanilla: 0
+  centerSwirlVisible: 1
+  centerSwirlPlaybackSpeed: 1
+  centerSwirlEmissiveColor: {r: 1, g: 1, b: 1, a: 1}
+  centerSwirlFlipX: 0
+  centerSwirlFlipY: 0
+  centerParticleSprite: {fileID: 0}
+  centerParticleTexture: {fileID: 0}
+  readyFlashFollowsCenterPalette: 1
+  readyFlashTint: {r: 1, g: 1, b: 1, a: 1}
+  centerParticleEmissionMultiplier: 1
+  centerParticleSizeMultiplier: 1
+  centerParticleLifetimeMultiplier: 1
+  centerParticleOrbitSpeedMultiplier: 1
+  centerParticleRadialSpeedMultiplier: 1
+  centerParticleRadiusMultiplier: 1
+  centerParticleTrailsEnabled: 1
+  centerParticleTrailLifetimeMultiplier: 1
+  centerParticleOffsetPixels: {x: 0, y: 0}
+  centerParticleScale: {x: 1, y: 1}
+  centerParticleRotationDegrees: 0
+  readyFlashTexture: {fileID: 0}
+  readyFlashSprites: []
+  readyFlashEmissionMultiplier: 1
+  readyFlashSizeMultiplier: 1
+  readyFlashOffsetPixels: {x: 0, y: 0}
+  readyFlashScale: {x: 1, y: 1}
+  readyFlashRotationDegrees: 0
+  groundLightEnabled: 1
+  groundLightColor: {r: 0.28627455, g: 0.8524765, b: 1, a: 1}
+  groundLightIntensity: 0.65
+  groundLightRange: 5
+  groundLightMinimumIntensity: 0.3
+  groundLightMaximumIntensity: 0.3
+  groundLightMovement: 1
+  groundLightCastsShadows: 1
+  groundLightOffsetPixels: {x: 0, y: 0}
+  portalShadowEnabled: 0
+  portalShadowSprite: {fileID: 0}
+  portalShadowCasterSprite: {fileID: 0}
+  portalShadowOffsetPixels: {x: 0, y: 0}
+  portalShadowScale: {x: 1, y: 1}
+  portalShadowRotationDegrees: 0
+  portalShadowFlipX: 0
+  portalShadowFlipY: 0

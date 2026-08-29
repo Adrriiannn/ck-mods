@@ -31,6 +31,27 @@ namespace ExpandNullforge.Persistence
       public int capabilities;
       public int lifecycleState;
       public bool builtIn;
+
+      /// <summary>
+      /// The layout version this world's terrain was generated from, or 0 for a world made before
+      /// layout versions existed.
+      /// </summary>
+      /// <remarks>
+      /// Written once, at the first load that has a layout to record, and then left alone. Core
+      /// Keeper generates terrain the first time a player walks somewhere, so changing this later
+      /// would not reshape what already exists — it would only make the unexplored half disagree
+      /// with the explored half.
+      /// </remarks>
+      public int layoutVersion;
+
+      /// <summary>
+      /// The shape code of the layout that generated this world.
+      /// </summary>
+      /// <remarks>
+      /// Kept alongside the version because the version alone cannot tell an unpublished edit from
+      /// the version it claims to be. See DimensionLayoutFingerprint.
+      /// </remarks>
+      public string layoutFingerprint = string.Empty;
     }
 
     [Serializable]
@@ -146,6 +167,23 @@ namespace ExpandNullforge.Persistence
       public long updatedUtcTicks;
     }
 
+    /// <summary>
+    /// When a boss went down, so its summon can honor a real-time cooldown.
+    /// </summary>
+    /// <remarks>
+    /// Vanilla has no such record — its respawn logic is purely "is the boss entity gone" —
+    /// which is why the authored cooldown minutes had no consumer until this. UTC wall clock on
+    /// purpose: the cooldown keeps running while the server is down, which is how a player
+    /// experiences "come back in half an hour".
+    /// </remarks>
+    [Serializable]
+    public sealed class DimensionBossDefeatRecord
+    {
+      public int schemaVersion = DimensionRegistryConstants.RegistrySchemaVersion;
+      public string bossObjectName = string.Empty;
+      public long defeatedUtcTicks;
+    }
+
     [Serializable]
     public sealed class DimensionGeneratedAreaRecord
     {
@@ -188,6 +226,7 @@ namespace ExpandNullforge.Persistence
       public List<DimensionAnchorRecord> anchors = new List<DimensionAnchorRecord>();
       public List<DimensionSceneRecord> scenes = new List<DimensionSceneRecord>();
       public List<DimensionProgressFlagRecord> progressFlags = new List<DimensionProgressFlagRecord>();
+      public List<DimensionBossDefeatRecord> bossDefeats = new List<DimensionBossDefeatRecord>();
       public List<DimensionGeneratedAreaRecord> generatedAreas = new List<DimensionGeneratedAreaRecord>();
       public List<DimensionContentOwnershipRecord> contentOwnership = new List<DimensionContentOwnershipRecord>();
     }
@@ -339,8 +378,8 @@ namespace ExpandNullforge.Persistence
       {
         if (!_warnedUnavailable)
         {
-          Debug.LogWarning(
-              "[ExpandNullforge] Dimension registry save path is not available yet. " +
+          DimensionLog.Problem(DimensionLogChannels.Persist, null, 
+              "Dimension registry save path is not available yet. " +
               "Waiting for the stable world GUID before loading or writing dimension state.");
           _warnedUnavailable = true;
         }
@@ -395,16 +434,16 @@ namespace ExpandNullforge.Persistence
           }
           else
           {
-            Debug.LogError(
-                "[ExpandNullforge] No readable dimension registry payload was available. " +
+            DimensionLog.Fatal(DimensionLogChannels.Persist, null, 
+                "No readable dimension registry payload was available. " +
                 "A clean registry will be created while preserving unreadable inputs.");
             _dirty = true;
           }
         }
         else if (hadRegistryBytes)
         {
-          Debug.LogError(
-              "[ExpandNullforge] Both dimension registry generations were invalid. " +
+          DimensionLog.Fatal(DimensionLogChannels.Persist, null, 
+              "Both dimension registry generations were invalid. " +
               "The original bytes are being preserved before a clean registry is created.");
           TryWriteCorruptBackup(pathA, rawA);
           TryWriteCorruptBackup(pathB, rawB);
@@ -435,7 +474,7 @@ namespace ExpandNullforge.Persistence
         }
 
         DimensionFrameworkLog.Verbose(
-            "[ExpandNullforge] Dimension registry loaded world=" +
+            "Dimension registry loaded world=" +
             worldKey +
             " generation=" +
             _generation +
@@ -464,7 +503,7 @@ namespace ExpandNullforge.Persistence
       }
       catch (Exception ex)
       {
-        Debug.LogError("[ExpandNullforge] Dimension registry load failed; preserving corrupt inputs. " + ex);
+        DimensionLog.Fatal(DimensionLogChannels.Persist, null, "Dimension registry load failed; preserving corrupt inputs. " + ex);
         TryWriteCorruptBackup(pathA, rawA);
         TryWriteCorruptBackup(pathB, rawB);
         _state = NewPayload(worldKey);
@@ -571,8 +610,8 @@ namespace ExpandNullforge.Persistence
 
         if (now >= _nextFlushFailureLogAt)
         {
-          Debug.LogError(
-              "[ExpandNullforge] Dimension registry save failed. Retrying in " +
+          DimensionLog.Fatal(DimensionLogChannels.Persist, null, 
+              "Dimension registry save failed. Retrying in " +
               retryDelay.ToString("0.#") +
               " seconds. " +
               ex);
@@ -841,6 +880,73 @@ namespace ExpandNullforge.Persistence
       }
     }
 
+    /// <summary>
+    /// Reads back which layout version generated this world's copy of a dimension.
+    /// </summary>
+    /// <returns>False when this world has no pin yet, which is the normal state of a new world.</returns>
+    public static bool TryGetLayoutPin(string dimensionId, out int layoutVersion, out string layoutFingerprint)
+    {
+      layoutVersion = 0;
+      layoutFingerprint = string.Empty;
+
+      EnsureLoadedForCurrentWorld();
+      if (!_loaded || _state == null)
+      {
+        return false;
+      }
+
+      int index = FindDimensionRecordIndex(dimensionId);
+      if (index < 0)
+      {
+        return false;
+      }
+
+      DimensionDefinitionRecord record = _state.dimensions[index];
+      if (record == null || record.layoutVersion <= 0)
+      {
+        return false;
+      }
+
+      layoutVersion = record.layoutVersion;
+      layoutFingerprint = record.layoutFingerprint ?? string.Empty;
+      return true;
+    }
+
+    /// <summary>
+    /// Records which layout version generated this world's copy of a dimension.
+    /// </summary>
+    /// <remarks>
+    /// Refuses to overwrite an existing pin. The pin describes terrain that already exists on disk,
+    /// and the one situation where a caller most wants to "correct" it — the mod shipped a new layout
+    /// — is exactly the situation where changing it would erase the record of what the player's world
+    /// is actually made of.
+    /// </remarks>
+    public static bool TryStampLayoutPin(string dimensionId, int layoutVersion, string layoutFingerprint)
+    {
+      EnsureLoadedForCurrentWorld();
+      if (!_loaded || _state == null || string.IsNullOrEmpty(dimensionId) || layoutVersion <= 0)
+      {
+        return false;
+      }
+
+      int index = FindDimensionRecordIndex(dimensionId);
+      if (index < 0)
+      {
+        return false;
+      }
+
+      DimensionDefinitionRecord record = _state.dimensions[index];
+      if (record == null || record.layoutVersion > 0)
+      {
+        return false;
+      }
+
+      record.layoutVersion = layoutVersion;
+      record.layoutFingerprint = SanitizeName(layoutFingerprint, 32, string.Empty);
+      Touch(true);
+      return true;
+    }
+
     public static void UpsertDimension(DimensionDefinition definition, bool builtIn)
     {
       EnsureLoadedForCurrentWorld();
@@ -854,6 +960,13 @@ namespace ExpandNullforge.Persistence
       int index = FindDimensionRecordIndex(record.dimensionId);
       if (index >= 0)
       {
+        // The layout pin belongs to the WORLD, not to the definition being upserted — it records
+        // which layout made this save's terrain. ToRecord knows nothing about it, so without this
+        // carry-over every registration would quietly erase the pin and the world would be treated
+        // as brand new on the next load.
+        record.layoutVersion = _state.dimensions[index].layoutVersion;
+        record.layoutFingerprint = _state.dimensions[index].layoutFingerprint;
+
         if (RecordsEqual(_state.dimensions[index], record))
         {
           return;
@@ -1152,6 +1265,95 @@ namespace ExpandNullforge.Persistence
       Touch();
     }
 
+    public static void UpsertBossDefeat(string bossObjectName, long defeatedUtcTicks)
+    {
+      EnsureLoadedForCurrentWorld();
+      if (!_loaded || _state == null || string.IsNullOrEmpty(bossObjectName))
+      {
+        return;
+      }
+
+      _state.bossDefeats = _state.bossDefeats ?? new List<DimensionBossDefeatRecord>();
+      int index = FindBossDefeatRecordIndex(bossObjectName);
+      if (index >= 0)
+      {
+        if (_state.bossDefeats[index].defeatedUtcTicks == defeatedUtcTicks)
+        {
+          return;
+        }
+
+        _state.bossDefeats[index].defeatedUtcTicks = defeatedUtcTicks;
+      }
+      else
+      {
+        _state.bossDefeats.Add(new DimensionBossDefeatRecord
+        {
+          bossObjectName = bossObjectName,
+          defeatedUtcTicks = defeatedUtcTicks
+        });
+      }
+
+      Touch();
+    }
+
+    public static bool TryGetBossDefeat(string bossObjectName, out long defeatedUtcTicks)
+    {
+      defeatedUtcTicks = 0L;
+      EnsureLoadedForCurrentWorld();
+      if (!_loaded || _state == null || _state.bossDefeats == null)
+      {
+        return false;
+      }
+
+      int index = FindBossDefeatRecordIndex(bossObjectName);
+      if (index < 0)
+      {
+        return false;
+      }
+
+      defeatedUtcTicks = _state.bossDefeats[index].defeatedUtcTicks;
+      return true;
+    }
+
+    public static void RemoveBossDefeat(string bossObjectName)
+    {
+      EnsureLoadedForCurrentWorld();
+      if (!_loaded || _state == null || _state.bossDefeats == null)
+      {
+        return;
+      }
+
+      int index = FindBossDefeatRecordIndex(bossObjectName);
+      if (index < 0)
+      {
+        return;
+      }
+
+      _state.bossDefeats.RemoveAt(index);
+      Touch();
+    }
+
+    private static int FindBossDefeatRecordIndex(string bossObjectName)
+    {
+      if (_state == null || _state.bossDefeats == null || string.IsNullOrEmpty(bossObjectName))
+      {
+        return -1;
+      }
+
+      for (int i = 0; i < _state.bossDefeats.Count; i++)
+      {
+        if (string.Equals(
+                _state.bossDefeats[i].bossObjectName,
+                bossObjectName,
+                StringComparison.Ordinal))
+        {
+          return i;
+        }
+      }
+
+      return -1;
+    }
+
     public static void RemoveProgressFlag(string flagId)
     {
       EnsureLoadedForCurrentWorld();
@@ -1283,6 +1485,8 @@ namespace ExpandNullforge.Persistence
              a.spaceKind == b.spaceKind &&
              a.capabilities == b.capabilities &&
              a.lifecycleState == b.lifecycleState &&
+             a.layoutVersion == b.layoutVersion &&
+             string.Equals(a.layoutFingerprint, b.layoutFingerprint, StringComparison.Ordinal) &&
              a.builtIn == b.builtIn;
     }
 
@@ -2068,7 +2272,8 @@ namespace ExpandNullforge.Persistence
         localMaxExclusiveX = definition.LocalBounds.MaxExclusive.x,
         localMaxExclusiveY = definition.LocalBounds.MaxExclusive.y,
         generationVersion = Math.Max(1, definition.GenerationVersion),
-        spaceKind = (int)definition.SpaceKind,
+        // The JSON field keeps its old name so every existing registry parses unchanged.
+        spaceKind = (int)definition.Type,
         capabilities = (int)definition.Capabilities,
         lifecycleState = (int)definition.LifecycleState,
         builtIn = builtIn
@@ -2184,7 +2389,7 @@ namespace ExpandNullforge.Persistence
               new int2(record.localMinX, record.localMinY),
               new int2(record.localMaxExclusiveX, record.localMaxExclusiveY)),
           Math.Max(1, record.generationVersion),
-          (DimensionSpaceKind)record.spaceKind,
+          DimensionTypeMigration.Normalize(record.spaceKind),
           (DimensionCapabilityFlags)record.capabilities,
           (DimensionLifecycleState)record.lifecycleState);
     }
@@ -2463,15 +2668,15 @@ namespace ExpandNullforge.Persistence
             JsonConvert.DeserializeObject<RegistryPayload>(envelope.payload);
         if (candidate == null)
         {
-          Debug.LogError("[ExpandNullforge] Dimension registry payload was empty after deserialization.");
+          DimensionLog.Fatal(DimensionLogChannels.Persist, null, "Dimension registry payload was empty after deserialization.");
           TryWriteCorruptBackup(path, raw);
           return false;
         }
 
         if (!IsRegistrySchemaReadable(candidate.schemaVersion))
         {
-          Debug.LogError(
-              "[ExpandNullforge] Dimension registry payload schema " +
+          DimensionLog.Fatal(DimensionLogChannels.Persist, null, 
+              "Dimension registry payload schema " +
               candidate.schemaVersion +
               " is not readable by this framework build. Current schema=" +
               DimensionRegistryConstants.RegistrySchemaVersion +
@@ -2486,7 +2691,7 @@ namespace ExpandNullforge.Persistence
       }
       catch (Exception ex)
       {
-        Debug.LogError("[ExpandNullforge] Dimension registry payload failed to deserialize. " + ex);
+        DimensionLog.Fatal(DimensionLogChannels.Persist, null, "Dimension registry payload failed to deserialize. " + ex);
         TryWriteCorruptBackup(path, raw);
         return false;
       }
@@ -2650,6 +2855,11 @@ namespace ExpandNullforge.Persistence
         SetSanitizedName(ref record.dimensionId, 128, string.Empty);
         SetSanitizedName(ref record.displayName, 128, record.dimensionId);
         SetIntIfChanged(ref record.generationVersion, Math.Max(1, record.generationVersion));
+
+        // Zero is a real value here — it means "made before layout versions existed" — so unlike
+        // generationVersion this must not be floored to 1, which would claim a pin nobody set.
+        SetIntIfChanged(ref record.layoutVersion, Math.Max(0, record.layoutVersion));
+        SetSanitizedName(ref record.layoutFingerprint, 32, string.Empty);
         if (record.localMaxExclusiveX <= record.localMinX || record.localMaxExclusiveY <= record.localMinY)
         {
           continue;
@@ -3112,7 +3322,7 @@ namespace ExpandNullforge.Persistence
       }
 
       DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Migrating provisional dimension registry from " +
+          "Migrating provisional dimension registry from " +
           slotWorldKey +
           " to stable world key " +
           stableWorldKey +
@@ -3156,8 +3366,8 @@ namespace ExpandNullforge.Persistence
         }
         catch (Exception ex)
         {
-          Debug.LogWarning(
-              "[ExpandNullforge] Could not read stable world GUID yet: " +
+          DimensionLog.Problem(DimensionLogChannels.Persist, null, 
+              "Could not read stable world GUID yet: " +
               ex.Message);
         }
       }
@@ -3238,7 +3448,7 @@ namespace ExpandNullforge.Persistence
       }
       catch (Exception ex)
       {
-        Debug.LogWarning("[ExpandNullforge] Could not preserve corrupt dimension registry: " + ex.Message);
+        DimensionLog.Problem(DimensionLogChannels.Persist, null, "Could not preserve corrupt dimension registry: " + ex.Message);
       }
     }
   }

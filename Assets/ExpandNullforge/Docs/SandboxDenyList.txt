@@ -1,0 +1,75 @@
+# Core Keeper's mod sandbox deny list, transcribed from the game's own
+# Assets/Resources/RoslynCSharpSettings.asset (RoslynCSharp.Settings.SecurityRestrictions).
+#
+# DimensionSandboxGuard reads this file. It is the only copy the code sees, so that the guard and
+# the rule cannot drift apart. The prose record, with the citations and the reasoning, is
+# ck-research/sandbox-compliance.md; edit both together or neither.
+#
+# Every list in the asset has defaultBehaviour 0, which is Allow, so these entries are the whole
+# restriction. Anything absent is permitted.
+#
+# Format: "<kind>: <entry>", one per line. Text after # is a comment.
+
+# Namespaces. The asset writes these with a trailing ".*" and matches them as a case-sensitive
+# prefix, so System.IO also covers System.IO.Compression.
+namespace: System.IO.*
+namespace: System.Diagnostics.*
+namespace: System.Net.*
+namespace: System.Runtime.InteropServices.*
+namespace: System.Reflection.*
+namespace: RoslynCSharp.*
+namespace: Pug.Platform.*
+
+# Types. Exact full name, case-insensitive, no wildcards. HarmonyLib's ATTRIBUTES are deliberately
+# absent from this list: declaring a patch is the sanctioned route, driving the patcher is not.
+type: System.AppDomain
+type: HarmonyLib.Harmony
+type: HarmonyLib.AccessTools
+type: HarmonyLib.Code
+type: HarmonyLib.FastAccess
+type: HarmonyLib.FastInvokeHandler
+type: HarmonyLib.MethodInvoker
+type: HarmonyLib.Patch
+type: HarmonyLib.PatchClassProcessor
+type: HarmonyLib.Patches
+type: HarmonyLib.PatchInfo
+type: HarmonyLib.PatchProcessor
+type: HarmonyLib.ReversePatcher
+type: HarmonyLib.SetterHandler
+type: HarmonyLib.Transpilers
+type: HarmonyLib.Traverse
+
+# Members. The shipped checker discards its own verdict on these and falls back to the declaring
+# type's, so neither is actually blocked today. They stay listed and guarded anyway: the asset says
+# they are denied, and being stricter than a bug costs nothing.
+member: UnityEngine.Application.Quit
+member: System.Type.InvokeMember
+
+# Types the C# compiler writes into every assembly by itself, which no source file mentions and
+# which the game's own checker never walks. Only DimensionSandboxAssemblyGuard uses these, because
+# only it reads the built DLL, where they show up. Each was found by reading the metadata of a clean
+# build of ExpandNullforge.dll and then locating where it is actually used; the note says where.
+# Anything NOT listed here is reported, so a new one fails the build and a person decides.
+#
+# Cecil reports a modifier's ELEMENT type, not the modifier, so a modreq never reaches the checker;
+# and CustomAttribute appears nowhere in Trivial.CodeSecurity, so an attribute never does either.
+compiler-emitted: System.Diagnostics.DebuggableAttribute            # assembly-level [Debuggable]
+compiler-emitted: System.Diagnostics.DebuggableAttribute+DebuggingModes  # its ctor's parameter type
+compiler-emitted: System.Diagnostics.DebuggerBrowsableAttribute     # on auto-property backing fields
+compiler-emitted: System.Diagnostics.DebuggerBrowsableState         # its ctor's parameter type
+compiler-emitted: System.Diagnostics.DebuggerHiddenAttribute        # on compiler-generated members
+compiler-emitted: System.Runtime.InteropServices.InAttribute        # modreq on every "in" parameter
+compiler-emitted: System.Runtime.InteropServices.UnmanagedType      # modreq for "where T : unmanaged"
+#
+# These two are not the C# compiler but Burst's IL post-processor, which rewrites every
+# [BurstCompile] method into a nested $BurstDirectCall type carrying a function-pointer delegate.
+# They are in the assembly Unity builds and in no source file. Measured in
+# Library/ScriptAssemblies/ExpandNullforge.dll: the first is an attribute type used by 8 custom
+# attributes, the second appears only inside that attribute's constructor signature.
+compiler-emitted: System.Runtime.InteropServices.UnmanagedFunctionPointerAttribute
+compiler-emitted: System.Runtime.InteropServices.CallingConvention
+
+# Settings from the same asset.
+setting: allowPInvoke = false
+setting: allowUnsafeCode = false
+setting: securityCheckCode = true

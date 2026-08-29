@@ -828,7 +828,7 @@ namespace ExpandNullforge.EditorTools
                 serializedSource.Update();
                 DimensionPortalArtworkLayer layer = ArtworkLayers[i];
                 SerializedProperty reference = serializedSource.FindProperty(
-                    GetReferencePropertyName(layer));
+                    DimensionPortalPackageEditorUtility.GetReferencePropertyName(layer));
                 DimensionPortalArtworkReferenceKind kind =
                     DimensionPortalArtworkEditorUtility.ClassifyReference(
                         reference,
@@ -1575,36 +1575,6 @@ namespace ExpandNullforge.EditorTools
             return errors.Count == 0 ? string.Empty : string.Join("; ", errors.ToArray());
         }
 
-        private static bool TryReadStaticFrameTextures(
-            SpriteAsset asset,
-            out Texture2D texture,
-            out Texture2D emissive)
-        {
-            texture = null;
-            emissive = null;
-            if (asset == null)
-            {
-                return false;
-            }
-
-            SerializedObject serialized = new SerializedObject(asset);
-            serialized.Update();
-            SerializedProperty data = serialized.FindProperty("m_staticSpriteData");
-            SerializedProperty textureProperty = data == null
-                ? null
-                : data.FindPropertyRelative("texture");
-            SerializedProperty emissiveProperty = data == null
-                ? null
-                : data.FindPropertyRelative("emissiveTexture");
-            texture = textureProperty == null
-                ? null
-                : textureProperty.objectReferenceValue as Texture2D;
-            emissive = emissiveProperty == null
-                ? null
-                : emissiveProperty.objectReferenceValue as Texture2D;
-            return texture != null;
-        }
-
         private static bool TryResolveContext(
             DimensionTemplateAsset template,
             DimensionPortalVisualProfileAsset profile,
@@ -1682,51 +1652,6 @@ namespace ExpandNullforge.EditorTools
             return string.Equals(profileRoot, ownerRoot, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool EnsureFolder(string folder, out string message)
-        {
-            message = string.Empty;
-            string normalized = NormalizeAssetPath(folder);
-            if (string.IsNullOrEmpty(normalized) ||
-                (!string.Equals(normalized, "Assets", StringComparison.Ordinal) &&
-                 !normalized.StartsWith("Assets/", StringComparison.Ordinal)))
-            {
-                message = "Portal preset folder is not a valid project asset path.";
-                return false;
-            }
-
-            if (AssetDatabase.IsValidFolder(normalized))
-            {
-                return true;
-            }
-
-            string[] parts = normalized.Split('/');
-            string current = "Assets";
-            for (int i = 1; i < parts.Length; i++)
-            {
-                if (string.IsNullOrEmpty(parts[i]))
-                {
-                    continue;
-                }
-
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    string guid = AssetDatabase.CreateFolder(current, parts[i]);
-                    string created = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guid));
-                    if (!string.Equals(created, next, StringComparison.OrdinalIgnoreCase) &&
-                        !AssetDatabase.IsValidFolder(next))
-                    {
-                        message = "Could not create portal preset folder '" + next + "'.";
-                        return false;
-                    }
-                }
-
-                current = next;
-            }
-
-            return AssetDatabase.IsValidFolder(normalized);
-        }
-
         private static bool CacheIsAlive(
             IReadOnlyList<DimensionPortalVisualProfileAsset> profiles)
         {
@@ -1763,23 +1688,6 @@ namespace ExpandNullforge.EditorTools
                 NormalizeAssetPath(left == null ? string.Empty : AssetDatabase.GetAssetPath(left)),
                 NormalizeAssetPath(right == null ? string.Empty : AssetDatabase.GetAssetPath(right)),
                 StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string GetReferencePropertyName(DimensionPortalArtworkLayer layer)
-        {
-            switch (layer)
-            {
-                case DimensionPortalArtworkLayer.Frame:
-                    return "portalFrameSpriteAsset";
-                case DimensionPortalArtworkLayer.ChargeSweep:
-                    return "chargeWaveSpriteAsset";
-                case DimensionPortalArtworkLayer.Milestones:
-                    return "milestoneSpriteAsset";
-                case DimensionPortalArtworkLayer.Center:
-                    return "centerEffectSpriteAsset";
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(layer), layer, null);
-            }
         }
 
         private static string GetLayerDisplayName(DimensionPortalArtworkLayer layer)

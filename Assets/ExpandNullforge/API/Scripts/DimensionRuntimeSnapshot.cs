@@ -7,8 +7,6 @@ namespace ExpandNullforge.Api
         public readonly int ContentOwnershipBindingCount;
         public readonly int AssetReferenceCount;
         public readonly int BiomeCount;
-        public readonly int GenerationTableCount;
-        public readonly int GenerationTableEntryCount;
         public readonly int PlayerVisitCount;
         public readonly int PortalCount;
         public readonly int PortalPresentationCount;
@@ -20,8 +18,6 @@ namespace ExpandNullforge.Api
         public readonly int SceneCount;
         public readonly int SceneTemplateCount;
         public readonly int EncounterCount;
-        public readonly int ResourceNodeCount;
-        public readonly int SpawnRuleCount;
         public readonly int WorldEventCount;
         public readonly int ProgressFlagCount;
         public readonly int GeneratedAreaCount;
@@ -29,7 +25,6 @@ namespace ExpandNullforge.Api
         public readonly int GenerationProviderCount;
         public readonly int GenerationPassCount;
         public readonly int ZoneDefinitionCount;
-        public readonly int EnvironmentProfileCount;
         public readonly int ZoneProviderCount;
         public readonly int AccessProviderCount;
         public readonly int RuntimeGenerationJobCount;
@@ -49,8 +44,6 @@ namespace ExpandNullforge.Api
             int contentOwnershipBindingCount,
             int assetReferenceCount,
             int biomeCount,
-            int generationTableCount,
-            int generationTableEntryCount,
             int playerVisitCount,
             int portalCount,
             int portalPresentationCount,
@@ -62,8 +55,6 @@ namespace ExpandNullforge.Api
             int sceneCount,
             int sceneTemplateCount,
             int encounterCount,
-            int resourceNodeCount,
-            int spawnRuleCount,
             int worldEventCount,
             int progressFlagCount,
             int generatedAreaCount,
@@ -71,7 +62,6 @@ namespace ExpandNullforge.Api
             int generationProviderCount,
             int generationPassCount,
             int zoneDefinitionCount,
-            int environmentProfileCount,
             int zoneProviderCount,
             int accessProviderCount,
             int runtimeGenerationJobCount,
@@ -90,8 +80,6 @@ namespace ExpandNullforge.Api
             ContentOwnershipBindingCount = contentOwnershipBindingCount;
             AssetReferenceCount = assetReferenceCount;
             BiomeCount = biomeCount;
-            GenerationTableCount = generationTableCount;
-            GenerationTableEntryCount = generationTableEntryCount;
             PlayerVisitCount = playerVisitCount;
             PortalCount = portalCount;
             PortalPresentationCount = portalPresentationCount;
@@ -103,8 +91,6 @@ namespace ExpandNullforge.Api
             SceneCount = sceneCount;
             SceneTemplateCount = sceneTemplateCount;
             EncounterCount = encounterCount;
-            ResourceNodeCount = resourceNodeCount;
-            SpawnRuleCount = spawnRuleCount;
             WorldEventCount = worldEventCount;
             ProgressFlagCount = progressFlagCount;
             GeneratedAreaCount = generatedAreaCount;
@@ -112,7 +98,6 @@ namespace ExpandNullforge.Api
             GenerationProviderCount = generationProviderCount;
             GenerationPassCount = generationPassCount;
             ZoneDefinitionCount = zoneDefinitionCount;
-            EnvironmentProfileCount = environmentProfileCount;
             ZoneProviderCount = zoneProviderCount;
             AccessProviderCount = accessProviderCount;
             RuntimeGenerationJobCount = runtimeGenerationJobCount;

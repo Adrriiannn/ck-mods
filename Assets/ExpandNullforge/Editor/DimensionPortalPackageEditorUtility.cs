@@ -629,49 +629,15 @@ namespace ExpandNullforge.EditorTools
             return true;
         }
 
+        /// <summary>Makes the portal package folder exist, or says why it could not.</summary>
+        /// <remarks>
+        /// The body is <see cref="DimensionAssetFolders.TryEnsure"/>, with every other folder this
+        /// framework makes. Kept as a name here because six call sites across the portal editors
+        /// ask for it by this name.
+        /// </remarks>
         public static bool EnsureFolder(string path, out string message)
         {
-            message = string.Empty;
-            string normalized = NormalizeAssetPath(path);
-            if (string.IsNullOrEmpty(normalized) ||
-                (!string.Equals(normalized, "Assets", StringComparison.Ordinal) &&
-                 !normalized.StartsWith("Assets/", StringComparison.Ordinal)))
-            {
-                message = "Portal package folder is not a valid project asset path.";
-                return false;
-            }
-
-            if (AssetDatabase.IsValidFolder(normalized))
-            {
-                return true;
-            }
-
-            string[] parts = normalized.Split('/');
-            string current = "Assets";
-            for (int i = 1; i < parts.Length; i++)
-            {
-                if (string.IsNullOrEmpty(parts[i]))
-                {
-                    continue;
-                }
-
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    string guid = AssetDatabase.CreateFolder(current, parts[i]);
-                    string created = NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guid));
-                    if (!AssetPathsEqual(created, next) &&
-                        !AssetDatabase.IsValidFolder(next))
-                    {
-                        message = "Could not create portal package folder '" + next + "'.";
-                        return false;
-                    }
-                }
-
-                current = next;
-            }
-
-            return AssetDatabase.IsValidFolder(normalized);
+            return DimensionAssetFolders.TryEnsure(path, "portal package", out message);
         }
 
         private static void ReadSpriteAssetAddress(
@@ -730,7 +696,14 @@ namespace ExpandNullforge.EditorTools
                 : DimensionPortalArtworkLayer.Center;
         }
 
-        private static string GetReferencePropertyName(DimensionPortalArtworkLayer layer)
+        /// <summary>The serialized field a layer's sprite asset is written to.</summary>
+        /// <remarks>
+        /// ONE COPY, AND IT ALREADY MATTERED. There were three — here, in the preset utility and
+        /// in the test — and the other two had no case for the instant centre, so the same layer
+        /// answered with a field name here and threw there. The test having its own copy also meant
+        /// it could not fail when this changed, which is the whole reason a test reads production.
+        /// </remarks>
+        internal static string GetReferencePropertyName(DimensionPortalArtworkLayer layer)
         {
             switch (layer)
             {

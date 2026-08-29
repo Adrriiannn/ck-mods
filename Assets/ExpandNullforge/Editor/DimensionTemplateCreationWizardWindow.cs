@@ -28,7 +28,8 @@ namespace ExpandNullforge.EditorTools
         private GUIStyle wizSectionStyle;
         private GUIStyle wizFieldLabelStyle;
 
-        [MenuItem("Dimensions API/Create your Dimension")]
+        // No menu item. Creating a dimension is the Home screen's own front door, so the
+        // dashboard is the single way in rather than two doors that do the same thing.
         public static void Open()
         {
             DimensionTemplateCreationWizardWindow window =
@@ -543,7 +544,7 @@ namespace ExpandNullforge.EditorTools
                     "Middle biome band",
                     Mathf.Max(1, Mathf.RoundToInt(playableSize * 0.64f)),
                     Mathf.Max(1, Mathf.RoundToInt(playableSize * 0.64f))));
-            Rect inner = DrawCircle(center, maxRadius * 0.30f, new Color(0.40f, 0.72f, 0.70f, 0.95f));
+            Rect inner = DrawCircle(center, maxRadius * 0.30f, new Color(0.36f, 0.66f, 0.90f, 0.95f));
             RegisterPreviewTooltip(
                 inner,
                 BuildBiomeTooltip(

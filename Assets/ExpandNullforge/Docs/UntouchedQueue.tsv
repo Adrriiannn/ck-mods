@@ -1,0 +1,91 @@
+# THE SWEEP IS FINISHED, AND THEN PART OF IT WAS WITHDRAWN. Every authoring component Core Keeper
+# ships was written by the framework and every field on every one of them was reachable. Then the
+# last group was re-checked against what the game actually loads, and eighteen of those components
+# turned out to be reachable on paper only: they were written onto a prefab the mod pipeline throws
+# away, so no creator answer on them ever changed a running game.
+#
+#   377 authoring types in the SDK
+#   357 are MonoBehaviour components the framework writes and the game reads
+#    18 are components a mod cannot ship at all — the game's own rule-table carrier and its own
+#       player. Five of them changed rules that CAN be reached another way, and those five moved
+#       to World Rules or to the assets that already owned them; the rest have no seam. The list
+#       below says which is which for every one.
+#     2 are not components at all, so there is nothing to author:
+#         PugMod.IAuthoring         an interface
+#         PugMod.ModAPIAuthoring    PugMod's baking hook — a plain class, not a MonoBehaviour,
+#                                   never put on a prefab, and its two members are get-only
+#                                   properties rather than serialized fields
+#
+# A field is only counted as covered when a verified chain carries it into play, so the honest
+# number is field coverage over the 357, not over the 375. Re-check with:
+#     bash Docs/audit-field-coverage.sh
+#
+# The last 25, and what became of each:
+#
+# ---- the game's own tables and prefab lists ----
+# WITHDRAWN. These thirteen rows were once "covered" by a prefab a mod could not ship. Core
+# Keeper drops any object without IEntityMonoBehaviourData twice on the way in, and the object
+# database keeps whichever copy of an object arrived first — which is always vanilla's. So none of
+# these ever reached a running game, and generating them was retired.
+#
+# What actually reaches the game, and where it now lives:
+#
+#   LootTableAuthoring                served by the loot tables and Drop Location, which patch
+#                                     LootTableConverter.Convert
+#   ConditionsTableAuthoring          served by the conditions, which patch
+#                                     ConditionsTableConverter.Convert
+#   EnvironmentSpawnObjectsTable-     served by the spawn and respawn rules, which patch
+#     Authoring                       EnvironmentSpawnObjectsTableConverter.Convert
+#   BiomesTableAuthoring              vanilla's own radial ring worldgen, not dimension biomes;
+#                                     dimension biomes are served by the biome registry
+#   PugDatabaseAuthoring              every framework generator already registers its objects
+#                                     through the mod pipeline; a second database is a hard error
+#   UpgradeCostsTableAuthoring        World Rules ▸ "What upgrading costs"
+#                                     (DimensionUpgradeCostRegistry, prefix on
+#                                     UpgradeCostsTableConverter.Convert)
+#   FishingTableAuthoring             World Rules ▸ "What fishing catches"
+#                                     (Conf/Loot/Fishing/Biome, .../Water and Conf/Fishing JSON,
+#                                     plus DimensionFishFightRegistry + prefix on
+#                                     FishingTableConverter.Convert for this mod's own fish)
+#   SkillTalentsTableAuthoring        World Rules ▸ "What talents give" (Conf/Talents JSON)
+#
+# And what has no seam at all, so nothing is offered for it:
+#
+#   ActivatedContentBundlesAuthoring  the converter only makes an empty buffer; its contents are
+#                                     runtime state the server syncs
+#   WorldInfoAuthoring                the converter only makes an empty component; seed and name
+#                                     live in the save
+#   PugPrefabBufferAuthoring          the buffer belongs to the game's own carrier object, which a
+#                                     mod cannot be; mod prefabs are converted anyway
+#   PugDamagePrefabsAuthoring         dead vanilla code — nothing in the game reads it
+#   InventoryAuxDataPrefabsAuthoring  a real seam (a postfix on InventoryAuxDataConverter.Convert)
+#                                     but nothing needs custom container save data yet; recorded in
+#                                     the capability registry as world-rules-container-aux-data
+#
+# ---- the player ----
+# WITHDRAWN for the same reason: a mod's own player prefab loses the same race. What survives is
+# World Rules ▸ "Overrides on the player", which writes over Core Keeper's own player object
+# (ObjectID 6000) as a world converts it and puts the numbers back afterwards.
+#
+#   PlayerAuthoring                   turning delay and vehicle drift, overridden
+#   PlayerAimPositionAuthoring        the aim offset, overridden
+#   PlayerLocalAuthoring              engine wiring for the game's own singleton; nothing to author
+#   PlayerCustomizationAuthoring      a placeholder the character creator overwrites before anyone
+#                                     sees it, so setting it would do nothing a player could notice
+#   EquippedObjectAuthoring           the slot handlers are pieces of the game's code, not values
+#
+# ---- per-object markers, all tickboxes on DimensionSimpleTraitsTemplate ----
+ClientBiomeSamplesAuthoring	eachPlayerGetsItsOwnBiomeSamples
+ClientSubMapAuthoring	eachPlayerGetsItsOwnSliceOfTheMap
+ConvertToInterpolatedGhostAfterSpawnAuthoring	smoothsItselfOnceItHasSpawned
+CreateCharacterGuidAuthoring	getsACharacterIdOfItsOwn
+CreatePlayerGuidAuthoring	getsAPlayerIdOfItsOwn
+PugDamageAuthoring	isAFloatingDamageNumber (brings the ghost it needs)
+ContainedMiniSimElementAuthoring	canLiveInATank
+#
+# ---- the debug map ----
+WorldExplorerDebugTrackerAuthoring	DimensionSimpleTraitsTemplate ▸ showItOnTheDebugMap and its five settings
+#
+# ---- and the two done just before them ----
+PugWorldGenAuthoring	DimensionNativeWorldPlacementTemplate — place something once, when a world is made
+LocalInteractableAuthoring	DimensionInteractionTemplate — what happens when a player uses it

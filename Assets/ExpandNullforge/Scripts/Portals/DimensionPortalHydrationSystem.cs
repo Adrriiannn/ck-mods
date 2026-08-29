@@ -3,6 +3,7 @@ using ExpandNullforge.Api;
 using ExpandNullforge.Foundation;
 using Unity.Collections;
 using Unity.Entities;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Portals
 {
@@ -109,7 +110,7 @@ namespace ExpandNullforge.Portals
         DimensionPortalPresentationDefinition presentation,
         bool hasPresentation)
     {
-      portal.TargetDimensionId = ToFixed64(definition.ToDimensionId);
+      portal.TargetDimensionId = DimensionFixedStrings.ToFixed64(definition.ToDimensionId);
       portal.TargetLocalX = definition.ToLocalPosition.x;
       portal.TargetLocalY = definition.ToLocalPosition.y;
       portal.ActivationCooldownSeconds = hasPresentation ? presentation.CooldownSeconds : 0.0f;
@@ -146,24 +147,5 @@ namespace ExpandNullforge.Portals
           a.Interactable == b.Interactable;
     }
 
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = Math.Min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 }

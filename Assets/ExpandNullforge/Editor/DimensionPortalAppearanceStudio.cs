@@ -53,7 +53,14 @@ namespace ExpandNullforge.EditorTools
             Duplicate,
             Create,
             Browse,
-            Use
+            Use,
+
+            /// <summary>
+            /// Open a profile for editing AND make it the one the mod builds with, in one motion.
+            /// The page's profile picker offers no separate "use" step: choosing a look means
+            /// using it, so the two must never come apart.
+            /// </summary>
+            Switch
         }
 
         private struct AssetIdentity
@@ -353,9 +360,19 @@ namespace ExpandNullforge.EditorTools
         private const float PortalPreviewEmissionExposure = 0.22f;
         private const float PickerHueSaturationEpsilon = 0.0001f;
         private const int PreviewZoomStepPercent = 10;
-        private const int MinPreviewZoomPercent = 10;
-        private const int MaxPreviewZoomPercent = 100;
-        private const float PreviewFitInset = 4f;
+        private const int MinPreviewZoomPercent = 3;
+        private const int MaxPreviewZoomPercent = 320;
+
+        /// <summary>
+        /// The zoom stops, in percent, where 10 draws one game pixel per screen pixel. The
+        /// range is deliberately wide: 3 is the across-the-cavern view a player actually has
+        /// of a portal, 320 is one game pixel blown up to thirty two, for judging a single
+        /// colour change. Steps are geometric-ish so each notch feels like the same move.
+        /// </summary>
+        private static readonly int[] PreviewZoomLadder =
+        {
+            3, 5, 10, 20, 30, 40, 60, 90, 120, 160, 240, 320,
+        };
         private const float PreviewToolbarMinimumWidth = 300f;
         private const string HexColorFieldControlName =
             "DimensionPortalAppearanceStudio.HexColor";
@@ -496,6 +513,12 @@ namespace ExpandNullforge.EditorTools
             new Dictionary<ColorPickerKey, float>();
         private readonly DimensionPortalParticlePreviewRenderer particlePreviewRenderer =
             new DimensionPortalParticlePreviewRenderer();
+        private readonly DimensionPortalParticlePreviewRenderer readyBurstPreviewRenderer =
+            new DimensionPortalParticlePreviewRenderer(true);
+        // The burst fires at the activation moment (activated clock zero); Replay burst moves
+        // this base forward so the one-shot restarts inside the running preview clock, and a
+        // closing replay parks it unreachably high so no burst plays over the close.
+        private float readyBurstBaseClock;
         private FleckPreviewState fleckPreviewState;
 
         private StudioLayer selectedLayer = StudioLayer.ChargeSweep;
@@ -510,6 +533,10 @@ namespace ExpandNullforge.EditorTools
         private int paletteFocusRoleIndex = -1;
         private float activeZoom = 6f;
         private float fittedZoom = 6f;
+        private float lastPreviewAreaWidth = 460f;
+        private float lastPreviewAreaHeight = 460f;
+        private Vector2 previewPanCanvas;
+        private bool previewPanActive;
         private int previewZoomPercent;
         private bool previewZoomWasAdjusted;
         private int canvasPixelWidth = CanonicalCanvasPixels;
@@ -619,6 +646,10 @@ namespace ExpandNullforge.EditorTools
         private MessageType pendingArtworkMessageType = MessageType.Info;
 
         private bool instantPortalMode;
+        // Set only while the rebuilt page hosts the canvas, which draws those same controls in
+        // the product's own buttons above it.
+        private bool hidePreviewToolbar;
+        private DrawResult lastCanvasResult;
 
         public DimensionPortalAppearanceStudio()
         {
@@ -841,6 +872,367 @@ namespace ExpandNullforge.EditorTools
             return true;
         }
 
+        // ------------------------------------------------------------------ page surface --
+        // Everything below is what the rebuilt Portal page needs in order to own the chrome:
+        // which layer is being edited, which phase the preview is in, and one entry point that
+        // draws the canvas alone. None of it changes what the studio does; it only gives the
+        // page a handle on the same state the drawn-in-place controls already read and write.
+
+        /// <summary>The layer whose settings are being edited.</summary>
+        internal StudioLayer SelectedLayer
+        {
+            get { return selectedLayer; }
+            set
+            {
+                if (!IsLayerAvailable(value))
+                {
+                    return;
+                }
+
+                SelectLayer(value);
+                repaintRequested = true;
+            }
+        }
+
+        /// <summary>True when this studio is editing the instant portal an item opens.</summary>
+        internal bool InstantPortalMode
+        {
+            get { return instantPortalMode; }
+        }
+
+        /// <summary>The portal whose look is being edited, once the studio has resolved it.</summary>
+        internal DimensionPortalVisualProfileAsset ActiveProfile
+        {
+            get { return activeProfile ?? editingProfile; }
+        }
+
+        /// <summary>The dimension the edited portal belongs to.</summary>
+        internal DimensionTemplateAsset ActiveTemplate
+        {
+            get { return activeTemplate ?? editingProfileTemplate; }
+        }
+
+        /// <summary>A layer an instant portal can never show is not offered at all.</summary>
+        internal bool IsLayerAvailable(StudioLayer layer)
+        {
+            return !instantPortalMode || !IsHiddenInstantLayer(layer);
+        }
+
+        /// <summary>
+        /// True when this layer has a full set of layout values, and can therefore be put back
+        /// the way the artwork was drawn.
+        /// </summary>
+        internal bool LayerHasLayout(StudioLayer layer)
+        {
+            return TryGetLayerTransformPropertyNames(
+                layer,
+                out _,
+                out _,
+                out _,
+                out _,
+                out _,
+                out _);
+        }
+
+        /// <summary>True when the preview is showing the portal after it finished charging.</summary>
+        internal bool IsPreviewActivated
+        {
+            get { return previewPhase == PreviewPhase.Activated; }
+        }
+
+        internal bool CanReplayOpening
+        {
+            get { return previewPhase == PreviewPhase.Activated; }
+        }
+
+        internal bool CanReplayClosing
+        {
+            get { return instantPortalMode && previewPhase == PreviewPhase.Activated; }
+        }
+
+        internal bool CanReplayBurst
+        {
+            get
+            {
+                return !instantPortalMode &&
+                       previewPhase == PreviewPhase.Activated &&
+                       activeProfile != null &&
+                       activeProfile.PlayReadyFlash;
+            }
+        }
+
+        /// <summary>Whether the pixel grid is drawn over the preview.</summary>
+        internal bool ShowGrid
+        {
+            get { return showGrid; }
+            set
+            {
+                if (showGrid == value)
+                {
+                    return;
+                }
+
+                showGrid = value;
+                repaintRequested = true;
+            }
+        }
+
+        /// <summary>Whether the centre and pivot guides are drawn over the preview.</summary>
+        internal bool ShowGuides
+        {
+            get { return showGuides; }
+            set
+            {
+                if (showGuides == value)
+                {
+                    return;
+                }
+
+                showGuides = value;
+                repaintRequested = true;
+            }
+        }
+
+        /// <summary>The studio's own view of the portal, so page and canvas never disagree.</summary>
+        internal SerializedObject GetProfileSerializedObject(
+            DimensionPortalVisualProfileAsset profile)
+        {
+            return profile == null ? null : GetSerializedProfile(profile);
+        }
+
+        /// <summary>The studio's own view of the dimension the portal belongs to.</summary>
+        internal SerializedObject GetTemplateSerializedObject(
+            DimensionTemplateAsset template)
+        {
+            return template == null ? null : GetSerializedTemplate(template);
+        }
+
+        /// <summary>
+        /// Tells the studio that something outside its own drawing changed the portal, so the
+        /// preview rebuilds and the unsaved-work tracking stays honest.
+        /// </summary>
+        internal void NotifyProfileEdited()
+        {
+            DimensionPortalVisualProfileAsset profile = ActiveProfile;
+            if (profile != null)
+            {
+                EditorUtility.SetDirty(profile);
+            }
+
+            profileEditSession.MarkChanged();
+            previewCompositionDirty = true;
+            repaintRequested = true;
+        }
+
+        /// <summary>
+        /// The same, for a colour that lives in the artwork's palette: those have to be baked
+        /// back into the portal's own sprite sheet, exactly as editing them in place does.
+        /// </summary>
+        internal void NotifyPaletteColorEdited(StudioLayer layer)
+        {
+            NotifyProfileEdited();
+            DimensionTemplateAsset template = ActiveTemplate;
+            DimensionPortalVisualProfileAsset profile = ActiveProfile;
+            if (template == null || profile == null)
+            {
+                return;
+            }
+
+            if (TryGetArtworkLayer(
+                    layer,
+                    out DimensionPortalArtworkLayer artworkLayer,
+                    instantPortalMode))
+            {
+                DimensionPortalArtworkEditorUtility.QueuePaletteBake(
+                    template,
+                    profile,
+                    artworkLayer);
+            }
+            else if (layer == StudioLayer.InnerFlecks)
+            {
+                DimensionPortalSwirlArtworkEditorUtility.QueueSwirlBake(template, profile);
+            }
+        }
+
+        /// <summary>
+        /// The same, for a setting that lives on a portal access rule.
+        /// </summary>
+        /// <remarks>
+        /// A rule is its own asset, so marking the dimension dirty would not save it. It is still
+        /// counted as a dimension-level change, because that is what decides whether saving has to
+        /// rebuild the runtime output — and an access rule certainly does.
+        /// </remarks>
+        internal void NotifyRuleEdited(Authoring.DimensionPortalAccessRuleAsset rule)
+        {
+            if (rule != null)
+            {
+                EditorUtility.SetDirty(rule);
+            }
+
+            templateSettingsChanged = true;
+            repaintRequested = true;
+        }
+
+        /// <summary>The same, for a setting that lives on the dimension rather than the portal.</summary>
+        internal void NotifyTemplateEdited()
+        {
+            DimensionTemplateAsset template = ActiveTemplate;
+            if (template != null)
+            {
+                EditorUtility.SetDirty(template);
+            }
+
+            templateSettingsChanged = true;
+            repaintRequested = true;
+        }
+
+        /// <summary>
+        /// Everything the last <see cref="DrawCanvasIsland"/> pass wants the window to act on:
+        /// the preset it was asked to use, a runtime refresh, a message. Read it once per pass,
+        /// the way the window reads the result of <see cref="Draw"/>.
+        /// </summary>
+        internal DrawResult ConsumeCanvasResult()
+        {
+            DrawResult result = lastCanvasResult;
+            lastCanvasResult = default(DrawResult);
+            return result;
+        }
+
+        /// <summary>
+        /// Draws the portal preview and nothing else: no header, no layer list, no settings
+        /// panel. The rebuilt page owns those, and hosts this as the one island of drawn pixels.
+        /// </summary>
+        internal void DrawCanvasIsland(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile,
+            float availableWidth,
+            float availableHeight)
+        {
+            if (instantPortalMode)
+            {
+                if (IsHiddenInstantLayer(selectedLayer))
+                {
+                    selectedLayer = StudioLayer.Center;
+                }
+
+                if (previewPhase == PreviewPhase.Charging)
+                {
+                    previewPhase = PreviewPhase.Activated;
+                    skipCenterOpeningOnNextBuild = true;
+                    previewCompositionDirty = true;
+                }
+            }
+
+            profile = ResolveEditingProfile(template, profile);
+            DrawResult result = new DrawResult
+            {
+                CanApply = profile != null,
+                RuntimeSyncRequested = runtimeSyncRequested,
+                UseProfileRequested = useProfileRequested,
+                EditingProfile = profile,
+                Message = pendingArtworkMessage ?? string.Empty,
+                MessageType = string.IsNullOrEmpty(pendingArtworkMessage)
+                    ? MessageType.Info
+                    : pendingArtworkMessageType
+            };
+            runtimeSyncRequested = false;
+            useProfileRequested = null;
+            pendingArtworkMessage = string.Empty;
+            activeTemplate = template;
+            activeProfile = profile;
+            if (profile == null)
+            {
+                lastCanvasResult = result;
+                return;
+            }
+
+            paletteBakeRequested = false;
+
+            SerializedObject serializedTemplate = GetSerializedTemplate(template);
+            serializedTemplate.UpdateIfRequiredOrScript();
+            SerializedObject serializedProfile = GetSerializedProfile(profile);
+            serializedProfile.UpdateIfRequiredOrScript();
+            ProcessUndoRedoPaletteChanges(template, profile, serializedProfile);
+            EnsurePreviewComposition(serializedProfile);
+            ConfigurePreviewViewBounds();
+            ResolveActiveZoom(
+                Mathf.Max(220f, availableWidth),
+                Mathf.Max(220f, availableHeight - 44f));
+
+            hidePreviewToolbar = true;
+            try
+            {
+                DrawPreviewCanvas(
+                    template,
+                    profile,
+                    serializedProfile,
+                    previewErrors.Count == 0);
+            }
+            finally
+            {
+                hidePreviewToolbar = false;
+            }
+
+            // Nothing trails the playbar unless there is genuinely something to say — an
+            // unconditional spacer here painted a strip of not-quite-canvas under every preview.
+            if (previewErrors.Count > 0 || previewWarnings.Count > 0)
+            {
+                GUILayout.Space(6f);
+                DrawPreviewIssues();
+            }
+
+            result.CanApply = previewErrors.Count == 0;
+
+            bool profileChanged = serializedProfile.ApplyModifiedProperties();
+            bool templateChanged = serializedTemplate.ApplyModifiedProperties();
+            result.Changed = result.Changed || profileChanged || templateChanged;
+            result.TemplateChanged = templateChanged;
+            if (profileChanged)
+            {
+                EditorUtility.SetDirty(profile);
+                previewCompositionDirty = true;
+                repaintRequested = true;
+                if (paletteBakeRequested &&
+                    TryGetArtworkLayer(paletteBakeLayer, out DimensionPortalArtworkLayer artworkLayer, instantPortalMode))
+                {
+                    DimensionPortalArtworkEditorUtility.QueuePaletteBake(
+                        template,
+                        profile,
+                        artworkLayer);
+                }
+
+                if (selectedLayer == StudioLayer.InnerFlecks)
+                {
+                    DimensionPortalSwirlArtworkEditorUtility.QueueSwirlBake(
+                        template,
+                        profile);
+                }
+            }
+
+            if (templateChanged)
+            {
+                EditorUtility.SetDirty(template);
+                templateSettingsChanged = true;
+                repaintRequested = true;
+            }
+
+            if (result.Changed)
+            {
+                profileEditSession.MarkChanged();
+            }
+
+            CapturePaletteSnapshot(profile, serializedProfile);
+
+            if (collapseColorUndoAfterApply && colorUndoGroup >= 0)
+            {
+                Undo.CollapseUndoOperations(colorUndoGroup);
+                colorUndoGroup = -1;
+                collapseColorUndoAfterApply = false;
+            }
+
+            lastCanvasResult = result;
+        }
+
         public DrawResult Draw(
             DimensionTemplateAsset template,
             DimensionPortalVisualProfileAsset profile,
@@ -903,7 +1295,7 @@ namespace ExpandNullforge.EditorTools
                 previewColumnWidth,
                 Mathf.Clamp(availableHeight - 250f, 300f, 560f));
 
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
             DrawStudioHeader(
                 profile,
                 serializedTemplate,
@@ -1135,7 +1527,14 @@ namespace ExpandNullforge.EditorTools
             DestroyTexture(ref paletteFocusTexture);
             DestroyTexture(ref pinnedLayerIconTexture);
             DestroyTexture(ref unpinnedLayerIconTexture);
+            DestroyTexture(ref groundGlowTexture);
+            if (groundGlowMaterial != null)
+            {
+                UnityEngine.Object.DestroyImmediate(groundGlowMaterial);
+                groundGlowMaterial = null;
+            }
             particlePreviewRenderer.Dispose();
+            readyBurstPreviewRenderer.Dispose();
             paletteFocusPixels = null;
             saturationValuePixels = null;
             retainedHueByColor.Clear();
@@ -1232,6 +1631,7 @@ namespace ExpandNullforge.EditorTools
             previewCompositionProfileDirtyCount = -1;
             InvalidatePaletteFocusTexture();
             particlePreviewRenderer.Invalidate();
+            readyBurstPreviewRenderer.Invalidate();
         }
 
         private void ProcessUndoRedoPaletteChanges(
@@ -1440,20 +1840,24 @@ namespace ExpandNullforge.EditorTools
 
         private void ResolveActiveZoom(float availablePreviewWidth, float availablePreviewHeight)
         {
-            float width = Mathf.Max(1f, activeViewBounds.width);
-            float height = Mathf.Max(1f, activeViewBounds.height);
-            int fitted = Mathf.Min(
-                Mathf.FloorToInt(
-                    (availablePreviewWidth - PreviewFitInset * 2f) / width),
-                Mathf.FloorToInt(
-                    (availablePreviewHeight - PreviewFitInset * 2f) / height));
-            fittedZoom = Mathf.Clamp(fitted, 1, 10);
+            lastPreviewAreaWidth = Mathf.Max(PreviewToolbarMinimumWidth, availablePreviewWidth);
+            lastPreviewAreaHeight = Mathf.Max(220f, availablePreviewHeight);
+
+            // The comfortable default leaves more than a portal's width of floor on every
+            // side, so the light it throws is part of the picture instead of cropped away.
+            float content = Mathf.Max(
+                1f,
+                Mathf.Max(canvasPixelWidth, canvasPixelHeight));
+            int fittedPercent = Mathf.Clamp(
+                Mathf.RoundToInt(
+                    Mathf.Min(lastPreviewAreaWidth, lastPreviewAreaHeight) /
+                    (content * 2.2f) * PreviewZoomStepPercent),
+                MinPreviewZoomPercent,
+                MaxPreviewZoomPercent);
+            fittedZoom = fittedPercent / (float)PreviewZoomStepPercent;
             if (!previewZoomWasAdjusted)
             {
-                previewZoomPercent = Mathf.Clamp(
-                    Mathf.RoundToInt(fittedZoom) * PreviewZoomStepPercent,
-                    MinPreviewZoomPercent,
-                    MaxPreviewZoomPercent);
+                previewZoomPercent = fittedPercent;
             }
             else
             {
@@ -1464,15 +1868,28 @@ namespace ExpandNullforge.EditorTools
             }
 
             activeZoom = previewZoomPercent / (float)PreviewZoomStepPercent;
+
+            // The viewport IS the canvas. The visible window, in canvas coordinates, is
+            // whatever fits the viewport at this zoom, centred on the artwork plus wherever
+            // the creator has panned — so zooming out genuinely walks away from the portal
+            // and zooming in genuinely leans into one pixel of it.
+            float viewWidth = lastPreviewAreaWidth / Mathf.Max(0.001f, activeZoom);
+            float viewHeight = lastPreviewAreaHeight / Mathf.Max(0.001f, activeZoom);
+            Vector2 viewCenter = new Vector2(
+                canvasPixelWidth * 0.5f + previewPanCanvas.x,
+                canvasPixelHeight * 0.5f + previewPanCanvas.y);
+            activeViewBounds = new Rect(
+                viewCenter.x - viewWidth * 0.5f,
+                viewCenter.y - viewHeight * 0.5f,
+                viewWidth,
+                viewHeight);
         }
 
         private void ConfigurePreviewViewBounds()
         {
-            activeViewBounds = new Rect(
-                0f,
-                0f,
-                canvasPixelWidth,
-                canvasPixelHeight);
+            // The visible window now follows the viewport, the zoom, and the creator's own
+            // pan, so it is computed at the end of ResolveActiveZoom, once the viewport's
+            // size is known. This hook stays because both draw paths call it in order.
         }
 
         private void DrawStudioHeader(
@@ -1692,6 +2109,51 @@ namespace ExpandNullforge.EditorTools
             return -1;
         }
 
+        /// <summary>Every saved look this dimension can choose between.</summary>
+        internal IReadOnlyList<DimensionPortalVisualProfileAsset> GetProfiles(
+            DimensionTemplateAsset template)
+        {
+            return DimensionPortalPresetEditorUtility.GetPresets(template);
+        }
+
+        /// <summary>True while an earlier request is still being carried out.</summary>
+        internal bool IsProfileActionBusy
+        {
+            get
+            {
+                return presetActionQueued ||
+                       EditorApplication.isCompiling ||
+                       EditorApplication.isUpdating;
+            }
+        }
+
+        internal void QueueSaveProfile(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile)
+        {
+            QueuePresetAction(PendingPresetAction.Save, template, profile);
+        }
+
+        internal void QueueCreateProfile(DimensionTemplateAsset template)
+        {
+            QueuePresetAction(PendingPresetAction.Create, template, null);
+        }
+
+        internal void QueueDuplicateProfile(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile)
+        {
+            QueuePresetAction(PendingPresetAction.Duplicate, template, profile);
+        }
+
+        /// <summary>Opens a profile for editing and makes it the one the mod builds with.</summary>
+        internal void QueueSwitchProfile(
+            DimensionTemplateAsset template,
+            DimensionPortalVisualProfileAsset profile)
+        {
+            QueuePresetAction(PendingPresetAction.Switch, template, profile);
+        }
+
         private void QueuePresetAction(
             PendingPresetAction action,
             DimensionTemplateAsset template,
@@ -1828,6 +2290,25 @@ namespace ExpandNullforge.EditorTools
                             useProfileRequested = target;
                         }
                         break;
+                    case PendingPresetAction.Switch:
+                        // Work on the look being left behind is saved first, so switching away
+                        // can never quietly discard an afternoon's edits.
+                        succeeded = SavePendingChanges(
+                            out _,
+                            out message);
+                        if (succeeded)
+                        {
+                            succeeded = SelectEditingProfile(template, target);
+                        }
+
+                        if (succeeded)
+                        {
+                            runtimeOutOfDateProfile = target;
+                            useProfileRequested = target;
+                            message = "Now editing and using portal profile '" +
+                                      GetPresetDisplayName(target) + "'.";
+                        }
+                        break;
                     default:
                         succeeded = false;
                         message = "Unknown Portal Studio preset action.";
@@ -1955,25 +2436,41 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
-            PreviewPhase previousPhase = previewPhase;
-            previewPhase = (PreviewPhase)GUILayout.Toolbar(
+            PreviewPhase chosenPhase = (PreviewPhase)GUILayout.Toolbar(
                 (int)previewPhase,
                 PreviewPhaseLabels,
                 EditorStyles.toolbarButton,
                 GUILayout.Width(width));
-            if (previewPhase != previousPhase)
-            {
-                pinnedLayerIndex = -1;
-                activatedClock = 0f;
-                skipCenterOpeningOnNextBuild = previewPhase == PreviewPhase.Activated;
-                isPlaying = true;
-                lastClockTime = EditorApplication.timeSinceStartup;
-                nextRepaintTime = 0.0;
-                previewCompositionDirty = true;
+            SetPreviewActivated(chosenPhase == PreviewPhase.Activated);
+        }
 
-                hasSelectedPixel = false;
-                ClearPaletteFocus();
+        /// <summary>
+        /// Switches the preview between charging and activated. One body, shared by the toolbar
+        /// here and by the rebuilt page that sits above the canvas; asking for the phase the
+        /// preview is already in does nothing.
+        /// </summary>
+        internal void SetPreviewActivated(bool activated)
+        {
+            PreviewPhase requested = activated
+                ? PreviewPhase.Activated
+                : PreviewPhase.Charging;
+            if (previewPhase == requested)
+            {
+                return;
             }
+
+            previewPhase = requested;
+            pinnedLayerIndex = -1;
+            activatedClock = 0f;
+            readyBurstBaseClock = 0f;
+            skipCenterOpeningOnNextBuild = previewPhase == PreviewPhase.Activated;
+            isPlaying = true;
+            lastClockTime = EditorApplication.timeSinceStartup;
+            nextRepaintTime = 0.0;
+            previewCompositionDirty = true;
+
+            hasSelectedPixel = false;
+            ClearPaletteFocus();
         }
 
         private void DrawReplayOpeningControl()
@@ -1984,15 +2481,32 @@ namespace ExpandNullforge.EditorTools
                     EditorStyles.toolbarButton,
                     GUILayout.Width(94f)))
             {
-                previewCenterClosingActive = false;
-                activatedClock = 0f;
-                skipCenterOpeningOnNextBuild = false;
-                isPlaying = true;
-                lastClockTime = EditorApplication.timeSinceStartup;
-                nextRepaintTime = 0.0;
-                previewCompositionDirty = true;
+                ReplayOpening();
             }
             EditorGUI.EndDisabledGroup();
+        }
+
+        /// <summary>
+        /// Plays the portal's opening again from its first frame. One body, shared by the
+        /// toolbar button here and by the rebuilt page that sits above the canvas.
+        /// </summary>
+        internal void ReplayOpening()
+        {
+            if (!CanReplayOpening)
+            {
+                return;
+            }
+
+            previewCenterClosingActive = false;
+            activatedClock = 0f;
+            // The in-game burst fires the moment charging completes, which is the same
+            // moment the opening replay restarts.
+            readyBurstBaseClock = 0f;
+            skipCenterOpeningOnNextBuild = false;
+            isPlaying = true;
+            lastClockTime = EditorApplication.timeSinceStartup;
+            nextRepaintTime = 0.0;
+            previewCompositionDirty = true;
         }
 
         private void DrawReplayClosingControl()
@@ -2009,15 +2523,67 @@ namespace ExpandNullforge.EditorTools
                     EditorStyles.toolbarButton,
                     GUILayout.Width(94f)))
             {
-                previewCenterClosingActive = true;
-                activatedClock = 0f;
-                skipCenterOpeningOnNextBuild = false;
-                isPlaying = true;
-                lastClockTime = EditorApplication.timeSinceStartup;
-                nextRepaintTime = 0.0;
-                previewCompositionDirty = true;
+                ReplayClosing();
             }
             EditorGUI.EndDisabledGroup();
+        }
+
+        /// <summary>
+        /// Plays the instant portal closing again. One body, shared by the toolbar button here
+        /// and by the rebuilt page that sits above the canvas.
+        /// </summary>
+        internal void ReplayClosing()
+        {
+            if (!CanReplayClosing)
+            {
+                return;
+            }
+
+            previewCenterClosingActive = true;
+            activatedClock = 0f;
+            readyBurstBaseClock = float.MaxValue;
+            skipCenterOpeningOnNextBuild = false;
+            isPlaying = true;
+            lastClockTime = EditorApplication.timeSinceStartup;
+            nextRepaintTime = 0.0;
+            previewCompositionDirty = true;
+        }
+
+        private void DrawReplayBurstControl()
+        {
+            // The burst layer only exists on the placed portal; an instant portal spawns
+            // fully charged and never plays the charge-completion flash.
+            if (instantPortalMode)
+            {
+                return;
+            }
+
+            EditorGUI.BeginDisabledGroup(!CanReplayBurst);
+            if (GUILayout.Button(
+                    "Replay burst",
+                    EditorStyles.toolbarButton,
+                    GUILayout.Width(84f)))
+            {
+                ReplayBurst();
+            }
+            EditorGUI.EndDisabledGroup();
+        }
+
+        /// <summary>
+        /// Fires the ready burst again inside the running preview clock. One body, shared by the
+        /// toolbar button here and by the rebuilt page that sits above the canvas.
+        /// </summary>
+        internal void ReplayBurst()
+        {
+            if (!CanReplayBurst)
+            {
+                return;
+            }
+
+            readyBurstBaseClock = activatedClock;
+            isPlaying = true;
+            lastClockTime = EditorApplication.timeSinceStartup;
+            nextRepaintTime = 0.0;
         }
 
         private void DrawViewControls()
@@ -2079,19 +2645,125 @@ namespace ExpandNullforge.EditorTools
 
         private void AdjustPreviewZoom(int direction)
         {
-            int nextZoom = Mathf.Clamp(
-                previewZoomPercent + direction * PreviewZoomStepPercent,
-                MinPreviewZoomPercent,
-                MaxPreviewZoomPercent);
-            if (nextZoom == previewZoomPercent)
+            if (!TryAdjustPreviewZoom(direction))
             {
                 return;
+            }
+
+            GUI.changed = true;
+        }
+
+        /// <summary>
+        /// Steps the preview zoom one notch and reports whether anything moved. Safe to call from
+        /// outside a drawing pass, which the rebuilt page above the canvas needs.
+        /// </summary>
+        internal bool TryAdjustPreviewZoom(int direction)
+        {
+            // Walk the ladder rather than adding a flat step: at 5% a 10-point step would
+            // triple the view, and at 300% it would be imperceptible.
+            int index = 0;
+            for (int i = 0; i < PreviewZoomLadder.Length; i++)
+            {
+                if (PreviewZoomLadder[i] <= previewZoomPercent)
+                {
+                    index = i;
+                }
+            }
+
+            int nextIndex = Mathf.Clamp(
+                index + (direction > 0 ? 1 : -1),
+                0,
+                PreviewZoomLadder.Length - 1);
+            int nextZoom = PreviewZoomLadder[nextIndex];
+            if (nextZoom == previewZoomPercent)
+            {
+                return false;
             }
 
             previewZoomPercent = nextZoom;
             previewZoomWasAdjusted = true;
             repaintRequested = true;
-            GUI.changed = true;
+            return true;
+        }
+
+        /// <summary>How far the preview is zoomed in, as a percentage.</summary>
+        internal int PreviewZoomPercent
+        {
+            get { return previewZoomPercent; }
+        }
+
+        internal bool CanZoomPreviewIn
+        {
+            get { return previewZoomPercent < MaxPreviewZoomPercent; }
+        }
+
+        internal bool CanZoomPreviewOut
+        {
+            get { return previewZoomPercent > MinPreviewZoomPercent; }
+        }
+
+        private GUIStyle canvasHintStyle;
+
+        /// <summary>The one-line how-to at the foot of the picture, matching the Tileset Studio.</summary>
+        private void DrawCanvasHint(Rect localCanvas)
+        {
+            if (canvasHintStyle == null)
+            {
+                canvasHintStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                };
+                canvasHintStyle.normal.textColor = new Color(0.84f, 0.86f, 0.98f, 0.42f);
+            }
+
+            GUI.Label(
+                new Rect(0f, localCanvas.height - 18f, localCanvas.width, 16f),
+                "click & hold to reposition · middle click to move around · scroll to zoom",
+                canvasHintStyle);
+        }
+
+        /// <summary>
+        /// Middle-drag moves the view across the floor; a double middle click walks back to
+        /// the portal. Pan is kept in canvas pixels so the view stays anchored while zooming.
+        /// </summary>
+        private void HandlePreviewPan(Rect canvasRect)
+        {
+            Event current = Event.current;
+            if (current == null)
+            {
+                return;
+            }
+
+            if (current.type == EventType.MouseDown &&
+                current.button == 2 &&
+                canvasRect.Contains(current.mousePosition))
+            {
+                if (current.clickCount >= 2)
+                {
+                    previewPanCanvas = Vector2.zero;
+                }
+
+                previewPanActive = true;
+                repaintRequested = true;
+                current.Use();
+            }
+            else if (current.type == EventType.MouseDrag &&
+                     previewPanActive &&
+                     current.button == 2)
+            {
+                float zoom = Mathf.Max(0.001f, activeZoom);
+                previewPanCanvas.x -= current.delta.x / zoom;
+                previewPanCanvas.y += current.delta.y / zoom;
+                float limit = Mathf.Max(canvasPixelWidth, canvasPixelHeight) * 3f;
+                previewPanCanvas.x = Mathf.Clamp(previewPanCanvas.x, -limit, limit);
+                previewPanCanvas.y = Mathf.Clamp(previewPanCanvas.y, -limit, limit);
+                repaintRequested = true;
+                current.Use();
+            }
+            else if (current.type == EventType.MouseUp && current.button == 2)
+            {
+                previewPanActive = false;
+            }
         }
 
         private void HandlePreviewZoomScroll(Rect previewWindowRect)
@@ -2114,7 +2786,7 @@ namespace ExpandNullforge.EditorTools
         private void DrawLayerNavigation()
         {
             EditorGUILayout.BeginVertical(GUILayout.Width(SidebarWidth));
-            EditorGUILayout.LabelField("LAYERS", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("LAYERS", DimensionsApiImguiTheme.SectionLabel);
             if (!instantPortalMode)
             {
                 DrawLayerButton(StudioLayer.Frame, "FRAME", "Base artwork");
@@ -2124,13 +2796,13 @@ namespace ExpandNullforge.EditorTools
 
             DrawLayerButton(StudioLayer.Center, "CENTER", "Activated ring");
             DrawLayerButton(StudioLayer.InnerFlecks, "SWIRLS", "Inner motion");
-            GUILayout.Space(8f);
-            EditorGUILayout.LabelField("IN-GAME", EditorStyles.miniBoldLabel);
             if (!instantPortalMode)
             {
                 DrawLayerButton(StudioLayer.ReadyBurst, "EFFECTS", "Ready activation burst");
             }
 
+            GUILayout.Space(8f);
+            EditorGUILayout.LabelField("ON THE GROUND", DimensionsApiImguiTheme.SectionLabel);
             DrawLayerButton(StudioLayer.GroundLight, "LIGHT", "Ground light / shadow");
             EditorGUILayout.EndVertical();
         }
@@ -2184,7 +2856,7 @@ namespace ExpandNullforge.EditorTools
 
         private void DrawCompactLayerNavigation(bool twoRows)
         {
-            EditorGUILayout.LabelField("LAYERS", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("LAYERS", DimensionsApiImguiTheme.SectionLabel);
             if (instantPortalMode)
             {
                 EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
@@ -2215,7 +2887,7 @@ namespace ExpandNullforge.EditorTools
                 EditorGUILayout.EndHorizontal();
             }
 
-            EditorGUILayout.LabelField("IN-GAME", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("IN-GAME", DimensionsApiImguiTheme.SectionLabel);
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             if (!instantPortalMode)
             {
@@ -2382,6 +3054,9 @@ namespace ExpandNullforge.EditorTools
 
             previewPhase = phase;
             activatedClock = 0f;
+            // The burst base rides the activated clock, so it has to restart with it; a stale
+            // base would suppress the burst now and fire it unprompted much later.
+            readyBurstBaseClock = 0f;
             skipCenterOpeningOnNextBuild = phase == PreviewPhase.Activated;
             isPlaying = true;
             lastClockTime = EditorApplication.timeSinceStartup;
@@ -2422,20 +3097,11 @@ namespace ExpandNullforge.EditorTools
             SerializedObject serializedProfile,
             bool canApply)
         {
-            float zoomedCanvasWidth = Mathf.Max(
-                1f,
-                activeViewBounds.width * activeZoom);
-            float zoomedCanvasHeight = Mathf.Max(
-                1f,
-                activeViewBounds.height * activeZoom);
-            float previewContentWidth = Mathf.Ceil(
-                Mathf.Max(
-                    PreviewToolbarMinimumWidth,
-                    activeViewBounds.width *
-                    (MaxPreviewZoomPercent / (float)PreviewZoomStepPercent)));
-            float canvasHostHeight = Mathf.Ceil(
-                activeViewBounds.height *
-                (MaxPreviewZoomPercent / (float)PreviewZoomStepPercent));
+            // The canvas and its host are one rectangle. The old layout sized the host for
+            // the largest zoom and floated a smaller canvas inside it, which left a dead
+            // darker band under the picture at every other zoom.
+            float previewContentWidth = Mathf.Ceil(lastPreviewAreaWidth);
+            float canvasHostHeight = Mathf.Ceil(lastPreviewAreaHeight);
             float previewWindowWidth = previewContentWidth;
 
             EditorGUILayout.BeginVertical(GUILayout.Width(previewWindowWidth));
@@ -2447,11 +3113,7 @@ namespace ExpandNullforge.EditorTools
                 canvasHostHeight,
                 GUILayout.Width(previewContentWidth),
                 GUILayout.Height(canvasHostHeight));
-            Rect canvasRect = new Rect(
-                canvasHostRect.x + (canvasHostRect.width - zoomedCanvasWidth) * 0.5f,
-                canvasHostRect.y + (canvasHostRect.height - zoomedCanvasHeight) * 0.5f,
-                zoomedCanvasWidth,
-                zoomedCanvasHeight);
+            Rect canvasRect = canvasHostRect;
             canvasControlId = GUIUtility.GetControlID(
                 CanvasControlHint,
                 FocusType.Keyboard,
@@ -2467,14 +3129,24 @@ namespace ExpandNullforge.EditorTools
                     new Color(0.035f, 0.04f, 0.05f, 1f));
                 DrawCanvasBackground(canvasRect);
 
+                // The pool of light goes down before everything: it lights the floor, the blob
+                // shadow then darkens that floor, and the portal's own art — emissive and unlit
+                // in-game — draws over both untinted. It is drawn OUTSIDE the clip group and
+                // clipped by hand, because the material blit ignores GUI clipping — the first
+                // build of this washed portal light across the page below the preview.
+                DrawGroundLightPool(canvasRect);
+
                 GUI.BeginGroup(canvasRect);
                 Rect localCanvas = new Rect(0f, 0f, canvasRect.width, canvasRect.height);
+                // The floor shadow lies under the portal in the world, so it goes down first.
+                DrawPortalShadowPreview();
                 for (int i = 0; i < visibleFrames.Count; i++)
                 {
                     DrawVisibleFrame(localCanvas, visibleFrames[i]);
                 }
 
                 DrawFleckPreview(localCanvas);
+                DrawReadyBurstPreview();
 
                 DrawPaletteFocusOverlay(localCanvas);
 
@@ -2483,6 +3155,7 @@ namespace ExpandNullforge.EditorTools
                     DrawAlignmentGuides(localCanvas);
                 }
 
+                DrawGroundLightGizmo(localCanvas);
                 DrawSelectedLayerOutline();
                 if (showGrid && activeZoom >= 4f)
                 {
@@ -2490,6 +3163,7 @@ namespace ExpandNullforge.EditorTools
                 }
 
                 DrawSelectedPixel();
+                DrawCanvasHint(localCanvas);
                 GUI.EndGroup();
             }
 
@@ -2500,24 +3174,32 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUILayout.EndVertical();
-            if (Event.current.type == EventType.Repaint)
-            {
-                DrawOutline(
-                    previewWindowRect,
-                    new Color(0.38f, 0.41f, 0.47f, 1f),
-                    1f);
-            }
+            // No outline around the preview window: the canvas draws its own border, and this
+            // second, lighter frame was one of the strips in the darker band below it.
             HandlePreviewZoomScroll(previewWindowRect);
+            HandlePreviewPan(canvasHostRect);
 
-            GUILayout.Space(5f);
-            EditorGUILayout.BeginVertical(GUILayout.Width(previewWindowWidth));
-            DrawPresetToolbar(template, profile, canApply);
-            EditorGUILayout.EndVertical();
+            if (!hidePreviewToolbar)
+            {
+                // The rebuilt page offers these as the product's own buttons, so drawing them
+                // here as well would be a second copy of the same controls.
+                GUILayout.Space(5f);
+                EditorGUILayout.BeginVertical(GUILayout.Width(previewWindowWidth));
+                DrawPresetToolbar(template, profile, canApply);
+                EditorGUILayout.EndVertical();
+            }
             EditorGUILayout.EndVertical();
         }
 
         private void DrawPreviewToolbar(float viewportWidth)
         {
+            if (hidePreviewToolbar)
+            {
+                // The rebuilt page draws these same controls above the canvas in the product's
+                // own buttons, so the drawn-in-place strip would be a second copy of itself.
+                return;
+            }
+
             bool compact = viewportWidth < 470f;
             if (compact)
             {
@@ -2534,6 +3216,7 @@ namespace ExpandNullforge.EditorTools
                     EditorStyles.toolbar,
                     GUILayout.Width(viewportWidth));
                 DrawReplayOpeningControl();
+                DrawReplayBurstControl();
                 DrawReplayClosingControl();
                 GUILayout.FlexibleSpace();
                 DrawViewControls();
@@ -2546,6 +3229,7 @@ namespace ExpandNullforge.EditorTools
                 GUILayout.Width(viewportWidth));
             DrawPortalStateControls(170f);
             DrawReplayOpeningControl();
+            DrawReplayBurstControl();
             DrawReplayClosingControl();
             GUILayout.FlexibleSpace();
             DrawViewControls();
@@ -2554,42 +3238,13 @@ namespace ExpandNullforge.EditorTools
 
         private void DrawCanvasBackground(Rect canvasRect)
         {
+            // The floor of a cavern, not an image editor: one near-black tone with no
+            // checkerboard, so the portal's own light is the brightest thing in the frame.
+            // The transparency checker said "this is a texture"; the game never shows one.
             GUI.BeginGroup(canvasRect);
             Rect clippedCanvas = new Rect(0f, 0f, canvasRect.width, canvasRect.height);
-            Color baseColor = new Color(0.055f, 0.06f, 0.075f, 1f);
-            EditorGUI.DrawRect(clippedCanvas, baseColor);
-            float checkerSize = activeZoom * 4f;
-            int columns = Mathf.CeilToInt(clippedCanvas.width / checkerSize);
-            int rows = Mathf.CeilToInt(clippedCanvas.height / checkerSize);
-            for (int y = 0; y < rows; y++)
-            {
-                for (int x = 0; x < columns; x++)
-                {
-                    if (((x + y) & 1) == 0)
-                    {
-                        continue;
-                    }
-
-                    float tileX = x * checkerSize;
-                    float tileY = y * checkerSize;
-                    float tileWidth = Mathf.Min(checkerSize, clippedCanvas.xMax - tileX);
-                    float tileHeight = Mathf.Min(checkerSize, clippedCanvas.yMax - tileY);
-                    if (tileWidth <= 0f || tileHeight <= 0f)
-                    {
-                        continue;
-                    }
-
-                    EditorGUI.DrawRect(
-                        new Rect(
-                            tileX,
-                            tileY,
-                            tileWidth,
-                            tileHeight),
-                        new Color(0.085f, 0.09f, 0.11f, 1f));
-                }
-            }
-
-            DrawOutline(clippedCanvas, new Color(0.36f, 0.39f, 0.45f, 1f), 1f);
+            EditorGUI.DrawRect(clippedCanvas, new Color(0.027f, 0.035f, 0.045f, 1f));
+            DrawOutline(clippedCanvas, new Color(0.10f, 0.17f, 0.16f, 1f), 1f);
             GUI.EndGroup();
         }
 
@@ -2630,11 +3285,6 @@ namespace ExpandNullforge.EditorTools
             return new Vector2(
                 (canvasPoint.x - activeViewBounds.xMin) * activeZoom,
                 (activeViewBounds.yMax - canvasPoint.y) * activeZoom);
-        }
-
-        private bool IsCenterOpening()
-        {
-            return previewPhase == PreviewPhase.Activated && currentCenterIsOpening;
         }
 
         private void DrawPreviewIssues()
@@ -3426,11 +4076,28 @@ namespace ExpandNullforge.EditorTools
             PreviewSheet display = animation.Sheet;
             if (!hasDirectOverride)
             {
+                // The runtime adds emissive x tint x glow intensity at draw time; routing the
+                // same product through the shared emission approximation makes Highlight
+                // brightness readable on the canvas like the charge and milestone layers.
+                Color centerTintForEmission = GetColor(profile, "centerTint", Color.white);
+                Color centerEmissive = GetColor(
+                    profile,
+                    "centerEmissiveColor",
+                    DimensionPortalVisualProfileAsset.VanillaCenterEmissiveColor);
+                float glowIntensity = Mathf.Clamp01(GetFloat(
+                    profile,
+                    "centerGlowIntensity",
+                    DimensionPortalVisualProfileAsset.VanillaCenterGlowIntensity));
                 display = GetRecoloredSheet(
                     isClosing ? "center-closing" : isOpening ? "center-opening" : "center-idle",
                     animation.Sheet,
                     CenterSourcePalette,
-                    GetPalette(profile, CenterPaletteProperties));
+                    GetPalette(profile, CenterPaletteProperties),
+                    new Color(
+                        centerEmissive.r * centerTintForEmission.r * glowIntensity,
+                        centerEmissive.g * centerTintForEmission.g * glowIntensity,
+                        centerEmissive.b * centerTintForEmission.b * glowIntensity,
+                        1f));
             }
 
             currentCenterOpeningDuration = openingDuration;
@@ -3754,6 +4421,429 @@ namespace ExpandNullforge.EditorTools
                     new Color(0.2f, 0.78f, 1f, 0.7f),
                     1f);
             }
+        }
+
+        // The one-shot burst outlives its particles by a margin; past this the preview stops
+        // simulating a system that can no longer emit anything.
+        private const float ReadyBurstPreviewSeconds = 3f;
+
+        // EnsurePortalShadowRenderer draws the vanilla fallback shadow sliced to this world
+        // size rather than at the sprite's native rect.
+        private static readonly Vector2 DefaultShadowSlicedSize = new Vector2(3.5f, 0.75f);
+
+        private void DrawReadyBurstPreview()
+        {
+            if (instantPortalMode ||
+                previewPhase != PreviewPhase.Activated ||
+                activeProfile == null ||
+                !activeProfile.PlayReadyFlash)
+            {
+                return;
+            }
+
+            float burstTime = activatedClock - readyBurstBaseClock;
+            if (burstTime < 0f || burstTime > ReadyBurstPreviewSeconds)
+            {
+                return;
+            }
+
+            if (readyBurstPreviewRenderer.TryRender(
+                    activeProfile,
+                    burstTime,
+                    out Texture burstTexture,
+                    out string renderError))
+            {
+                // Composited around the same aperture anchor as the persistent swirl; the
+                // authored offset is already baked into the render. The burst flashes over
+                // the whole portal in the world, so the aperture mask is opened wide.
+                // The render is centred on the aperture, which sits at fixed game pixels no
+                // matter what size the frame artwork is; bodyScreenOrigin converts that into
+                // this canvas, so a 64 x 64 frame override does not drag the burst off centre.
+                Vector2 apertureCanvas =
+                    DimensionPortalVisualContract.ProjectToGamePixels(
+                        DimensionPortalVisualContract.CenterLocalPosition) - bodyScreenOrigin;
+                Rect nativeBurstCanvas = new Rect(
+                    apertureCanvas.x - CanonicalCanvasPixels * 0.5f,
+                    apertureCanvas.y - CanonicalCanvasPixels * 0.5f,
+                    CanonicalCanvasPixels,
+                    CanonicalCanvasPixels);
+                readyBurstPreviewRenderer.DrawAdditive(
+                    CanvasRectToGuiRect(nativeBurstCanvas),
+                    burstTexture,
+                    new Vector2(CanonicalCanvasPixels * 0.5f, CanonicalCanvasPixels * 0.5f),
+                    new Vector2(4096f, 4096f));
+            }
+            else if (!string.IsNullOrEmpty(renderError))
+            {
+                AddPreviewWarning(renderError);
+            }
+        }
+
+        private void DrawPortalShadowPreview()
+        {
+            if (activeProfile == null || !activeProfile.PortalShadowEnabled)
+            {
+                return;
+            }
+
+            Sprite sprite = activeProfile.PortalShadowSprite;
+            if (sprite == null)
+            {
+                sprite = DimensionRuntimeConsumerBootstrapUtility.LoadDefaultPortalShadowSprite();
+            }
+
+            if (sprite == null || sprite.texture == null)
+            {
+                return;
+            }
+
+            // Runtime placement: PortalShadowGroup at (-0.5 + offX/16, 0, 0.8125 + offY/16)
+            // plus the Shadow child at (0.5, 0.0625, -0.5) — a flat X-rotated sprite whose
+            // ground footprint projects 1:1 into canvas pixels, drawn 70% black.
+            Vector2 offsetPixels = activeProfile.PortalShadowOffsetPixels;
+            Vector2 anchorGamePixels = new Vector2(offsetPixels.x, 6f + offsetPixels.y);
+            Vector2 rawScale = activeProfile.PortalShadowScale;
+            Vector2 scale = new Vector2(
+                Mathf.Clamp(Mathf.Abs(rawScale.x), 0.05f, 8f),
+                Mathf.Clamp(Mathf.Abs(rawScale.y), 0.05f, 8f));
+
+            // The generated renderer draws the default shadow sliced to a fixed world size and
+            // a custom one at its native size; matching both here is what keeps the preview
+            // honest for an author aligning the blob against their own frame art.
+            bool authoredSprite = activeProfile.PortalShadowSprite != null;
+            Vector2 unscaledPixels;
+            if (authoredSprite)
+            {
+                float pixelsPerUnit = sprite.pixelsPerUnit <= 0f ? 16f : sprite.pixelsPerUnit;
+                float gamePixelsPerSpritePixel =
+                    DimensionPortalVisualContract.PixelsPerUnit / pixelsPerUnit;
+                unscaledPixels = new Vector2(
+                    sprite.rect.width * gamePixelsPerSpritePixel,
+                    sprite.rect.height * gamePixelsPerSpritePixel);
+            }
+            else
+            {
+                unscaledPixels = DefaultShadowSlicedSize *
+                                 DimensionPortalVisualContract.PixelsPerUnit;
+            }
+
+            Vector2 sizePixels = new Vector2(
+                unscaledPixels.x * scale.x,
+                unscaledPixels.y * scale.y);
+            Vector2 normalizedPivot = authoredSprite
+                ? new Vector2(
+                    sprite.rect.width <= 0f ? 0.5f : sprite.pivot.x / sprite.rect.width,
+                    sprite.rect.height <= 0f ? 0.5f : sprite.pivot.y / sprite.rect.height)
+                : new Vector2(0.5f, 0.5f);
+            Vector2 anchorCanvas = anchorGamePixels - bodyScreenOrigin;
+            Rect canvasRect = new Rect(
+                anchorCanvas.x - normalizedPivot.x * sizePixels.x,
+                anchorCanvas.y - normalizedPivot.y * sizePixels.y,
+                sizePixels.x,
+                sizePixels.y);
+            Rect guiRect = CanvasRectToGuiRect(canvasRect);
+
+            Texture2D texture = sprite.texture;
+            Rect texCoords = new Rect(
+                sprite.rect.x / texture.width,
+                sprite.rect.y / texture.height,
+                sprite.rect.width / texture.width,
+                sprite.rect.height / texture.height);
+            if (activeProfile.PortalShadowFlipX)
+            {
+                texCoords.x += texCoords.width;
+                texCoords.width = -texCoords.width;
+            }
+            if (activeProfile.PortalShadowFlipY)
+            {
+                texCoords.y += texCoords.height;
+                texCoords.height = -texCoords.height;
+            }
+
+            float rotation = activeProfile.PortalShadowRotationDegrees;
+            Matrix4x4 previousMatrix = GUI.matrix;
+            if (!Mathf.Approximately(rotation, 0f))
+            {
+                // A ground-plane spin projects as a plain 2D rotation of the blob.
+                Vector2 pivotGui = CanvasPointToGuiPoint(anchorCanvas);
+                GUIUtility.RotateAroundPivot(-rotation, pivotGui);
+            }
+
+            Color previousColor = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.7019608f);
+            GUI.DrawTextureWithTexCoords(guiRect, texture, texCoords, true);
+            GUI.color = previousColor;
+            GUI.matrix = previousMatrix;
+        }
+
+        // Measured from the template PugLight (local y 1.244, ground z -0.3625 once the
+        // sprite pivot chain is removed) — identical for the placed and the instant portal.
+        private const float GroundLightHeightUnits = 1.244f;
+        private const float GroundLightGroundZUnits = -0.3625f;
+
+        private const string GroundGlowShaderPath =
+            "Assets/ExpandNullforge/Editor/Shaders/PortalStudioGroundGlow.shader";
+
+        private Texture2D groundGlowTexture;
+        private Material groundGlowMaterial;
+        private string groundGlowSignature;
+
+        /// <summary>
+        /// The pool of light the portal throws on the floor, rendered the way the game renders
+        /// it rather than hinted at.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Everything here is the measured runtime, not an artistic impression. The lamp hangs
+        /// <see cref="GroundLightHeightUnits"/> above the floor, so a floor point at radius r
+        /// is d = sqrt(r² + h²) from it. The game attenuates by a curve authored in the shipped
+        /// render-pipeline asset — a two-key Hermite that evaluates to (1 − d/range)² within
+        /// ±0.007 everywhere — and multiplies by the light's colour and intensity, added over
+        /// zero ambient. The intensity is the flicker midpoint, because LightFlickerEffect
+        /// overwrites the authored value with (min + max) / 2 on Awake.
+        /// </para>
+        /// <para>
+        /// The pool needs no tonemap or bloom emulation: at vanilla values its peak sits near
+        /// 0.17, far under both the tonemap knee (0.5) and the bloom threshold (1.9). One texel
+        /// per game pixel keeps the gradient exactly as chunky as the 270p chain draws it.
+        /// </para>
+        /// </remarks>
+        private void DrawGroundLightPool(Rect canvasScreenRect)
+        {
+            if (Event.current.type != EventType.Repaint ||
+                activeProfile == null ||
+                !activeProfile.GroundLightEnabled)
+            {
+                return;
+            }
+
+            float range = Mathf.Max(0f, activeProfile.GroundLightRange);
+            if (range <= GroundLightHeightUnits)
+            {
+                // No pool exists; the gizmo path owns the warning for this case.
+                return;
+            }
+
+            float radiusPixels = Mathf.Sqrt(
+                range * range - GroundLightHeightUnits * GroundLightHeightUnits) *
+                DimensionPortalVisualContract.PixelsPerUnit;
+
+            EnsureGroundGlowTexture(range, radiusPixels);
+            if (groundGlowTexture == null)
+            {
+                return;
+            }
+
+            EnsureGroundGlowMaterial();
+            if (groundGlowMaterial == null)
+            {
+                return;
+            }
+
+            Vector2 offsetPixels = activeProfile.GroundLightOffsetPixels;
+            Vector2 groundGamePixels = new Vector2(
+                offsetPixels.x,
+                GroundLightGroundZUnits * DimensionPortalVisualContract.PixelsPerUnit +
+                    offsetPixels.y);
+            Vector2 discCenter = groundGamePixels - bodyScreenOrigin;
+
+            Rect poolCanvasRect = new Rect(
+                discCenter.x - radiusPixels,
+                discCenter.y - radiusPixels,
+                radiusPixels * 2f,
+                radiusPixels * 2f);
+            Rect poolLocal = CanvasRectToGuiRect(poolCanvasRect);
+            Rect poolScreen = new Rect(
+                canvasScreenRect.x + poolLocal.x,
+                canvasScreenRect.y + poolLocal.y,
+                poolLocal.width,
+                poolLocal.height);
+
+            // Manual clip: only the slice inside the canvas is drawn, with texture coordinates
+            // narrowed to match, so the blit cannot reach the page even though it answers to no
+            // GUI clip stack. The pool is radially symmetric, so the V origin needs no flip.
+            Rect visible = Rect.MinMaxRect(
+                Mathf.Max(poolScreen.xMin, canvasScreenRect.xMin),
+                Mathf.Max(poolScreen.yMin, canvasScreenRect.yMin),
+                Mathf.Min(poolScreen.xMax, canvasScreenRect.xMax),
+                Mathf.Min(poolScreen.yMax, canvasScreenRect.yMax));
+            if (visible.width <= 0f || visible.height <= 0f)
+            {
+                return;
+            }
+
+            Rect sourceUv = new Rect(
+                (visible.xMin - poolScreen.xMin) / poolScreen.width,
+                (poolScreen.yMax - visible.yMax) / poolScreen.height,
+                visible.width / poolScreen.width,
+                visible.height / poolScreen.height);
+            Graphics.DrawTexture(
+                visible,
+                groundGlowTexture,
+                sourceUv,
+                0,
+                0,
+                0,
+                0,
+                Color.white,
+                groundGlowMaterial);
+        }
+
+        /// <summary>Bakes the pool texture, one texel per game pixel, cached until a field moves.</summary>
+        private void EnsureGroundGlowTexture(float range, float radiusPixels)
+        {
+            Color colour = activeProfile.GroundLightColor;
+            float intensity = activeProfile.GroundLightIntensity;
+            string signature = string.Concat(
+                colour.r.ToString("0.####"), ",",
+                colour.g.ToString("0.####"), ",",
+                colour.b.ToString("0.####"), ",",
+                range.ToString("0.####"), ",",
+                intensity.ToString("0.####"));
+            if (groundGlowTexture != null && signature == groundGlowSignature)
+            {
+                return;
+            }
+
+            DestroyTexture(ref groundGlowTexture);
+            groundGlowSignature = signature;
+
+            int side = Mathf.Max(2, Mathf.CeilToInt(radiusPixels) * 2);
+            Texture2D texture = new Texture2D(side, side, TextureFormat.RGBA32, false)
+            {
+                hideFlags = HideFlags.HideAndDontSave,
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+
+            Color linear = colour.linear;
+            float half = side * 0.5f;
+            float pixelsPerUnit = DimensionPortalVisualContract.PixelsPerUnit;
+            Color32[] pixels = new Color32[side * side];
+            for (int y = 0; y < side; y++)
+            {
+                for (int x = 0; x < side; x++)
+                {
+                    float dxUnits = (x + 0.5f - half) / pixelsPerUnit;
+                    float dyUnits = (y + 0.5f - half) / pixelsPerUnit;
+                    float floorDistance = Mathf.Sqrt(dxUnits * dxUnits + dyUnits * dyUnits);
+                    float d = Mathf.Sqrt(
+                        floorDistance * floorDistance +
+                        GroundLightHeightUnits * GroundLightHeightUnits);
+                    float normalized = Mathf.Clamp01(d / range);
+                    float attenuation = (1f - normalized) * (1f - normalized);
+                    Color texel = new Color(
+                        linear.r * intensity * attenuation,
+                        linear.g * intensity * attenuation,
+                        linear.b * intensity * attenuation,
+                        1f).gamma;
+                    pixels[y * side + x] = texel;
+                }
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            groundGlowTexture = texture;
+        }
+
+        private void EnsureGroundGlowMaterial()
+        {
+            if (groundGlowMaterial != null)
+            {
+                return;
+            }
+
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(GroundGlowShaderPath);
+            if (shader == null)
+            {
+                return;
+            }
+
+            groundGlowMaterial = new Material(shader)
+            {
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+        }
+
+        private void DrawGroundLightGizmo(Rect localCanvas)
+        {
+            if (selectedLayer != StudioLayer.GroundLight ||
+                activeProfile == null ||
+                !activeProfile.GroundLightEnabled)
+            {
+                return;
+            }
+
+            Vector2 offsetPixels = activeProfile.GroundLightOffsetPixels;
+            // The offset moves the lamp across the floor: world X and world Z, each of which
+            // projects 1:1 into canvas pixels.
+            Vector2 groundGamePixels = new Vector2(
+                offsetPixels.x,
+                GroundLightGroundZUnits * DimensionPortalVisualContract.PixelsPerUnit +
+                    offsetPixels.y);
+            Vector2 discCenter = groundGamePixels - bodyScreenOrigin;
+
+            float range = Mathf.Max(0f, activeProfile.GroundLightRange);
+            if (range <= GroundLightHeightUnits)
+            {
+                // The light sits above the floor, so a range shorter than that height never
+                // reaches the ground at all. Drawing a collapsed ring would claim a pool that
+                // does not exist.
+                AddPreviewWarning(
+                    "The ground light's range (" + range.ToString("0.##") +
+                    ") is shorter than its height above the floor (" +
+                    GroundLightHeightUnits.ToString("0.###") +
+                    "), so it casts no pool on the ground.");
+                return;
+            }
+
+            float discRadiusPixels = Mathf.Sqrt(
+                range * range - GroundLightHeightUnits * GroundLightHeightUnits) *
+                DimensionPortalVisualContract.PixelsPerUnit;
+
+            Color ringColor = activeProfile.GroundLightColor;
+            ringColor.a = 0.9f;
+            float dotSize = Mathf.Max(1.5f, 1f / EditorGUIUtility.pixelsPerPoint * 2f);
+            int dotCount = Mathf.Clamp(
+                Mathf.RoundToInt(discRadiusPixels * activeZoom * 0.2f),
+                24,
+                180);
+            for (int i = 0; i < dotCount; i++)
+            {
+                float angle = i * (Mathf.PI * 2f / dotCount);
+                Vector2 canvasPoint = discCenter + new Vector2(
+                    Mathf.Cos(angle) * discRadiusPixels,
+                    Mathf.Sin(angle) * discRadiusPixels);
+                Vector2 guiPoint = CanvasPointToGuiPoint(canvasPoint);
+                if (guiPoint.x < -dotSize || guiPoint.y < -dotSize ||
+                    guiPoint.x > localCanvas.width + dotSize ||
+                    guiPoint.y > localCanvas.height + dotSize)
+                {
+                    continue;
+                }
+
+                EditorGUI.DrawRect(
+                    new Rect(
+                        guiPoint.x - dotSize * 0.5f,
+                        guiPoint.y - dotSize * 0.5f,
+                        dotSize,
+                        dotSize),
+                    ringColor);
+            }
+
+            // The lamp itself, at its projected height above the disc.
+            Vector2 sourceGamePixels = new Vector2(
+                offsetPixels.x,
+                (GroundLightHeightUnits + GroundLightGroundZUnits) *
+                    DimensionPortalVisualContract.PixelsPerUnit + offsetPixels.y);
+            Vector2 sourceGui = CanvasPointToGuiPoint(sourceGamePixels - bodyScreenOrigin);
+            float markerThickness = Mathf.Max(1f, 1f / EditorGUIUtility.pixelsPerPoint);
+            EditorGUI.DrawRect(
+                new Rect(sourceGui.x - 5f, sourceGui.y, 10f, markerThickness),
+                ringColor);
+            EditorGUI.DrawRect(
+                new Rect(sourceGui.x, sourceGui.y - 5f, markerThickness, 10f),
+                ringColor);
         }
 
         private void DrawFrameTexture(VisibleFrame frame, Texture2D texture)
@@ -4326,6 +5416,25 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
+            // The burst and the ground light are positioned on the canvas without owning a
+            // sprite frame to grab, so their drag starts anywhere while they are selected.
+            if (IsFramelessTransformableLayer(selectedLayer))
+            {
+                string framelessOffsetName = GetOffsetPropertyName(selectedLayer);
+                SerializedProperty framelessOffset = string.IsNullOrEmpty(framelessOffsetName)
+                    ? null
+                    : profile.FindProperty(framelessOffsetName);
+                if (framelessOffset != null)
+                {
+                    canvasDragLayer = selectedLayer;
+                    canvasDragStartPoint = canvasPoint;
+                    canvasDragStartOffset = framelessOffset.vector2Value;
+                    canvasDragPending = true;
+                    canvasDragUndoRecorded = false;
+                    GUIUtility.hotControl = controlId;
+                }
+            }
+
             current.Use();
         }
 
@@ -4407,9 +5516,20 @@ namespace ExpandNullforge.EditorTools
                    layer == StudioLayer.ChargeSweep ||
                    layer == StudioLayer.Milestones ||
                    layer == StudioLayer.Center ||
+                   layer == StudioLayer.ReadyBurst ||
+                   layer == StudioLayer.GroundLight ||
                    (layer == StudioLayer.InnerFlecks &&
                     activeProfile != null &&
                     activeProfile.CenterSwirlOverrideVanilla);
+        }
+
+        /// <summary>
+        /// Layers positioned on the canvas without owning a sprite frame to grab: their drag
+        /// starts anywhere on the canvas while they are selected.
+        /// </summary>
+        private static bool IsFramelessTransformableLayer(StudioLayer layer)
+        {
+            return layer == StudioLayer.ReadyBurst || layer == StudioLayer.GroundLight;
         }
 
         private static string GetOffsetPropertyName(StudioLayer layer)
@@ -4426,6 +5546,10 @@ namespace ExpandNullforge.EditorTools
                     return "centerOffsetPixels";
                 case StudioLayer.InnerFlecks:
                     return "centerParticleOffsetPixels";
+                case StudioLayer.ReadyBurst:
+                    return "readyFlashOffsetPixels";
+                case StudioLayer.GroundLight:
+                    return "groundLightOffsetPixels";
                 default:
                     return string.Empty;
             }
@@ -4471,13 +5595,13 @@ namespace ExpandNullforge.EditorTools
             if (fixedWidth > 0f)
             {
                 mainPanelRect = EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Width(fixedWidth));
             }
             else
             {
                 mainPanelRect = EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.MinWidth(InspectorMinWidth),
                     GUILayout.ExpandWidth(true));
             }
@@ -4740,11 +5864,11 @@ namespace ExpandNullforge.EditorTools
 
             if (fixedWidth > 0f)
             {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(fixedWidth));
+                EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox, GUILayout.Width(fixedWidth));
             }
             else
             {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
             }
 
             EditorGUILayout.LabelField("Sounds", EditorStyles.boldLabel);
@@ -4845,6 +5969,19 @@ namespace ExpandNullforge.EditorTools
         {
             EditorGUILayout.BeginHorizontal();
             string result = EditorGUILayout.TextField(new GUIContent(label, tooltip), value);
+            using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(result)))
+            {
+                if (GUILayout.Button(
+                    new GUIContent(
+                        "▶",
+                        "Play this sound without opening the picker. Sound Library keys " +
+                        "audition here; an SfxID name only plays inside the game."),
+                    GUILayout.Width(24f)))
+                {
+                    PlaySoundKey(result);
+                }
+            }
+
             if (GUILayout.Button(
                 new GUIContent("Pick", "Browse the game's sounds, listen, and select."),
                 GUILayout.Width(40f)))
@@ -4854,6 +5991,47 @@ namespace ExpandNullforge.EditorTools
 
             EditorGUILayout.EndHorizontal();
             return result;
+        }
+
+        /// <summary>
+        /// Auditions the sound a field names, resolving the key the same way the picker's
+        /// preselect does. SfxID names have no clip in the bundles, so they stay silent here.
+        /// </summary>
+        private static void PlaySoundKey(string soundKey)
+        {
+            if (string.IsNullOrEmpty(soundKey))
+            {
+                return;
+            }
+
+            string gamePath = DimensionGameSoundCatalog.ResolveGamePath();
+            System.Collections.Generic.IReadOnlyList<DimensionGameSoundCatalog.SoundEntry> entries =
+                DimensionGameSoundCatalog.GetEntries(gamePath, out string scanError);
+            if (!string.IsNullOrEmpty(scanError))
+            {
+                return;
+            }
+
+            string normalizedKey = soundKey.Trim().Replace('\\', '/');
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (!string.Equals(
+                        entries[i].AssetPath,
+                        normalizedKey,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                AudioClip clip = DimensionGameSoundCatalog.LoadClip(entries[i], out _);
+                if (clip != null)
+                {
+                    DimensionGameSoundCatalog.StopPreview();
+                    DimensionGameSoundCatalog.PlayPreview(clip);
+                }
+
+                return;
+            }
         }
 
         private void DrawTexturePanel(
@@ -4871,25 +6049,25 @@ namespace ExpandNullforge.EditorTools
             if (expandHeight && fixedWidth > 0f)
             {
                 EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Width(fixedWidth),
                     GUILayout.Height(targetHeight));
             }
             else if (expandHeight)
             {
                 EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Height(targetHeight));
             }
             else if (fixedWidth > 0f)
             {
                 EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Width(fixedWidth));
             }
             else
             {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
             }
 
             TextureSlotCacheEntry cacheEntry = GetTextureSlotCacheEntry(
@@ -4998,25 +6176,25 @@ namespace ExpandNullforge.EditorTools
             if (expandHeight && fixedWidth > 0f)
             {
                 EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Width(fixedWidth),
                     GUILayout.Height(targetHeight));
             }
             else if (expandHeight)
             {
                 EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Height(targetHeight));
             }
             else if (fixedWidth > 0f)
             {
                 EditorGUILayout.BeginVertical(
-                    EditorStyles.helpBox,
+                    DimensionsApiImguiTheme.CardBox,
                     GUILayout.Width(fixedWidth));
             }
             else
             {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
             }
 
             SwirlTextureSlotCacheEntry cacheEntry =
@@ -5300,11 +6478,11 @@ namespace ExpandNullforge.EditorTools
                 new GUIContent(
                     GetExpectedTextureSlotDisplayName(layer, slotIndex),
                     message),
-                EditorStyles.miniBoldLabel);
+                DimensionsApiImguiTheme.SectionLabel);
             GUILayout.FlexibleSpace();
             EditorGUILayout.LabelField(
                 new GUIContent("Waiting for SpriteAsset data", message),
-                EditorStyles.miniLabel,
+                DimensionsApiImguiTheme.Caption,
                 GUILayout.ExpandWidth(false));
             EditorGUILayout.EndHorizontal();
         }
@@ -6294,7 +7472,7 @@ namespace ExpandNullforge.EditorTools
                     DrawProperty(profile, "chargeWaveSpeed", "Playback speed");
                     break;
                 case StudioLayer.Milestones:
-                    EditorGUILayout.LabelField("Activation thresholds", EditorStyles.miniBoldLabel);
+                    EditorGUILayout.LabelField("Activation thresholds", DimensionsApiImguiTheme.SectionLabel);
                     DrawProperty(profile, "firstMilestone", "Bottom pair");
                     DrawProperty(profile, "secondMilestone", "Middle pair");
                     DrawProperty(profile, "thirdMilestone", "Upper pair");
@@ -6307,7 +7485,7 @@ namespace ExpandNullforge.EditorTools
                     {
                         EditorGUILayout.LabelField(
                             "Animation and glow",
-                            EditorStyles.miniBoldLabel);
+                            DimensionsApiImguiTheme.SectionLabel);
                         DrawProperty(profile, "centerSwirlPlaybackSpeed", "Playback speed");
                         DrawProperty(
                             profile,
@@ -6316,28 +7494,30 @@ namespace ExpandNullforge.EditorTools
                     }
                     break;
                 case StudioLayer.ReadyBurst:
-                    EditorGUILayout.LabelField("Burst placement", EditorStyles.miniBoldLabel);
+                    EditorGUILayout.LabelField("Burst placement", DimensionsApiImguiTheme.SectionLabel);
                     DrawProperty(profile, "readyFlashOffsetPixels", "Offset (pixels)");
                     DrawProperty(profile, "readyFlashScale", "Scale");
                     DrawProperty(profile, "readyFlashRotationDegrees", "Rotation");
                     DrawProperty(profile, "readyFlashEmissionMultiplier", "Emission multiplier");
                     DrawProperty(profile, "readyFlashSizeMultiplier", "Size multiplier");
+                    GUILayout.Space(2f);
+                    DrawReplayBurstControl();
                     break;
                 case StudioLayer.GroundLight:
                     EditorGUILayout.HelpBox(
-                        "In-game effect. Core Keeper's world light, fog, flicker, and responsive shadows cannot be reproduced exactly in this sprite canvas.",
+                        "The coloured pool itself only exists in the game world. The dashed ring on the canvas shows exactly where it reaches; the swatch below shows its true steady brightness. Fog and responsive shadows stay world-only.",
                         MessageType.None);
-                    EditorGUILayout.LabelField("Light placement", EditorStyles.miniBoldLabel);
+                    EditorGUILayout.LabelField("Light placement", DimensionsApiImguiTheme.SectionLabel);
                     DrawProperty(profile, "groundLightEnabled", "Enabled");
                     DrawProperty(profile, "groundLightOffsetPixels", "Offset (pixels)");
-                    DrawProperty(profile, "groundLightIntensity", "Authored intensity");
                     DrawProperty(profile, "groundLightRange", "Range");
                     DrawProperty(profile, "groundLightMinimumIntensity", "Runtime minimum");
                     DrawProperty(profile, "groundLightMaximumIntensity", "Runtime maximum");
+                    DrawGroundLightEffectiveIntensityRow(profile);
                     DrawProperty(profile, "groundLightMovement", "Vanilla movement");
                     DrawProperty(profile, "groundLightCastsShadows", "Responsive shadows");
                     GUILayout.Space(4f);
-                    EditorGUILayout.LabelField("Projected shadow", EditorStyles.miniBoldLabel);
+                    EditorGUILayout.LabelField("Projected shadow", DimensionsApiImguiTheme.SectionLabel);
                     DrawProperty(profile, "portalShadowEnabled", "Enabled");
                     DrawProperty(profile, "portalShadowSprite", "Floor shadow sprite");
                     DrawProperty(profile, "portalShadowCasterSprite", "Responsive caster sprite");
@@ -6347,6 +7527,42 @@ namespace ExpandNullforge.EditorTools
                     EditorGUILayout.EndHorizontal();
                     break;
             }
+        }
+
+        private void DrawGroundLightEffectiveIntensityRow(SerializedObject profile)
+        {
+            float minimum = GetFloat(profile, "groundLightMinimumIntensity", 0.3f);
+            float maximum = Mathf.Max(
+                minimum,
+                GetFloat(profile, "groundLightMaximumIntensity", 0.3f));
+            // Read only. The profile derives the effective intensity from this same range, so
+            // there is nothing to write back — and writing during a GUI pass would record an
+            // undo step every repaint, which no Ctrl+Z could ever get past.
+            float effective = (minimum + maximum) * 0.5f;
+
+            Color lightColor = GetColor(
+                profile,
+                "groundLightColor",
+                DimensionPortalVisualProfileAsset.VanillaGroundLightColor);
+            Rect row = EditorGUILayout.GetControlRect();
+            Rect content = EditorGUI.PrefixLabel(
+                row,
+                new GUIContent(
+                    "Brightness in game",
+                    "The steady brightness the flicker settles around: the midpoint of the runtime minimum and maximum. There is no separate authored intensity any more, because the game overwrote it a moment after the portal appeared."));
+            Rect swatch = new Rect(content.x, content.y + 1f, 36f, content.height - 2f);
+            EditorGUI.DrawRect(swatch, Color.black);
+            EditorGUI.DrawRect(
+                new Rect(swatch.x + 1f, swatch.y + 1f, swatch.width - 2f, swatch.height - 2f),
+                new Color(
+                    Mathf.Clamp01(lightColor.r * effective),
+                    Mathf.Clamp01(lightColor.g * effective),
+                    Mathf.Clamp01(lightColor.b * effective),
+                    1f));
+            EditorGUI.LabelField(
+                new Rect(swatch.xMax + 6f, content.y, 80f, content.height),
+                effective.ToString("0.00"),
+                DimensionsApiImguiTheme.Caption);
         }
 
         private void DrawLayerTransformSettings(
@@ -6373,44 +7589,12 @@ namespace ExpandNullforge.EditorTools
             SerializedProperty flipY = profile.FindProperty(flipYName);
 
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Layout", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("Layout", DimensionsApiImguiTheme.SectionLabel);
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("Reset layout", EditorStyles.miniButton, GUILayout.Width(82f)))
             {
-                Undo.RecordObject(
-                    profile.targetObject,
-                    "Reset " + GetLayerTitle(layer) + " layout");
-                if (visible != null)
-                {
-                    visible.boolValue = true;
-                }
-
-                if (offset != null)
-                {
-                    offset.vector2Value = Vector2.zero;
-                }
-
-                if (scale != null)
-                {
-                    scale.vector2Value = Vector2.one;
-                }
-
-                if (rotation != null)
-                {
-                    rotation.floatValue = 0f;
-                }
-
-                if (flipX != null)
-                {
-                    flipX.boolValue = false;
-                }
-
-                if (flipY != null)
-                {
-                    flipY.boolValue = false;
-                }
-
-                MarkPreviewTransformChanged();
+                ResetLayerLayout(profile, layer);
+                GUI.changed = true;
             }
 
             EditorGUILayout.EndHorizontal();
@@ -6462,6 +7646,69 @@ namespace ExpandNullforge.EditorTools
             }
 
             GUILayout.Space(4f);
+        }
+
+        /// <summary>
+        /// Puts one layer back where the artwork was drawn: centred, unturned, full size and
+        /// visible. One body, shared by the drawn-in-place button and by the rebuilt page.
+        /// </summary>
+        internal void ResetLayerLayout(SerializedObject profile, StudioLayer layer)
+        {
+            if (profile == null ||
+                !TryGetLayerTransformPropertyNames(
+                    layer,
+                    out string visibleName,
+                    out string offsetName,
+                    out string scaleName,
+                    out string rotationName,
+                    out string flipXName,
+                    out string flipYName))
+            {
+                return;
+            }
+
+            SerializedProperty visible = profile.FindProperty(visibleName);
+            SerializedProperty offset = profile.FindProperty(offsetName);
+            SerializedProperty scale = profile.FindProperty(scaleName);
+            SerializedProperty rotation = profile.FindProperty(rotationName);
+            SerializedProperty flipX = profile.FindProperty(flipXName);
+            SerializedProperty flipY = profile.FindProperty(flipYName);
+
+            Undo.RecordObject(
+                profile.targetObject,
+                "Reset " + GetLayerTitle(layer) + " layout");
+            if (visible != null)
+            {
+                visible.boolValue = true;
+            }
+
+            if (offset != null)
+            {
+                offset.vector2Value = Vector2.zero;
+            }
+
+            if (scale != null)
+            {
+                scale.vector2Value = Vector2.one;
+            }
+
+            if (rotation != null)
+            {
+                rotation.floatValue = 0f;
+            }
+
+            if (flipX != null)
+            {
+                flipX.boolValue = false;
+            }
+
+            if (flipY != null)
+            {
+                flipY.boolValue = false;
+            }
+
+            previewCompositionDirty = true;
+            repaintRequested = true;
         }
 
         private void DrawOffsetNudgeButton(
@@ -6545,14 +7792,14 @@ namespace ExpandNullforge.EditorTools
 
         private static void DrawFlecksPaletteControls(SerializedObject profile)
         {
-            EditorGUILayout.LabelField("Swirl mode", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("Swirl mode", DimensionsApiImguiTheme.SectionLabel);
             DrawProperty(profile, "centerSwirlVisible", "Visible");
             DrawProperty(profile, "centerSwirlOverrideVanilla", "Override vanilla");
         }
 
         private static void DrawReadyBurstPaletteControls(SerializedObject profile)
         {
-            EditorGUILayout.LabelField("Ready burst visibility and color", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("Ready burst visibility and color", DimensionsApiImguiTheme.SectionLabel);
             DrawProperty(profile, "playReadyFlash", "Enabled");
             DrawProperty(
                 profile,
@@ -7493,17 +8740,6 @@ namespace ExpandNullforge.EditorTools
                 canvasRect.height * activeZoom);
         }
 
-        private static int GetLoopedFrame(float time, float fps, int frameCount)
-        {
-            if (frameCount <= 1 || fps <= 0f)
-            {
-                return 0;
-            }
-
-            int frame = Mathf.FloorToInt(Mathf.Max(0f, time) * fps);
-            return frame % frameCount;
-        }
-
         private static int FindClosestPaletteIndex(Color32 color, Color32[] palette)
         {
             int closest = 0;
@@ -7555,6 +8791,8 @@ namespace ExpandNullforge.EditorTools
         {
             if (layerButtonStyle == null)
             {
+                // Same typeface and text colour as the rest of the product; the button's shape
+                // and behaviour are untouched.
                 layerButtonStyle = new GUIStyle(GUI.skin.button)
                 {
                     alignment = TextAnchor.MiddleLeft,
@@ -7562,6 +8800,12 @@ namespace ExpandNullforge.EditorTools
                     richText = true,
                     padding = new RectOffset(6, 30, 2, 2)
                 };
+                if (DimensionsApiImguiTheme.BodyStrong != null)
+                {
+                    layerButtonStyle.font = DimensionsApiImguiTheme.BodyStrong;
+                    layerButtonStyle.fontSize = 12;
+                }
+                SetStyleTextColor(layerButtonStyle, DimensionsApiImguiTheme.Lavender);
             }
 
             return layerButtonStyle;
@@ -7581,6 +8825,12 @@ namespace ExpandNullforge.EditorTools
                         source.padding.top,
                         source.padding.bottom)
                 };
+                if (DimensionsApiImguiTheme.Body != null)
+                {
+                    layerChipStyle.font = DimensionsApiImguiTheme.Body;
+                    layerChipStyle.fontSize = 11;
+                }
+                SetStyleTextColor(layerChipStyle, DimensionsApiImguiTheme.Periwinkle);
             }
 
             return layerChipStyle;
@@ -7599,6 +8849,7 @@ namespace ExpandNullforge.EditorTools
                 : new Color(0.82f, 0.86f, 0.9f, 1f);
             style = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
             {
+                font = DimensionsApiImguiTheme.Mono,
                 fontSize = 8,
                 fontStyle = emphasized ? FontStyle.Bold : FontStyle.Normal,
                 alignment = TextAnchor.MiddleCenter
@@ -7845,7 +9096,8 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static string GetLayerTitle(StudioLayer layer)
+        /// <summary>The name one part of the portal goes by, in the studio and on the page.</summary>
+        internal static string GetLayerTitle(StudioLayer layer)
         {
             switch (layer)
             {

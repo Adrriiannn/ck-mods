@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ExpandNullforge.EditorTools
 {
-    public sealed class DimensionFrameworkAuthoringWindow : EditorWindow
+    public sealed partial class DimensionFrameworkAuthoringWindow : EditorWindow
     {
         private const string WindowTitle = "Dimensions API";
         private const float SidebarWidth = 220f;
@@ -20,13 +20,11 @@ namespace ExpandNullforge.EditorTools
         private string activeSectionId = "overview";
         private int selectedBiomeIndex;
         private Vector2 rootScroll;
-        private Vector2 navScroll;
         private Vector2 detailScroll;
         private Vector2 notesScroll;
         private Vector2 actionScroll;
         private Vector2 toolGuideScroll;
         private Vector2 setupGuideScroll;
-        private Vector2 extractionReadinessScroll;
         private string selectedGuideModuleId = string.Empty;
         private string selectedActionId;
         private string commandInputValue = string.Empty;
@@ -43,6 +41,7 @@ namespace ExpandNullforge.EditorTools
         private bool portalVisualProfileSetupQueued;
         private DimensionPortalAppearanceStudio portalAppearanceStudio;
         private readonly DimensionTilesetStudio tilesetStudio = new DimensionTilesetStudio();
+        private readonly DimensionLayoutStudio layoutStudio = new DimensionLayoutStudio();
         private DimensionTemplateAsset initializedPortalTemplate;
         private DimensionPortalVisualProfileAsset initializedPortalProfile;
         private bool itemPortalVisualProfileSetupQueued;
@@ -52,13 +51,21 @@ namespace ExpandNullforge.EditorTools
         private int portalStudioTab;
         private int selectedTilesetIndex;
         private Object serializedAssetBindingTarget;
+        /// <summary>Foldout state for the uncurated fields each panel draws below its own list.</summary>
+        private readonly Dictionary<string, bool> uncuratedFieldFoldouts =
+            new Dictionary<string, bool>();
+
+        /// <summary>Which borrowed attack each creature has highlighted in the picker.</summary>
+        private readonly Dictionary<string, int> borrowedAttackChoices =
+            new Dictionary<string, int>();
+
         private SerializedObject serializedAssetBinding;
         private readonly Dictionary<string, SerializedProperty> serializedAssetBindingProperties =
             new Dictionary<string, SerializedProperty>();
         private System.Action pendingPortalTransition;
         private bool portalTransitionQueued;
 
-        [MenuItem("Dimensions API/Authoring Dashboard")]
+        [MenuItem("Dimensions API/Dimension Dashboard")]
         public static void Open()
         {
             DimensionFrameworkAuthoringWindow window =
@@ -150,7 +157,33 @@ namespace ExpandNullforge.EditorTools
             TryUseProjectSelection();
         }
 
-        private void OnGUI()
+        /// <summary>
+        /// Draws the active stage's body: the original IMGUI panel, hosted by the UI Toolkit
+        /// frame in <c>DimensionFrameworkAuthoringWindow.Shell.cs</c>. The frame owns the
+        /// wordmark bar, the Home screen, the rail and the stage heading; everything below the
+        /// heading is still the panel a creator uses today, unchanged.
+        /// </summary>
+        private void DrawLegacyStageBody()
+        {
+            // The panels below are IMGUI and draw Unity's own grey plates. Painting the cavern
+            // ground first and tinting their backgrounds pulls them onto the same surface as the
+            // rebuilt pages without touching a single control.
+            DimensionsApiImguiTheme.PaintBackground(
+                new Rect(0f, 0f, position.width, position.height));
+            Color previousBackground;
+            Color previousContent;
+            DimensionsApiImguiTheme.PushTint(out previousBackground, out previousContent);
+            try
+            {
+                DrawLegacyStageBodyInner();
+            }
+            finally
+            {
+                DimensionsApiImguiTheme.PopTint(previousBackground, previousContent);
+            }
+        }
+
+        private void DrawLegacyStageBodyInner()
         {
             // Keep the header's control tree stable for the complete Layout/Repaint
             // pair. Portal Studio can publish an action message later in the same
@@ -179,26 +212,258 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
-            // Two independently scrolling columns: the section nav on the left stays put while the
-            // active section on the right scrolls (and vice versa).
-            EditorGUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
-
-            EditorGUILayout.BeginVertical(GUILayout.Width(SidebarWidth), GUILayout.ExpandHeight(true));
-            navScroll = EditorGUILayout.BeginScrollView(navScroll, GUILayout.ExpandHeight(true));
-            DrawNavigationSidebar();
-            EditorGUILayout.EndScrollView();
-            DrawTemplatePicker();
-            EditorGUILayout.EndVertical();
-
-            GUILayout.Space(8f);
-
-            EditorGUILayout.BeginVertical(GUILayout.ExpandHeight(true));
             rootScroll = EditorGUILayout.BeginScrollView(rootScroll, GUILayout.ExpandHeight(true));
             DrawCurrentSection();
             EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
+        }
 
-            EditorGUILayout.EndHorizontal();
+        /// <summary>
+        /// Selects a dimension on behalf of the Home screen, using the same path the old
+        /// template picker used so the workspace, view model and portal caches all rebuild.
+        /// </summary>
+        /// <summary>Builds the runtime manifest, the same action the old Export page ran.</summary>
+        /// <summary>Draws just the Layout Studio, for the rebuilt Map page to host.</summary>
+        private void DrawLayoutStudioForShell()
+        {
+            if (selectedTemplate == null || selectedTemplate.LayoutTemplate == null)
+            {
+                return;
+            }
+
+            DrawLayoutStudio();
+        }
+
+        /// <summary>
+        /// Which Portal Studio the rebuilt page drives. The placed portal and the instant item
+        /// portal are two studios sharing one page, chosen by the tab the creator picked.
+        /// </summary>
+        private DimensionPortalAppearanceStudio ResolvePortalStudioForShell()
+        {
+            if (portalStudioTab == 1)
+            {
+                // The item-portal studio used to be created by the legacy instant-portal panel,
+                // which nothing reaches any more — without this, switching the page to the item
+                // portal resolved a null studio and showed an empty room.
+                if (itemPortalAppearanceStudio == null)
+                {
+                    itemPortalAppearanceStudio = new DimensionPortalAppearanceStudio();
+                    itemPortalAppearanceStudio.ConfigureInstantPortalMode();
+                }
+
+                return itemPortalAppearanceStudio;
+            }
+
+            return portalAppearanceStudio;
+        }
+
+        /// <summary>The portal profile the page should edit for the active version tab.</summary>
+        private DimensionPortalVisualProfileAsset ResolvePortalProfileForShell()
+        {
+            if (selectedTemplate == null)
+            {
+                return null;
+            }
+
+            return portalStudioTab == 1
+                ? selectedTemplate.ItemPortalVisualProfile
+                : selectedTemplate.PortalVisualProfile;
+        }
+
+        /// <summary>
+        /// Prepares the active version's profile the way the legacy panels used to: a missing
+        /// profile is created and assigned on the next editor tick, an existing one gets its
+        /// artwork initialized once. Without this, a fresh dimension's portal page showed its
+        /// empty state forever, waiting for a setup step that no longer had a caller.
+        /// </summary>
+        private void EnsurePortalProfileReadyForShell()
+        {
+            if (selectedTemplate == null)
+            {
+                return;
+            }
+
+            if (portalStudioTab == 1)
+            {
+                DimensionPortalVisualProfileAsset itemProfile =
+                    selectedTemplate.ItemPortalVisualProfile;
+                if (itemProfile == null)
+                {
+                    QueueItemPortalVisualProfileSetup();
+                }
+                else
+                {
+                    EnsureItemPortalProfileInitializedOnce(itemProfile);
+                }
+
+                return;
+            }
+
+            DimensionPortalVisualProfileAsset profile = selectedTemplate.PortalVisualProfile;
+            if (profile == null)
+            {
+                QueuePortalVisualProfileSetup();
+            }
+            else
+            {
+                EnsurePortalProfileInitializedOnce(profile);
+            }
+        }
+
+        /// <summary>
+        /// Handles what a Portal Studio pass reported, exactly as the legacy panels did: a
+        /// message to show, a template edit to rebuild from, a profile to start building with,
+        /// or a request to push the saved look into the generated prefab.
+        /// </summary>
+        /// <remarks>
+        /// The use and sync requests are the half that was silently dropped when the legacy
+        /// panels died: Save and the profile picker queue their work inside the studio, the
+        /// studio reports it out through this result, and only the window can finish the job —
+        /// so without these branches the button clicked, the message said saved, and the built
+        /// portal never changed.
+        /// </remarks>
+        private void HandlePortalStudioResultFromShell(
+            DimensionPortalAppearanceStudio.DrawResult result)
+        {
+            if (!string.IsNullOrEmpty(result.Message))
+            {
+                lastEditorActionMessage = result.Message;
+                lastEditorActionType = result.MessageType;
+            }
+
+            if (result.TemplateChanged)
+            {
+                RebuildWorkspace();
+                Repaint();
+            }
+
+            bool instant = portalStudioTab == 1;
+            DimensionPortalAppearanceStudio studio = instant
+                ? itemPortalAppearanceStudio
+                : portalAppearanceStudio;
+            if (studio == null)
+            {
+                return;
+            }
+
+            if (result.UseProfileRequested != null)
+            {
+                DimensionPortalVisualProfileAsset requestedProfile = result.UseProfileRequested;
+                bool switched = result.CanApply &&
+                    (instant
+                        ? TryUseItemPortalVisualProfile(requestedProfile, out _)
+                        : TryUsePortalVisualProfile(requestedProfile, out _));
+                studio.NotifyRuntimeSyncResult(requestedProfile, switched);
+            }
+            else if (result.RuntimeSyncRequested)
+            {
+                DimensionPortalVisualProfileAsset boundProfile = ResolvePortalProfileForShell();
+                bool synchronized = result.CanApply && TryApplyPortalVisualChanges(out _);
+                studio.NotifyRuntimeSyncResult(boundProfile, synchronized);
+            }
+        }
+
+        // ------------------------------------------------- portal versions, for the page ---
+
+        private int GetPortalVersionTabForShell()
+        {
+            return portalStudioTab;
+        }
+
+        private void SetPortalVersionTabFromShell(int tab)
+        {
+            int next = tab == 1 ? 1 : 0;
+            if (portalStudioTab == next)
+            {
+                return;
+            }
+
+            portalStudioTab = next;
+            RefreshStageBody();
+            Repaint();
+        }
+
+        private bool HasPortalVersionForShell(bool instant)
+        {
+            return HasPortalVersion(instant);
+        }
+
+        private bool IsPortalVersionEnabledForShell(bool instant)
+        {
+            return IsPortalVersionEnabled(instant);
+        }
+
+        private void TogglePortalVersionEnabledFromShell(bool instant)
+        {
+            TogglePortalVersionEnabled(instant);
+            RebuildWorkspace();
+            Repaint();
+        }
+
+        /// <summary>Shows a block's generated item on the stage that owns items.</summary>
+        private void FocusBlockItemFromShell(DimensionItemAsset item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            Selection.activeObject = item;
+            EditorGUIUtility.PingObject(item);
+            GoToStage("resources");
+        }
+
+        private void BuildDimensionFromShell()
+        {
+            if (selectedTemplate == null || viewModel == null || viewModel.SessionReport == null)
+            {
+                return;
+            }
+
+            // The whole content pipeline runs FIRST: items, tileset block items, portal items,
+            // creatures, plants, workbenches, chests, objects, vehicles, projectiles, critters,
+            // explosions, fog, and the drop plan. It used to be a separate button on a page that
+            // no longer exists, which meant "Build the Dimension" shipped a dimension with zero
+            // content prefabs — every generator green and unreachable. The manifest and bootstrap
+            // are built after, so they see every prefab this pass produced.
+            GenerateItemPrefabs(selectedTemplate.GlobalItems);
+
+            DimensionTemplateManifestExportPreview preview =
+                viewModel.SessionReport.ManifestExportPreview;
+            DimensionFrameworkAuthoringAssetActionResult result =
+                DimensionFrameworkAuthoringAssetUtility.CreateRuntimeManifestAsset(
+                    selectedTemplate,
+                    preview);
+            if (result != null && result.CreatedObject != null)
+            {
+                lastGeneratedManifestAsset = result.CreatedObject;
+            }
+
+            RunAssetAction(result);
+        }
+
+        private void ShowGeneratedAssetsFromShell()
+        {
+            if (lastGeneratedManifestAsset == null)
+            {
+                return;
+            }
+
+            Selection.activeObject = lastGeneratedManifestAsset;
+            EditorGUIUtility.PingObject(lastGeneratedManifestAsset);
+            lastEditorActionMessage = "Selected the last generated runtime manifest asset.";
+            lastEditorActionType = MessageType.Info;
+        }
+
+        private void SelectTemplateFromShell(DimensionTemplateAsset template)
+        {
+            if (template == selectedTemplate)
+            {
+                return;
+            }
+
+            selectedTemplate = template;
+            autoUseProjectSelection = false;
+            RebuildWorkspace();
         }
 
         private void DrawHeader()
@@ -238,7 +503,7 @@ namespace ExpandNullforge.EditorTools
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(310f), GUILayout.ExpandHeight(true));
             EditorGUILayout.LabelField("First step", EditorStyles.boldLabel);
             EditorGUILayout.LabelField(
-                "Create a Dimension Asset before using the dashboard. This asset becomes the home for the dimension identity, starter biome, layout, resources, scenes, access rules, and export settings.",
+                "Create a Dimension Asset before using the dashboard. Identity, starter biome, layout, resources, scenes, access rules and export settings all live on it.",
                 EditorStyles.wordWrappedLabel);
             GUILayout.Space(8f);
             if (GUILayout.Button("Create Dimension Asset", GUILayout.Height(34f)))
@@ -248,7 +513,7 @@ namespace ExpandNullforge.EditorTools
 
             GUILayout.Space(6f);
             EditorGUILayout.HelpBox(
-                "Use the wizard first. When it finishes, drop the created Dimension Asset into the field above, or just select it in the Project window.",
+                "Use the wizard first. When it finishes, drop the created Dimension Asset into the field above, or select it in the Project window.",
                 MessageType.Info);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndVertical();
@@ -1092,91 +1357,6 @@ namespace ExpandNullforge.EditorTools
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawExtractionReadiness()
-        {
-            DimensionFrameworkExtractionReadinessReport report =
-                workspace == null ? null : workspace.ExtractionReadiness;
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Framework extraction readiness", EditorStyles.boldLabel);
-            GUILayout.FlexibleSpace();
-            if (report != null)
-            {
-                EditorGUILayout.LabelField(
-                    "Ready " + report.ReadyCount +
-                    "   Advisory " + report.AdvisoryCount +
-                    "   Blocked " + report.BlockedCount,
-                    EditorStyles.miniLabel,
-                    GUILayout.Width(240f));
-            }
-
-            EditorGUILayout.EndHorizontal();
-
-            if (report == null)
-            {
-                EditorGUILayout.HelpBox(
-                    "No extraction-readiness report is available for this workspace.",
-                    MessageType.Info);
-                EditorGUILayout.EndVertical();
-                return;
-            }
-
-            EditorGUILayout.HelpBox(
-                report.Message,
-                report.State == DimensionAuthoringReadinessState.Blocked
-                    ? MessageType.Warning
-                    : MessageType.Info);
-
-            extractionReadinessScroll = EditorGUILayout.BeginScrollView(
-                extractionReadinessScroll,
-                GUILayout.MinHeight(110f),
-                GUILayout.MaxHeight(180f));
-            IReadOnlyList<DimensionFrameworkExtractionReadinessItem> items = report.Items;
-            for (int i = 0; i < items.Count; i++)
-            {
-                DrawExtractionReadinessItem(items[i]);
-            }
-
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawExtractionReadinessItem(DimensionFrameworkExtractionReadinessItem item)
-        {
-            if (item == null)
-            {
-                return;
-            }
-
-            Color oldColor = GUI.color;
-            GUI.color = StateColor(item.State);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUI.color = oldColor;
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField(item.Title, EditorStyles.boldLabel);
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.LabelField(item.State.ToString(), EditorStyles.miniBoldLabel, GUILayout.Width(80f));
-            EditorGUILayout.EndHorizontal();
-
-            if (item.BlocksExtraction)
-            {
-                EditorGUILayout.LabelField("Blocks extraction if unresolved", EditorStyles.miniBoldLabel);
-            }
-
-            if (!string.IsNullOrEmpty(item.Evidence))
-            {
-                EditorGUILayout.LabelField("Evidence: " + item.Evidence, EditorStyles.wordWrappedMiniLabel);
-            }
-
-            if (!string.IsNullOrEmpty(item.Guidance))
-            {
-                EditorGUILayout.LabelField(item.Guidance, EditorStyles.wordWrappedMiniLabel);
-            }
-
-            EditorGUILayout.EndVertical();
-        }
-
         // The dashboard sections are colour-coded BLUE so a creator can tell "I'm in the section
         // list" at a peripheral glance — distinct from the orange Tileset Studio and (soon) the
         // blue-accented Portal Studio interior.
@@ -1423,34 +1603,14 @@ namespace ExpandNullforge.EditorTools
             GUILayout.Space(4f);
         }
 
+        /// <summary>
+        /// One map, shared with the live shell. Two copies of "which capability is this section"
+        /// is two answers waiting to disagree, and the one a creator reads would be whichever
+        /// panel they happened to open.
+        /// </summary>
         private static string MaturityCapabilityForSection(string sectionId)
         {
-            switch (sectionId)
-            {
-                case "dimension":
-                    return "dimension-identity-registry";
-                case "portals":
-                    return "portal-studio";
-                case "tilesets":
-                    return "custom-tilesets";
-                case "layout":
-                    return "coordinate-translation";
-                case "biomes":
-                    return "biomes-zones";
-                case "terrain":
-                case "generation":
-                    return "generation";
-                case "scenes":
-                case "resources":
-                case "spawns":
-                    return "scenes-resources-spawns-events";
-                case "export":
-                    return "manifest-ownership";
-                case "diagnostics":
-                    return "diagnostics-readiness";
-                default:
-                    return "dashboard-wizard";
-            }
+            return DimensionStageMaturity.CapabilityForSection(sectionId);
         }
 
         private static Color MaturityColor(DimensionCapabilityMaturity maturity)
@@ -1480,13 +1640,13 @@ namespace ExpandNullforge.EditorTools
         {
             DrawSectionIntro(
                 "Dimension overview",
-                "A clean dashboard for the selected Dimension Asset.");
+                "The selected Dimension Asset at a glance.");
 
             DimensionTemplateManifestExportPreview exportPreview =
                 viewModel.SessionReport.ManifestExportPreview;
 
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("Biomes", CountBiomes().ToString(), "Biome definitions.");
+            DrawDashboardMetric("Biomes", CountBiomes().ToString(), "Biomes so far.");
             DrawDashboardMetric("Scenes", CountScenes().ToString(), "Structures and scene pools.");
             DrawDashboardMetric("Resources", CountResources().ToString(), "Ores, resource nodes, and loot sources.");
             DrawDashboardMetric("Spawns", CountSpawns().ToString(), "Animals, critters, mobs, bosses, and spawn rules.");
@@ -1506,7 +1666,7 @@ namespace ExpandNullforge.EditorTools
             DrawNamedValue("Dimension ID", selectedTemplate.DimensionId);
             DrawNamedValue("Absolute origin", FormatInt2(definition.AbsoluteOrigin));
             DrawNamedValue("Local 0,0", "At " + FormatInt2(definition.AbsoluteOrigin));
-            DrawNamedValue("Space kind", definition.SpaceKind.ToString());
+            DrawNamedValue("Dimension type", definition.Type.ToString());
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandWidth(true));
@@ -1545,17 +1705,15 @@ namespace ExpandNullforge.EditorTools
             }
             else
             {
-                DrawNamedValue("Floor IDs", biome.GetFloorObjectIdsWithPresets().Length.ToString());
-                DrawNamedValue("Wall IDs", biome.GetWallObjectIdsWithPresets().Length.ToString());
-                DrawNamedValue("Ore IDs", biome.GetOreObjectIdsWithPresets().Length.ToString());
-                DrawNamedValue("Water IDs", biome.GetWaterObjectIdsWithPresets().Length.ToString());
+                DrawNamedValue("Floor IDs", biome.FloorObjectIds.Length.ToString());
+                DrawNamedValue("Wall IDs", biome.WallObjectIds.Length.ToString());
+                DrawNamedValue("Ore IDs", biome.OreObjectIds.Length.ToString());
             }
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandWidth(true));
             EditorGUILayout.LabelField("Generation mini-preview", EditorStyles.boldLabel);
             DrawNamedValue("Passes", CountGenerationPasses().ToString());
-            DrawNamedValue("Tables", CountGenerationTables().ToString());
             DrawNamedValue("Terrain IDs", CountBiomeTerrainIds().ToString());
             DrawNamedValue("Runtime-ready", exportPreview.ReadyForRuntimeGeneration ? "Yes" : "Pending");
             EditorGUILayout.EndVertical();
@@ -1572,7 +1730,6 @@ namespace ExpandNullforge.EditorTools
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandWidth(true));
             EditorGUILayout.LabelField("Resources summary", EditorStyles.boldLabel);
-            DrawNamedValue("Resource nodes", CountAssets(selectedTemplate.GlobalResourceNodes).ToString());
             DrawNamedValue("Items", CountAssets(selectedTemplate.GlobalItems).ToString());
             DrawNamedValue("Recipes", CountAssets(selectedTemplate.GlobalRecipes).ToString());
             DrawNamedValue("Workbenches", CountAssets(selectedTemplate.GlobalWorkbenches).ToString());
@@ -1585,15 +1742,11 @@ namespace ExpandNullforge.EditorTools
             DrawNamedValue("Critters", CountAssets(selectedTemplate.GlobalCritters).ToString());
             DrawNamedValue("Mobs", CountAssets(selectedTemplate.GlobalMobs).ToString());
             DrawNamedValue("Bosses", CountAssets(selectedTemplate.GlobalBosses).ToString());
-            DrawNamedValue("Spawn rules", CountAssets(selectedTemplate.GlobalSpawnRules).ToString());
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandWidth(true));
             EditorGUILayout.LabelField("Selected biome content", EditorStyles.boldLabel);
             DrawNamedValue("Scenes", biome == null ? "0" : CountBiomeScenes(biome).ToString());
-            DrawNamedValue("Resources", biome == null ? "0" : CountBiomeResources(biome).ToString());
-            DrawNamedValue("Spawns", biome == null ? "0" : CountBiomeSpawns(biome).ToString());
-            DrawNamedValue("Scene spawn points", biome == null ? "0" : CountSceneSpawnPoints(biome.ScenePool).ToString());
             EditorGUILayout.EndVertical();
             EditorGUILayout.EndHorizontal();
         }
@@ -1617,7 +1770,7 @@ namespace ExpandNullforge.EditorTools
                 Field("contentPackVersion", "Content pack version"),
                 Field("contentPackAuthor", "Content pack author"),
                 Field("absoluteOrigin", "Absolute origin"),
-                Field("spaceKind", "Space kind"),
+                Field("dimensionType", "Dimension type"),
                 Field("reservedLocalMin", "Reserved local min"),
                 Field("reservedLocalMaxExclusive", "Reserved local max exclusive"),
                 Field("portalAccessRules", "Portal access rules"));
@@ -1638,7 +1791,7 @@ namespace ExpandNullforge.EditorTools
             DrawNamedValue("Absolute origin", FormatInt2(definition.AbsoluteOrigin));
             DrawNamedValue("Local origin preview", "0, 0 at " + FormatInt2(definition.AbsoluteOrigin));
             DrawNamedValue("Reserved local bounds", FormatBounds(definition.LocalBounds));
-            DrawNamedValue("Space kind", definition.SpaceKind.ToString());
+            DrawNamedValue("Dimension type", definition.Type.ToString());
             EditorGUILayout.EndVertical();
             EditorGUILayout.EndHorizontal();
 
@@ -2541,27 +2694,24 @@ namespace ExpandNullforge.EditorTools
                 "World layout",
                 "Shape where every biome lives before terrain, scenes, resources, and spawn rules are applied.");
 
-            DrawContextualPreviewCanvas(viewModel.PreviewCanvas);
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Create Layout Template", GUILayout.Width(180f)))
+            if (selectedTemplate.LayoutTemplate == null)
             {
-                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateLayoutTemplate(selectedTemplate));
-            }
-
-            using (new EditorGUI.DisabledScope(selectedTemplate.LayoutTemplate == null))
-            {
-                if (GUILayout.Button("Add Biome Region", GUILayout.Width(160f)))
+                EditorGUILayout.HelpBox(
+                    "This dimension has no layout yet. A layout is where every biome lives — create one " +
+                    "and the Layout Studio opens here.",
+                    MessageType.Info);
+                if (GUILayout.Button("Create Layout Template", GUILayout.Width(180f), GUILayout.Height(26f)))
                 {
-                    RunAssetAction(
-                        DimensionFrameworkAuthoringAssetUtility.AddLayoutRegion(
-                            selectedTemplate.LayoutTemplate,
-                            GetSelectedBiomeOrFirst()));
+                    RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateLayoutTemplate(selectedTemplate));
+                    GUIUtility.ExitGUI();
                 }
+
+                return;
             }
 
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-            GUILayout.Space(6f);
+            DrawLayoutStudio();
+            GUILayout.Space(8f);
+
             DrawSerializedAsset(
                 selectedTemplate,
                 "Dimension Layout Link",
@@ -2578,7 +2728,10 @@ namespace ExpandNullforge.EditorTools
                 Field("gridLocalMin", "Grid local min"),
                 Field("gridCellSize", "Grid cell size"),
                 Field("gridCells", "Grid cells"),
-                Field("radialBandSizeTiles", "Radial band size"),
+                // "Radial band size" is gone from every surface: the compiler reads it, passes it
+                // on and the method it lands in never uses it, so a ring is always written as an
+                // exact circle. The field itself stays stored, because pinned layout fingerprints
+                // include it.
                 Field("radialRings", "Radial rings"),
                 Field("biomeMask", "Biome mask"),
                 Field("maskBiomeMappings", "Mask biome mappings"),
@@ -2592,11 +2745,102 @@ namespace ExpandNullforge.EditorTools
                 FormatBounds(selectedTemplate.ReservedLocalBounds));
         }
 
+        /// <summary>
+        /// Draws the Layout Studio and carries out whatever the modder asked it for.
+        /// </summary>
+        /// <remarks>
+        /// The Studio itself only reports intent — it never creates or deletes assets. Keeping the
+        /// asset writes here means every one of them goes through <c>RunAssetAction</c>, which is what
+        /// produces the undo entry and the saved asset; a studio that wrote assets directly would leave
+        /// edits that survive until Unity feels like reloading and then quietly do not.
+        /// </remarks>
+        private void DrawLayoutStudio()
+        {
+            DimensionLayoutTemplateAsset layout = selectedTemplate.LayoutTemplate;
+
+            // Compiled fresh every repaint, by the same compiler the build uses. It is not free, but it
+            // is the only way the canvas can be trusted: a preview that reads the authoring data
+            // directly would show rings the build might reject and hide the ones it silently drops.
+            DimensionCompiledGenerationPlan plan = DimensionTemplateCompiler.Compile(selectedTemplate);
+
+            DimensionLayoutStudio.DrawResult r = layoutStudio.Draw(
+                selectedTemplate,
+                layout,
+                plan.BiomeRegions,
+                plan.PlayableLocalBounds);
+
+            if (r.Changed)
+            {
+                Repaint();
+            }
+
+            DrawLayoutCompileIssues(plan);
+
+            if (r.AddRingRequested)
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.AddLayoutRing(layout, GetSelectedBiomeOrFirst()));
+                GUIUtility.ExitGUI();
+            }
+
+            if (r.AddRegionRequested)
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.AddLayoutRegion(layout, GetSelectedBiomeOrFirst()));
+                GUIUtility.ExitGUI();
+            }
+
+            if (!string.IsNullOrEmpty(r.RemoveEntryId))
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.RemoveLayoutEntry(layout, r.RemoveEntryId));
+                GUIUtility.ExitGUI();
+            }
+
+            if (r.PublishRequested)
+            {
+                RunAssetAction(
+                    DimensionFrameworkAuthoringAssetUtility.PublishLayoutVersion(selectedTemplate, layout));
+                GUIUtility.ExitGUI();
+            }
+        }
+
+        /// <summary>
+        /// Shows only the compile problems that are about the layout.
+        /// </summary>
+        /// <remarks>
+        /// Filtered rather than showing everything, because the full issue list covers spawn rules,
+        /// resources and scenes too — and a wall of unrelated warnings under a map is how an author
+        /// learns to stop reading warnings.
+        /// </remarks>
+        private void DrawLayoutCompileIssues(DimensionCompiledGenerationPlan plan)
+        {
+            if (plan.Issues == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < plan.Issues.Count; i++)
+            {
+                DimensionAuthoringIssue issue = plan.Issues[i];
+                if (issue.Code == null || !issue.Code.StartsWith("layout-", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                EditorGUILayout.HelpBox(
+                    issue.Message,
+                    issue.Severity == DimensionAuthoringSeverity.Error
+                        ? MessageType.Error
+                        : MessageType.Warning);
+            }
+        }
+
         private void DrawBiomeEditor()
         {
             DrawSectionIntro(
                 "Biomes",
-                "Create and maintain the biome definitions that later terrain, generation, resources, scenes, and spawns build on.");
+                "The biomes that terrain, generation, resources, scenes and spawns all build on.");
 
             BiomeTemplateAsset biome = DrawBiomeSelectorHeader();
             EditorGUILayout.BeginHorizontal();
@@ -2646,13 +2890,17 @@ namespace ExpandNullforge.EditorTools
                 Field("priority", "Priority"),
                 Field("enabled", "Enabled"),
                 Field("environmentProfileId", "Environment profile ID"),
-                Field("environmentProfileTemplate", "Environment profile"),
                 Field("paletteAssetId", "Palette ID"),
-                Field("paletteTemplate", "Palette"),
-                Field("contentPresets", "Content presets"),
                 Field("hasFallbackLocalBounds", "Has fallback bounds"),
                 Field("fallbackLocalMin", "Fallback local min"),
                 Field("fallbackLocalMaxExclusive", "Fallback local max"),
+                Field("showTitleOnDiscovery", "Announce on discovery"),
+                Field("overrideTitleColor", "Override title colour"),
+                Field("titleColor", "Title colour"),
+                Field("titleIconObjectId", "Title icon object"),
+                Field("ambienceSoundKey", "Ambience loop"),
+                Field("ambienceVolume", "Ambience volume"),
+                Field("musicRosterName", "Music playlist"),
                 Field("notes", "Notes"));
 
             EditorGUILayout.BeginHorizontal();
@@ -2667,11 +2915,9 @@ namespace ExpandNullforge.EditorTools
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandWidth(true));
             EditorGUILayout.LabelField("Biome assets", EditorStyles.boldLabel);
-            DrawNamedValue("Floor IDs", biome.GetFloorObjectIdsWithPresets().Length.ToString());
-            DrawNamedValue("Wall IDs", biome.GetWallObjectIdsWithPresets().Length.ToString());
-            DrawNamedValue("Ore IDs", biome.GetOreObjectIdsWithPresets().Length.ToString());
-            DrawNamedValue("Water IDs", biome.GetWaterObjectIdsWithPresets().Length.ToString());
-            DrawNamedValue("Palette", biome.ResolvedPaletteAssetId);
+            DrawNamedValue("Floor IDs", biome.FloorObjectIds.Length.ToString());
+            DrawNamedValue("Wall IDs", biome.WallObjectIds.Length.ToString());
+            DrawNamedValue("Ore IDs", biome.OreObjectIds.Length.ToString());
             EditorGUILayout.EndVertical();
             EditorGUILayout.EndHorizontal();
 
@@ -2695,9 +2941,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("Terrain tables", CountBiomeGenerationTables(biome).ToString(), "Tables that decide terrain objects.");
             DrawDashboardMetric("Generation passes", CountBiomeGenerationPasses(biome).ToString(), "Passes that apply terrain rules.");
-            DrawDashboardMetric("Environment", string.IsNullOrEmpty(biome.ResolvedEnvironmentProfileId) ? "-" : biome.ResolvedEnvironmentProfileId, "Fog, lighting, music, and map color profile.");
             EditorGUILayout.EndHorizontal();
 
             GUILayout.Space(8f);
@@ -2707,40 +2951,7 @@ namespace ExpandNullforge.EditorTools
                 Field("floorObjectIds", "Floor object IDs"),
                 Field("wallObjectIds", "Wall object IDs"),
                 Field("oreObjectIds", "Ore object IDs"),
-                Field("waterObjectIds", "Water object IDs"),
-                Field("paletteAssetId", "Palette ID"),
-                Field("paletteTemplate", "Palette"),
-                Field("environmentProfileId", "Environment profile ID"),
-                Field("environmentProfileTemplate", "Environment profile"),
-                Field("generationProfile", "Generation profile"),
-                Field("generationPasses", "Generation passes"),
-                Field("generationTables", "Generation tables"));
-
-            DrawSerializedAsset(
-                biome.PaletteTemplate,
-                "Selected Biome Palette",
-                Field("paletteId", "Palette ID"),
-                Field("displayName", "Display name"),
-                Field("resourceKey", "Resource key"),
-                Field("priority", "Priority"),
-                Field("enabled", "Enabled"),
-                Field("entries", "Palette entries"),
-                Field("notes", "Notes"));
-
-            DrawSerializedAsset(
-                biome.EnvironmentProfileTemplate,
-                "Selected Biome Environment",
-                Field("profileId", "Profile ID"),
-                Field("displayName", "Display name"),
-                Field("zoneId", "Zone ID"),
-                Field("mapColor", "Map color"),
-                Field("ambientCueId", "Ambient cue ID"),
-                Field("musicCueId", "Music cue ID"),
-                Field("lightingProfileId", "Lighting profile ID"),
-                Field("fogProfileId", "Fog profile ID"),
-                Field("hasMapColor", "Has map color"),
-                Field("priority", "Priority"),
-                Field("enabled", "Enabled"));
+                Field("generationPasses", "Generation passes"));
 
             DrawEditorCard(
                 "Terrain controls",
@@ -2755,16 +2966,14 @@ namespace ExpandNullforge.EditorTools
 
             DrawContextualPreviewCanvas(viewModel.PreviewCanvas);
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("Biomes", CountBiomes().ToString(), "Biome definitions participating in generation.");
-            DrawDashboardMetric("Tables", CountGenerationTables().ToString(), "Terrain/object/liquid/ore tables.");
+            DrawDashboardMetric("Biomes", CountBiomes().ToString(), "Biomes taking part in generation.");
             DrawDashboardMetric("Passes", CountGenerationPasses().ToString(), "Ordered generation passes.");
             EditorGUILayout.EndHorizontal();
 
             DrawSerializedAsset(
                 selectedTemplate,
                 "Global Generation Assets",
-                Field("globalGenerationPasses", "Global generation passes"),
-                Field("globalGenerationTables", "Global generation tables"));
+                Field("globalGenerationPasses", "Global generation passes"));
 
             BiomeTemplateAsset biome = DrawBiomeSelectorHeader();
             if (biome != null)
@@ -2772,28 +2981,7 @@ namespace ExpandNullforge.EditorTools
                 DrawSerializedAsset(
                     biome,
                     "Selected Biome Generation",
-                    Field("generationProfile", "Generation profile"),
-                    Field("generationPasses", "Generation passes"),
-                    Field("generationTables", "Generation tables"));
-
-                DrawSerializedAsset(
-                    biome.GenerationProfile,
-                    "Selected Biome Generation Profile",
-                    Field("profileId", "Profile ID"),
-                    Field("displayName", "Display name"),
-                    Field("generationPasses", "Generation passes"),
-                    Field("terrainTables", "Terrain tables"),
-                    Field("floorTables", "Floor tables"),
-                    Field("wallTables", "Wall tables"),
-                    Field("liquidTables", "Liquid tables"),
-                    Field("oreTables", "Ore tables"),
-                    Field("objectTables", "Object tables"),
-                    Field("sceneTables", "Scene tables"),
-                    Field("spawnTables", "Spawn tables"),
-                    Field("resourceTables", "Resource tables"),
-                    Field("worldEventTables", "World event tables"),
-                    Field("customTables", "Custom tables"),
-                    Field("notes", "Notes"));
+                    Field("generationPasses", "Generation passes"));
             }
 
             DrawEditorCard(
@@ -2831,7 +3019,7 @@ namespace ExpandNullforge.EditorTools
             DrawDashboardMetric("This biome", biomeScenes.ToString(), "Scenes attached to the selected biome.");
             DrawDashboardMetric("Global", globalScenes.ToString(), "Scenes attached to the whole dimension.");
             DrawDashboardMetric("Total", CountScenes().ToString(), "All scenes currently declared.");
-            DrawDashboardMetric("Contents", CountSceneContents().ToString(), "Props, loot containers, spawn points, and triggers inside scenes.");
+            DrawDashboardMetric("Contents", CountSceneContents().ToString(), "Triggers inside scenes.");
             EditorGUILayout.EndHorizontal();
 
             DrawSerializedAsset(
@@ -2846,6 +3034,13 @@ namespace ExpandNullforge.EditorTools
                     "Selected Biome Scene Pool",
                     Field("scenePool", "Scenes"));
             }
+
+            DrawSerializedAsset(
+                selectedTemplate,
+                "Dungeons",
+                Field("globalDungeons", "Dungeons"));
+
+            DrawDungeonAssetEditors(selectedTemplate.GlobalDungeons);
 
             DrawSceneTemplateEditors(selectedTemplate.GlobalScenes, "Global Scene");
             if (biome != null)
@@ -3017,22 +3212,39 @@ namespace ExpandNullforge.EditorTools
                 RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateWorkbench(selectedTemplate));
             }
 
+            if (GUILayout.Button("Add Container", GUILayout.Width(120f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateContainer(selectedTemplate));
+            }
+
+            if (GUILayout.Button("Add Plant", GUILayout.Width(100f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreatePlant(selectedTemplate));
+            }
+
+            if (GUILayout.Button("Add Object", GUILayout.Width(100f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateWorldObject(selectedTemplate));
+            }
+
+            if (GUILayout.Button("Add Vehicle", GUILayout.Width(110f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateVehicle(selectedTemplate));
+            }
+
+            if (GUILayout.Button("Add Projectile", GUILayout.Width(126f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateProjectile(selectedTemplate));
+            }
+
+            if (GUILayout.Button("Add Explosion", GUILayout.Width(126f)))
+            {
+                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateExplosion(selectedTemplate));
+            }
+
             if (GUILayout.Button("Add Loot Table", GUILayout.Width(120f)))
             {
                 RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateLootTable(selectedTemplate));
-            }
-
-            if (GUILayout.Button("Add Global Node", GUILayout.Width(128f)))
-            {
-                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateResourceNode(selectedTemplate, null));
-            }
-
-            using (new EditorGUI.DisabledScope(biome == null))
-            {
-                if (GUILayout.Button("Add Biome Node", GUILayout.Width(126f)))
-                {
-                    RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateResourceNode(selectedTemplate, biome));
-                }
             }
 
             GUILayout.FlexibleSpace();
@@ -3041,58 +3253,69 @@ namespace ExpandNullforge.EditorTools
             DrawItemGenerationBar();
 
             GUILayout.Space(6f);
-            int biomeResources = biome == null ? 0 : CountBiomeResources(biome);
-            int globalResourceNodes = CountAssets(selectedTemplate.GlobalResourceNodes);
             int globalItems = CountAssets(selectedTemplate.GlobalItems);
             int globalRecipes = CountAssets(selectedTemplate.GlobalRecipes);
             int globalWorkbenches = CountAssets(selectedTemplate.GlobalWorkbenches);
             int globalLootTables = CountAssets(selectedTemplate.GlobalLootTables);
-            int globalResources = globalResourceNodes +
-                globalItems +
+            int globalContainers = CountAssets(selectedTemplate.GlobalContainers);
+            int globalPlants = CountAssets(selectedTemplate.GlobalPlants);
+            int globalWorldObjects = CountAssets(selectedTemplate.GlobalWorldObjects);
+            int globalVehicles = CountAssets(selectedTemplate.GlobalVehicles);
+            int globalProjectiles = CountAssets(selectedTemplate.GlobalProjectiles);
+            int globalResources = globalItems +
                 globalRecipes +
                 globalWorkbenches +
-                globalLootTables;
+                globalLootTables +
+                globalContainers +
+                globalPlants +
+                globalWorldObjects +
+                globalVehicles +
+                globalProjectiles;
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("This biome", biomeResources.ToString(), "Resource nodes attached to the selected biome.");
-            DrawDashboardMetric("Global", globalResources.ToString(), "Global nodes, items, recipes, workbenches, and loot tables.");
+            DrawDashboardMetric("Global", globalResources.ToString(), "Global items, recipes, workbenches, and loot tables.");
             DrawDashboardMetric("Total", CountResources().ToString(), "All obtainable content currently declared.");
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("Items", globalItems.ToString(), "Global item definitions.");
-            DrawDashboardMetric("Recipes", globalRecipes.ToString(), "Global recipe definitions.");
-            DrawDashboardMetric("Workbenches", globalWorkbenches.ToString(), "Global crafting station definitions.");
-            DrawDashboardMetric("Loot", globalLootTables.ToString(), "Global loot table definitions.");
+            DrawDashboardMetric("Items", globalItems.ToString(), "Items the mod adds.");
+            DrawDashboardMetric("Recipes", globalRecipes.ToString(), "How items are crafted.");
+            DrawDashboardMetric("Workbenches", globalWorkbenches.ToString(), "Crafting stations of your own.");
+            DrawDashboardMetric("Loot", globalLootTables.ToString(), "Tables that decide drops.");
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.BeginHorizontal();
+            DrawDashboardMetric("Containers", globalContainers.ToString(), "Chests, stashes and display stands.");
+            DrawDashboardMetric("Plants", globalPlants.ToString(), "Crops. Each one emits a seed, a plant and a ripe plant.");
+            DrawDashboardMetric("Objects", globalWorldObjects.ToString(), "Doors, lights, beds, trophies and decoration.");
+            DrawDashboardMetric("Vehicles", globalVehicles.ToString(), "Things a player can ride.");
+            DrawDashboardMetric("Projectiles", globalProjectiles.ToString(), "What weapons and creatures fire.");
             EditorGUILayout.EndHorizontal();
 
             DrawSerializedAsset(
                 selectedTemplate,
                 "Global Resource Assets",
-                Field("globalResourceNodes", "Resource nodes"),
                 Field("globalItems", "Items"),
                 Field("globalRecipes", "Recipes"),
                 Field("globalWorkbenches", "Workbenches"),
-                Field("globalLootTables", "Loot tables"));
+                Field("globalLootTables", "Loot tables"),
+                Field("globalContainers", "Containers"),
+                Field("globalPlants", "Plants"),
+                Field("globalWorldObjects", "Objects"),
+                Field("globalVehicles", "Vehicles"),
+                Field("globalProjectiles", "Projectiles"),
+                Field("globalExplosions", "Explosions"));
 
-            if (biome != null)
-            {
-                DrawSerializedAsset(
-                    biome,
-                    "Selected Biome Resource Nodes",
-                    Field("resourceNodes", "Resource nodes"));
-            }
-
-            DrawResourceAssetEditors(selectedTemplate.GlobalResourceNodes, "Global Resource Node");
             DrawItemAssetEditors(selectedTemplate.GlobalItems);
             DrawRecipeAssetEditors(selectedTemplate.GlobalRecipes);
             DrawWorkbenchAssetEditors(selectedTemplate.GlobalWorkbenches);
             DrawLootTableAssetEditors(selectedTemplate.GlobalLootTables);
-            if (biome != null)
-            {
-                DrawResourceAssetEditors(biome.ResourceNodes, "Biome Resource Node");
-            }
+            DrawContainerAssetEditors(selectedTemplate.GlobalContainers);
+            DrawPlantAssetEditors(selectedTemplate.GlobalPlants);
+            DrawWorldObjectAssetEditors(selectedTemplate.GlobalWorldObjects);
+            DrawVehicleAssetEditors(selectedTemplate.GlobalVehicles);
+            DrawProjectileAssetEditors(selectedTemplate.GlobalProjectiles);
+            DrawExplosionAssetEditors(selectedTemplate.GlobalExplosions);
 
             GUILayout.Space(8f);
-            if (biomeResources == 0 && globalResources == 0)
+            if (globalResources == 0)
             {
                 DrawEditorCard(
                     "No resources yet",
@@ -3133,45 +3356,26 @@ namespace ExpandNullforge.EditorTools
                 RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateSpawnable(selectedTemplate, DimensionSpawnableKind.Boss));
             }
 
-            if (GUILayout.Button("Add Global Rule", GUILayout.Width(124f)))
-            {
-                RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateSpawnRule(selectedTemplate, null));
-            }
-
-            using (new EditorGUI.DisabledScope(biome == null))
-            {
-                if (GUILayout.Button("Add Biome Rule", GUILayout.Width(120f)))
-                {
-                    RunAssetAction(DimensionFrameworkAuthoringAssetUtility.CreateSpawnRule(selectedTemplate, biome));
-                }
-            }
-
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
             GUILayout.Space(6f);
-            int biomeSpawns = biome == null ? 0 : CountBiomeSpawns(biome);
             int globalAnimals = CountAssets(selectedTemplate.GlobalAnimals);
             int globalCritters = CountAssets(selectedTemplate.GlobalCritters);
             int globalMobs = CountAssets(selectedTemplate.GlobalMobs);
             int globalBosses = CountAssets(selectedTemplate.GlobalBosses);
-            int globalSpawnRules = CountAssets(selectedTemplate.GlobalSpawnRules);
-            int globalSceneSpawnPoints = CountSceneSpawnPoints(selectedTemplate.GlobalScenes);
             int globalSpawns = globalAnimals +
                 globalCritters +
                 globalMobs +
-                globalBosses +
-                globalSpawnRules +
-                globalSceneSpawnPoints;
+                globalBosses;
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("This biome", biomeSpawns.ToString(), "Spawn rules and scene spawn points attached to the selected biome.");
-            DrawDashboardMetric("Global", globalSpawns.ToString(), "Global animals, critters, mobs, bosses, spawn rules, and scene spawn points.");
+            DrawDashboardMetric("Global", globalSpawns.ToString(), "Global animals, critters, mobs, and bosses.");
             DrawDashboardMetric("Total", CountSpawns().ToString(), "All spawn content currently declared.");
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.BeginHorizontal();
-            DrawDashboardMetric("Animals", globalAnimals.ToString(), "Global passive animal definitions.");
-            DrawDashboardMetric("Critters", globalCritters.ToString(), "Global critter definitions.");
-            DrawDashboardMetric("Mobs", globalMobs.ToString(), "Global hostile or custom mob definitions.");
-            DrawDashboardMetric("Bosses", globalBosses.ToString(), "Global boss definitions.");
+            DrawDashboardMetric("Animals", globalAnimals.ToString(), "Passive animals.");
+            DrawDashboardMetric("Critters", globalCritters.ToString(), "Ambient critters.");
+            DrawDashboardMetric("Mobs", globalMobs.ToString(), "Hostile or custom mobs.");
+            DrawDashboardMetric("Bosses", globalBosses.ToString(), "Boss fights.");
             EditorGUILayout.EndHorizontal();
 
             DrawSerializedAsset(
@@ -3180,32 +3384,30 @@ namespace ExpandNullforge.EditorTools
                 Field("globalAnimals", "Animals"),
                 Field("globalCritters", "Critters"),
                 Field("globalMobs", "Mobs"),
-                Field("globalBosses", "Bosses"),
-                Field("globalSpawnRules", "Spawn rules"));
+                Field("globalBosses", "Bosses"));
 
-            if (biome != null)
-            {
-                DrawSerializedAsset(
-                    biome,
-                    "Selected Biome Spawn Rules",
-                    Field("spawnRules", "Spawn rules"));
-            }
+            DrawSerializedAsset(
+                selectedTemplate,
+                "Changing the game itself",
+                Field("globalGameSetups", "World rules"));
+
+            DrawSerializedAsset(
+                selectedTemplate,
+                "Stat effects of your own",
+                Field("globalConditions", "Conditions"));
 
             DrawAnimalAssetEditors(selectedTemplate.GlobalAnimals);
             DrawCritterAssetEditors(selectedTemplate.GlobalCritters);
+            DrawGameSetupAssetEditors(selectedTemplate.GlobalGameSetups);
+            DrawConditionAssetEditors(selectedTemplate.GlobalConditions);
             DrawMobAssetEditors(selectedTemplate.GlobalMobs);
             DrawBossAssetEditors(selectedTemplate.GlobalBosses);
-            DrawSpawnRuleAssetEditors(selectedTemplate.GlobalSpawnRules, "Global Spawn Rule");
-            if (biome != null)
-            {
-                DrawSpawnRuleAssetEditors(biome.SpawnRules, "Biome Spawn Rule");
-            }
 
-            if (biomeSpawns == 0 && globalSpawns == 0)
+            if (globalSpawns == 0)
             {
                 DrawEditorCard(
-                    "No spawn rules yet",
-                    "Add passive animals, critters, mobs, bosses, NPCs, and spawn rules once the biome habitat is designed.");
+                    "No spawns yet",
+                    "Add passive animals, critters, mobs, and bosses once the biome habitat is designed.");
                 return;
             }
 
@@ -3236,7 +3438,6 @@ namespace ExpandNullforge.EditorTools
                     Field("sceneId", "Scene ID"),
                     Field("templateId", "Template ID"),
                     Field("kind", "Kind"),
-                    Field("providerId", "Provider ID"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
                     Field("placementMode", "Placement mode"),
                     Field("footprintSize", "Footprint size"),
@@ -3248,44 +3449,9 @@ namespace ExpandNullforge.EditorTools
                     Field("enabled", "Enabled"),
                     Field("required", "Required"),
                     Field("unique", "Unique"),
-                    Field("props", "Props"),
-                    Field("lootContainers", "Loot containers"),
-                    Field("spawnPoints", "Spawn points"),
-                    Field("triggers", "Triggers"));
-            }
-        }
-
-        private void DrawResourceAssetEditors(ResourceNodeTemplateAsset[] nodes, string titlePrefix)
-        {
-            if (nodes == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                ResourceNodeTemplateAsset node = nodes[i];
-                if (node == null)
-                {
-                    continue;
-                }
-
-                DrawSerializedAsset(
-                    node,
-                    BuildAssetEditorTitle(titlePrefix, node.name, node.NodeId, i),
-                    Field("displayName", "Display name"),
-                    Field("nodeId", "Node ID"),
-                    Field("zoneId", "Zone ID"),
-                    Field("hasLocalBounds", "Has local bounds"),
-                    Field("localMin", "Local min"),
-                    Field("localMaxExclusive", "Local max"),
-                    Field("resourceId", "Resource ID"),
-                    Field("kind", "Kind"),
-                    Field("providerId", "Provider ID"),
-                    Field("generationPassId", "Generation pass ID"),
-                    Field("weight", "Weight"),
-                    Field("priority", "Priority"),
-                    Field("enabled", "Enabled"));
+                    Field("triggers", "Triggers"),
+                    Field("tiles", "Terrain tiles"),
+                    Field("sceneObjects", "Placed objects"));
             }
         }
 
@@ -3461,14 +3627,63 @@ namespace ExpandNullforge.EditorTools
             // Same guarantee for tileset blocks: every enabled tileset's toggled-on block kinds get
             // a real item asset (id locked to the tileset's derived block id) before generation.
             DimensionFrameworkAuthoringAssetUtility.EnsureTilesetBlockItems(selectedTemplate);
+
+            // And for food: every dish becomes three items and every golden ingredient a fourth,
+            // re-synced from the dish and the ingredient each time so a renamed dish cannot ship
+            // under its old name. Must run before the item list is read below.
+            DimensionFrameworkAuthoringAssetUtility.EnsureFoodItems(selectedTemplate);
             int portalItemsCreated =
                 portalItemResult != null && portalItemResult.CreatedObject != null ? 1 : 0;
 
             // Re-read after the ensure step so any freshly created portal items are included.
             DimensionItemAsset[] itemsToGenerate = selectedTemplate.GlobalItems;
 
+            // The drop-location inversion, done ONCE for the whole generate. Every generator below
+            // is handed the same plan, so a chest and a slime can never disagree about what drops
+            // from them, and the walk over every authored item happens once rather than per source.
+            DimensionDropPlan drops = DimensionDropPlan.Build(
+                itemsToGenerate,
+                selectedTemplate.GlobalWorldObjects);
+
+            // The mod's own loot tables, answerable by name for the whole generate — the same
+            // law as conditions below. Anything stamping a LootTableID (a creature's drops, a
+            // container's becomes-loot) resolves vanilla names first and this mod's tables
+            // second, to the exact minted id the runtime registry will carry.
+            DimensionEditorLootTables.Seed(selectedTemplate);
+
+            // This mod's own conditions have to be answerable by name for the whole generate, and
+            // their numbers depend on the whole set — so they are claimed once, here, and put back
+            // afterwards. Without it a creature asking for a custom buff silently gets nothing.
+            using (DimensionConditionScope conditions =
+                new DimensionConditionScope(selectedTemplate.GlobalConditions))
+            {
+            if (conditions.Count > 0)
+            {
+                Debug.Log(
+                    "[Dimensions API] " + conditions.Count +
+                    " condition(s) of this mod's own are available by name for this generate.");
+            }
+
+            // Every name the OTHER generators owe the player, gathered before anything is written.
+            // It is built here, inside the condition scope, because a custom stat effect's line is
+            // keyed by the number the scope hands it; and it is handed to the item generator
+            // because the mod has one localization table and one pass may write it.
+            DimensionLocalizationPlan localization = DimensionLocalizationPlan.Build(
+                selectedTemplate,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+
             DimensionItemGenerationReport report = DimensionItemGenerator.Generate(
-                itemsToGenerate, outputFolder, selectedTemplate.GlobalRecipes, selectedTemplate.Tilesets);
+                itemsToGenerate,
+                outputFolder,
+                EveryRecipeInTheMod(),
+                selectedTemplate.Tilesets,
+                selectedTemplate.Biomes,
+                selectedTemplate.GlobalBosses,
+                selectedTemplate.NamedAreas,
+                localization,
+                OwnedObjectIds(),
+                selectedTemplate.GlobalExplosions,
+                SwitchedOffObjectIds());
 
             for (int i = 0; i < report.Errors.Count; i++)
             {
@@ -3480,6 +3695,168 @@ namespace ExpandNullforge.EditorTools
                 Debug.LogWarning("[Dimensions API] " + report.Warnings[i]);
             }
 
+            // An item that never said what it is has one chosen for it, and that choice decides
+            // which slot it lands in and how much use it takes before it breaks. Plain log lines
+            // rather than warnings: on a project that predates the question every item is on this
+            // list, and a hundred warnings would bury the ones that need doing something about.
+            for (int i = 0; i < report.Derived.Count; i++)
+            {
+                Debug.Log("[Dimensions API] " + report.Derived[i]);
+            }
+
+            // Ground fog rides the same action because it is generated FROM the blocks, and a mod
+            // whose blocks and whose fog were generated at different moments would ship a fog block
+            // describing a tileset id that no longer exists.
+            DimensionGroundFogReport fogReport =
+                DimensionGroundFogGenerator.Generate(selectedTemplate.Tilesets, modRoot);
+            for (int i = 0; i < fogReport.Warnings.Count; i++)
+            {
+                Debug.LogWarning("[Dimensions API] " + fogReport.Warnings[i]);
+            }
+
+            string fogSummary = DescribeGroundFog(fogReport);
+
+            DimensionContainerGenerationReport containerReport = DimensionContainerGenerator.Generate(
+                selectedTemplate.GlobalContainers,
+                outputFolder + "/" + DimensionContainerGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()),
+                drops);
+
+            for (int i = 0; i < containerReport.Errors.Count; i++)
+            {
+                Debug.LogError("[Dimensions API] " + containerReport.Errors[i]);
+            }
+
+            for (int i = 0; i < containerReport.Warnings.Count; i++)
+            {
+                Debug.LogWarning("[Dimensions API] " + containerReport.Warnings[i]);
+            }
+
+            string containerSummary =
+                containerReport.Created.Count + containerReport.Updated.Count +
+                containerReport.Skipped.Count > 0
+                    ? "\n\n" + containerReport.Summarize()
+                    : string.Empty;
+
+            DimensionCreatureGenerationReport creatureReport = GenerateCreatures(outputFolder, drops);
+            for (int i = 0; i < creatureReport.Errors.Count; i++)
+            {
+                Debug.LogError("[Dimensions API] " + creatureReport.Errors[i]);
+            }
+
+            for (int i = 0; i < creatureReport.Warnings.Count; i++)
+            {
+                Debug.LogWarning("[Dimensions API] " + creatureReport.Warnings[i]);
+            }
+
+            string creatureSummary =
+                creatureReport.Created.Count + creatureReport.Updated.Count + creatureReport.Skipped.Count > 0
+                    ? "\n\n" + creatureReport.Summarize()
+                    : string.Empty;
+
+            // Everything else a mod can define. These went unreached for a while — the assets and
+            // the generators both existed, and nothing called them — which is exactly the shape of
+            // failure that leaves an author staring at a crop they authored and never see in game.
+            DimensionWorkbenchGenerationReport workbenchReport = DimensionWorkbenchGenerator.Generate(
+                selectedTemplate.GlobalWorkbenches,
+                outputFolder + "/" + DimensionWorkbenchGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+
+            DimensionPlantGenerationReport plantReport = DimensionPlantGenerator.Generate(
+                selectedTemplate.GlobalPlants,
+                outputFolder + "/" + DimensionPlantGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+
+            DimensionWorldObjectGenerationReport worldObjectReport =
+                DimensionWorldObjectGenerator.Generate(
+                    selectedTemplate.GlobalWorldObjects,
+                    outputFolder + "/" + DimensionWorldObjectGenerator.FolderName,
+                    DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()),
+                    drops,
+                    selectedTemplate.Tilesets);
+
+            DimensionExplosionGenerationReport explosionReport = DimensionExplosionGenerator.Generate(
+                selectedTemplate.GlobalExplosions,
+                outputFolder + "/" + DimensionExplosionGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+
+            DimensionCritterGenerationReport critterReport = DimensionCritterGenerator.Generate(
+                selectedTemplate.GlobalCritters,
+                outputFolder + "/" + DimensionCritterGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()),
+                selectedTemplate.Tilesets);
+
+            // World rules are the one thing here that does not become a prefab. Fishing and talents
+            // are written as settings files into the mod's own Conf folder, which the game reads
+            // while it starts; upgrade prices and the player's numbers ride the generated bootstrap
+            // instead. They go to the MOD ROOT rather than the items folder, because Conf is a
+            // folder the game itself looks for and it only looks beside the mod, never inside it.
+            DimensionWorldRulesGenerationReport gameSetupReport =
+                DimensionWorldRulesGenerator.Generate(selectedTemplate.GlobalGameSetups, modRoot);
+
+            DimensionProjectileGenerationReport projectileReport = DimensionProjectileGenerator.Generate(
+                selectedTemplate.GlobalProjectiles,
+                outputFolder + "/" + DimensionProjectileGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()),
+                selectedTemplate.Tilesets);
+
+            DimensionCreatureGenerationReport vehicleReport =
+                DimensionVehicleGenerator.Generate(
+                    selectedTemplate.GlobalVehicles,
+                    outputFolder + "/" + DimensionVehicleGenerator.FolderName,
+                    DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+
+            ReportProblems(workbenchReport.Errors, workbenchReport.Warnings);
+            ReportProblems(plantReport.Errors, plantReport.Warnings);
+            ReportProblems(worldObjectReport.Errors, worldObjectReport.Warnings);
+            ReportProblems(vehicleReport.Errors, vehicleReport.Warnings);
+            ReportProblems(projectileReport.Errors, projectileReport.Warnings);
+            ReportProblems(critterReport.Errors, critterReport.Warnings);
+            ReportProblems(explosionReport.Errors, explosionReport.Warnings);
+            ReportProblems(gameSetupReport.Errors, gameSetupReport.Warnings);
+
+            string otherSummary =
+                Describe("Crafting stations", workbenchReport.Created.Count, workbenchReport.Updated.Count, workbenchReport.Skipped.Count) +
+                Describe("Plants", plantReport.Created.Count, plantReport.Updated.Count, plantReport.Skipped.Count) +
+                Describe("Objects", worldObjectReport.Created.Count, worldObjectReport.Updated.Count, worldObjectReport.Skipped.Count) +
+                Describe("Vehicles", vehicleReport.Created.Count, vehicleReport.Updated.Count, vehicleReport.Skipped.Count) +
+                Describe("Projectiles", projectileReport.Created.Count, projectileReport.Updated.Count, projectileReport.Skipped.Count) +
+                Describe("Critters", critterReport.Created.Count, critterReport.Updated.Count, critterReport.Skipped.Count) +
+                Describe("Explosions", explosionReport.Created.Count, explosionReport.Updated.Count, explosionReport.Skipped.Count) +
+                Describe("World rules", gameSetupReport.Created.Count, gameSetupReport.Updated.Count, gameSetupReport.Skipped.Count);
+
+            // A drop naming a source that nothing generates is completely silent: no error, no
+            // creature carrying it, and an item that simply never turns up. This is the only moment
+            // the two halves are both known, so it is the only place the typo can be caught.
+            WarnAboutDropsFromNowhere(drops);
+            WarnAboutIdsThatShadowTheGame();
+
+            // And the same shape of silence for names: an object built by a generator nobody
+            // remembered to give a name to reaches the player showing its own key. Every generator
+            // above has closed its asset batch by now, which is what makes the prefabs readable.
+            WarnAboutObjectsWithNoName(
+                report.LocalizationKeys,
+                report,
+                containerReport,
+                creatureReport,
+                workbenchReport,
+                plantReport,
+                worldObjectReport,
+                explosionReport,
+                critterReport,
+                projectileReport,
+                vehicleReport);
+
+            // A mod that ships a pooled-prefab bank pools ONLY what that bank lists, and a body
+            // with no pool is a KeyNotFoundException thrown from inside the game's own draw loop
+            // the first time that object comes on screen — not a missing picture. Every body these
+            // generators just wrote is exposed to it, so the bank is brought back into step here,
+            // once, after every generator has closed its asset batch and the prefabs are readable.
+            DimensionPooledPrefabBankUtility.Result pooledPrefabs =
+                DimensionPooledPrefabBankUtility.EnsureGeneratedPrefabsArePooled(
+                    modRoot,
+                    delegate(string message) { Debug.LogWarning("[Dimensions API] " + message); });
+
             string portalItemSummary = portalItemsCreated > 0
                 ? "\n\n" + portalItemResult.Message +
                   " Open it under Resources ▸ Items to set its Icon sprite, then generate again."
@@ -3487,11 +3864,499 @@ namespace ExpandNullforge.EditorTools
 
             EditorUtility.DisplayDialog(
                 "Generate Items",
-                report.Summarize() + portalItemSummary + "\n\nOutput: " + outputFolder +
+                report.Summarize() + creatureSummary + containerSummary + otherSummary +
+                fogSummary + pooledPrefabs.Summarize() + portalItemSummary +
+                "\n\nOutput: " + outputFolder +
                 (report.HasProblems
                     ? "\n\nDetails were written to the Console."
                     : string.Empty),
                 "OK");
+            }
+
+            DimensionEditorLootTables.Clear();
+        }
+
+        /// <summary>
+        /// Turns the dimension's authored mobs, bosses and animals into real prefabs.
+        /// </summary>
+        /// <remarks>
+        /// All three shapes go through one generator because a prefab does not care which authoring
+        /// asset it came from — what differs is what an author is offered, not what the game needs.
+        /// Bosses are marked as such because Core Keeper treats them differently in several places.
+        /// Every one of them is an enemy in the game's sense of the word — the tag is what carries
+        /// <c>LastAttackerCD</c> — and what separates a cow from a caveling is the Temperament each
+        /// asset carries, which the generator turns into attack tags and a chase distance.
+        /// </remarks>
+        /// <summary>
+        /// Every id this template turns into an object, so a reference to one of them is qualified.
+        /// </summary>
+        /// <remarks>
+        /// Handed to every generator that is not the item generator. Without it those runs owned
+        /// nothing, and <c>QualifyReference</c> — which is "qualify it only if it is ours" — was the
+        /// identity function: a workbench recipe outputting the mod's own item shipped the bare id
+        /// while the item had registered under the qualified one, and the station crafted nothing.
+        /// </remarks>
+        private List<string> OwnedObjectIds()
+        {
+            return DimensionGeneratedObjectIds.Collect(selectedTemplate);
+        }
+
+        /// <summary>
+        /// The ids of this mod's own assets that are unticked, so a reference to one can be told
+        /// apart from a misspelling.
+        /// </summary>
+        /// <remarks>
+        /// The bootstrap emitter's binder has always been given this. The generators' were not, so
+        /// the same unticked projectile got "one of yours but is switched off" from one half of a
+        /// generate and "neither one of this mod's nor one the game has" from the other.
+        /// </remarks>
+        private List<string> SwitchedOffObjectIds()
+        {
+            return DimensionGeneratedObjectIds.SwitchedOff(selectedTemplate);
+        }
+
+        /// <summary>
+        /// Every recipe the mod has, whether it sits in the mod's recipe list or only on a
+        /// Workbench.
+        /// </summary>
+        /// <remarks>
+        /// WHAT A CRAFT COSTS IS STORED ON THE ITEM IT MAKES, so the item generator is the only
+        /// pass that can write it — and it was only being shown the mod's own recipe list. A
+        /// Workbench also carries a list of its own, and the bootstrap already registers from that
+        /// one. So a recipe added straight to a Workbench appeared at the bench and cost nothing at
+        /// all, with no word said. Both lists are handed over now; the same asset in both is
+        /// recognised as one recipe.
+        /// </remarks>
+        private List<DimensionRecipeAsset> EveryRecipeInTheMod()
+        {
+            List<DimensionRecipeAsset> all = new List<DimensionRecipeAsset>();
+            if (selectedTemplate == null)
+            {
+                return all;
+            }
+
+            DimensionRecipeAsset[] global = selectedTemplate.GlobalRecipes;
+            for (int i = 0; global != null && i < global.Length; i++)
+            {
+                if (global[i] != null && !all.Contains(global[i]))
+                {
+                    all.Add(global[i]);
+                }
+            }
+
+            DimensionWorkbenchAsset[] benches = selectedTemplate.GlobalWorkbenches;
+            for (int b = 0; benches != null && b < benches.Length; b++)
+            {
+                if (benches[b] == null || !benches[b].Enabled)
+                {
+                    continue;
+                }
+
+                DimensionRecipeAsset[] benchRecipes = benches[b].Recipes;
+                for (int i = 0; benchRecipes != null && i < benchRecipes.Length; i++)
+                {
+                    if (benchRecipes[i] != null && !all.Contains(benchRecipes[i]))
+                    {
+                        all.Add(benchRecipes[i]);
+                    }
+                }
+            }
+
+            return all;
+        }
+
+        private DimensionCreatureGenerationReport GenerateCreatures(
+            string outputFolder,
+            DimensionDropPlan drops)
+        {
+            List<DimensionCreatureGenerator.Request> requests =
+                new List<DimensionCreatureGenerator.Request>();
+
+            DimensionMobAsset[] mobs = selectedTemplate.GlobalMobs;
+            if (mobs != null)
+            {
+                for (int i = 0; i < mobs.Length; i++)
+                {
+                    DimensionMobAsset mob = mobs[i];
+                    if (mob == null)
+                    {
+                        continue;
+                    }
+
+                    requests.Add(new DimensionCreatureGenerator.Request
+                    {
+                        CreatureId = mob.MobId,
+                        DisplayName = mob.DisplayName,
+                        Stats = mob.CreatureStats,
+                        Combat = mob.Combat,
+                        SimpleTraits = mob.SimpleTraits,
+                        ExtraLoot = mob.ExtraLoot,
+                        Pet = mob.Pet,
+                        DropsFromItems = drops.For(DimensionDropSourceKind.Creature, mob.MobId),
+                        LootTable = mob.LootTable,
+                        BehaviourName = mob.BehaviorScriptId,
+                        IsEnemy = true,
+                        Aggression = mob.Aggression,
+                        IsBoss = false,
+                        Hatching = mob.Hatching,
+                        Visual = mob.Visual,
+                        Audio = mob.Audio,
+                        Enabled = mob.Enabled
+                    });
+
+                    // An elite is a second creature, not a mode of the first. It borrows the same
+                    // behaviour and art and differs only in the numbers, which is exactly what the
+                    // game can already express without any new machinery.
+                    DimensionEliteVariantTemplate elite = mob.EliteVariant;
+                    if (elite.Enabled)
+                    {
+                        // The two halves of the elite do not both work on both kinds of stat
+                        // block, and which half is doing nothing is invisible in the prefab. On a
+                        // level-scaled creature the game recomputes health, damage reduction and
+                        // attack damage from the level every time, so only the level bump lands.
+                        if (!mob.CreatureStats.UsesAuthoredNumbers &&
+                            elite.ExtraLevels == 0)
+                        {
+                            Debug.LogWarning(
+                                "[Dimensions API] '" + mob.DisplayName + "' takes its numbers from " +
+                                "the area level curve, and its elite is set to no extra levels. The " +
+                                "health, damage and armour multipliers are recomputed from the " +
+                                "level on a creature like this, so the elite will be identical to " +
+                                "the ordinary one. Give it at least one extra level, or type the " +
+                                "mob's numbers under Stats.");
+                        }
+
+                        requests.Add(new DimensionCreatureGenerator.Request
+                        {
+                            CreatureId = DimensionEliteVariantTemplate.IdFor(mob.MobId),
+                            DisplayName = elite.DisplayNameFor(mob.DisplayName),
+                            Stats = mob.CreatureStats.ScaledForElite(elite, 1, true, false),
+
+                            // The level bump is what makes a level-scaled elite actually harder;
+                            // on a creature with typed numbers the multipliers have already done
+                            // the work and the rarity is only the colour of its name.
+                            Rarity = (Rarity)elite.ExtraLevels,
+                            Combat = mob.Combat,
+                            SimpleTraits = mob.SimpleTraits,
+                            ExtraLoot = mob.ExtraLoot,
+                            Pet = mob.Pet,
+                            DropsFromItems = drops.For(
+                                DimensionDropSourceKind.Creature,
+                                DimensionEliteVariantTemplate.IdFor(mob.MobId)),
+                            LootTable = elite.LootTable != null ? elite.LootTable : mob.LootTable,
+                            BehaviourName = mob.BehaviorScriptId,
+                            IsEnemy = true,
+                            Aggression = mob.Aggression,
+                            IsBoss = false,
+
+                            // Same art and same voice as the mob it is a harder copy of: an elite
+                            // is the same creature with different numbers, and giving it its own
+                            // clip list would mean drawing every elite twice.
+                            Visual = mob.Visual,
+                            Audio = mob.Audio,
+                            Enabled = mob.Enabled
+                        });
+                    }
+                }
+            }
+
+            DimensionBossAsset[] bosses = selectedTemplate.GlobalBosses;
+            if (bosses != null)
+            {
+                for (int i = 0; i < bosses.Length; i++)
+                {
+                    DimensionBossAsset boss = bosses[i];
+                    if (boss == null)
+                    {
+                        continue;
+                    }
+
+                    requests.Add(new DimensionCreatureGenerator.Request
+                    {
+                        CreatureId = boss.BossId,
+                        DisplayName = boss.DisplayName,
+                        Stats = boss.CreatureStats,
+                        Combat = boss.Combat,
+                        SimpleTraits = boss.SimpleTraits,
+                        BorrowedKit = boss.BorrowedKit,
+                        MoreBorrowedKits = boss.MoreBorrowedKits,
+                        TheRestOfTheKits = boss.TheRestOfTheKits,
+                        BossChest = boss.BossChest,
+                        DropsFromItems = drops.For(DimensionDropSourceKind.Creature, boss.BossId),
+                        LootTable = boss.LootTable,
+                        IsEnemy = true,
+
+                        // Bosses were pinned to Hostile here, on the reasoning that a fight
+                        // nobody can start is not a boss fight. A boss that ignores you until you
+                        // touch it is a real shape and the framework was refusing to build it, so
+                        // the boss now answers the same question a mob does. Its own default is
+                        // Hostile, which is what almost every boss is.
+                        Aggression = boss.Aggression,
+                        IsBoss = true,
+                        MapPin = boss.MapPin,
+                        FightMusic = boss.FightMusic,
+                        BodySprite = boss.Visual.BodySprite,
+                        Visual = boss.Visual,
+                        Audio = boss.Audio,
+                        SummoningItemId = boss.SummoningItemId,
+                        Enabled = boss.Enabled
+                    });
+                }
+            }
+
+            DimensionAnimalAsset[] animals = selectedTemplate.GlobalAnimals;
+            if (animals != null)
+            {
+                for (int i = 0; i < animals.Length; i++)
+                {
+                    DimensionAnimalAsset animal = animals[i];
+                    if (animal == null)
+                    {
+                        continue;
+                    }
+
+                    requests.Add(new DimensionCreatureGenerator.Request
+                    {
+                        CreatureId = animal.AnimalId,
+                        DisplayName = animal.DisplayName,
+                        Stats = animal.CreatureStats,
+                        Combat = animal.Combat,
+                        SimpleTraits = animal.SimpleTraits,
+                        DropsFromItems = drops.For(DimensionDropSourceKind.Creature, animal.AnimalId),
+                        LootTable = animal.LootTable,
+
+                        Visual = animal.Visual,
+                        Audio = animal.Audio,
+
+                        // The game's own Cow and Roly Poly BOTH carry EnemyAuthoring, and they are
+                        // as harmless as animals get — what makes them harmless is their empty
+                        // attack tags, which is what Temperament now writes. Withholding the tag
+                        // instead cost the animal its LastAttackerCD (so a Defensive animal could
+                        // never hit back) and made it invisible to explosions and pushback.
+                        IsEnemy = true,
+                        Aggression = animal.Aggression,
+                        IsBoss = false,
+                        Enabled = animal.Enabled
+                    });
+                }
+            }
+
+            if (requests.Count == 0)
+            {
+                return new DimensionCreatureGenerationReport();
+            }
+
+            return DimensionCreatureGenerator.Generate(
+                requests,
+                outputFolder + "/" + DimensionCreatureGenerator.FolderName,
+                DimensionNamingContext.ForOutputFolder(outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+        }
+
+        /// <summary>
+        /// Reports anything this run built that a player would meet without a name.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each generator is named explicitly rather than collected through a shared interface,
+        /// because there is no shared interface and inventing one to make this line shorter would
+        /// touch ten files to save four. The cost of forgetting a generator here is one missed
+        /// warning; the cost of the check not existing at all was a whole class of content shipping
+        /// with its key printed in the tooltip.
+        /// </para>
+        /// <para>
+        /// Reports carry prefab PATHS, so the objects are read back off disk. That is deliberate:
+        /// asking the prefabs what they are called is the only question that keeps working when
+        /// somebody adds a generator, or a second object inside an existing one.
+        /// </para>
+        /// </remarks>
+        private static void WarnAboutObjectsWithNoName(
+            ICollection<string> writtenKeys,
+            DimensionItemGenerationReport items,
+            DimensionContainerGenerationReport containers,
+            DimensionCreatureGenerationReport creatures,
+            DimensionWorkbenchGenerationReport workbenches,
+            DimensionPlantGenerationReport plants,
+            DimensionWorldObjectGenerationReport worldObjects,
+            DimensionExplosionGenerationReport explosions,
+            DimensionCritterGenerationReport critters,
+            DimensionProjectileGenerationReport projectiles,
+            DimensionCreatureGenerationReport vehicles)
+        {
+            List<string> paths = new List<string>();
+            AddPaths(paths, items == null ? null : items.Created, items == null ? null : items.Updated);
+            AddPaths(paths, containers == null ? null : containers.Created, containers == null ? null : containers.Updated);
+            AddPaths(paths, creatures == null ? null : creatures.Created, creatures == null ? null : creatures.Updated);
+            AddPaths(paths, workbenches == null ? null : workbenches.Created, workbenches == null ? null : workbenches.Updated);
+            AddPaths(paths, plants == null ? null : plants.Created, plants == null ? null : plants.Updated);
+            AddPaths(paths, worldObjects == null ? null : worldObjects.Created, worldObjects == null ? null : worldObjects.Updated);
+            AddPaths(paths, explosions == null ? null : explosions.Created, explosions == null ? null : explosions.Updated);
+            AddPaths(paths, critters == null ? null : critters.Created, critters == null ? null : critters.Updated);
+            AddPaths(paths, projectiles == null ? null : projectiles.Created, projectiles == null ? null : projectiles.Updated);
+            AddPaths(paths, vehicles == null ? null : vehicles.Created, vehicles == null ? null : vehicles.Updated);
+
+            List<string> warnings = new List<string>();
+            DimensionLocalizationCoverage.Check(
+                DimensionLocalizationCoverage.ReadGeneratedObjects(paths),
+                writtenKeys,
+                warnings);
+
+            for (int i = 0; i < warnings.Count; i++)
+            {
+                Debug.LogWarning("[Dimensions API] " + warnings[i]);
+            }
+        }
+
+        private static void AddPaths(List<string> paths, List<string> created, List<string> updated)
+        {
+            if (created != null)
+            {
+                paths.AddRange(created);
+            }
+
+            if (updated != null)
+            {
+                paths.AddRange(updated);
+            }
+        }
+
+        /// <summary>Sends a generator's problems to the Console the same way for every generator.</summary>
+        private static void ReportProblems(List<string> errors, List<string> warnings)
+        {
+            for (int i = 0; errors != null && i < errors.Count; i++)
+            {
+                Debug.LogError("[Dimensions API] " + errors[i]);
+            }
+
+            for (int i = 0; warnings != null && i < warnings.Count; i++)
+            {
+                Debug.LogWarning("[Dimensions API] " + warnings[i]);
+            }
+        }
+
+        /// <summary>
+        /// One summary line, or nothing when a creator has never used that kind of thing.
+        /// </summary>
+        /// <remarks>
+        /// Silent when there is nothing to say, for the same reason ground fog is: somebody who has
+        /// never authored a plant should not read "Plants: 0 created" on every generate.
+        /// </remarks>
+        private static string Describe(string label, int created, int updated, int skipped)
+        {
+            if (created + updated + skipped == 0)
+            {
+                return string.Empty;
+            }
+
+            return "\n\n" + label + ": " + created + " created, " + updated + " updated, " +
+                skipped + " skipped.";
+        }
+
+        /// <summary>
+        /// Warns about drops that name a source nothing in the mod defines.
+        /// </summary>
+        /// <remarks>
+        /// This failure is completely silent otherwise. An item that says it drops from "gaint_slime"
+        /// generates without complaint, no creature carries it, and the author plays their own mod
+        /// hunting for something that can never appear. Generation is the only moment both halves —
+        /// what drops, and what exists to drop it — are known at once, so it is the only place the
+        /// typo can be caught.
+        /// </remarks>
+        /// <summary>
+        /// Warns when one of the mod's own ids is also the name of one of the game's objects.
+        /// </summary>
+        /// <remarks>
+        /// THE GAME'S NAME WINS EVERYWHERE, and that has to be said out loud. Calling one of your
+        /// objects Torch is allowed and the object generates perfectly well — but every reference
+        /// anywhere in the mod that types "Torch" means the game's torch, because the binder asks
+        /// the ObjectID enum first and bakes the number it finds. Without this line the only way to
+        /// discover that is to notice a recipe quietly making the wrong thing.
+        /// </remarks>
+        private void WarnAboutIdsThatShadowTheGame()
+        {
+            List<string> owned = OwnedObjectIds();
+            for (int i = 0; i < owned.Count; i++)
+            {
+                string local = owned[i];
+                if (DimensionObjectBinder.Vanilla(local) == ObjectID.None)
+                {
+                    continue;
+                }
+
+                Debug.LogWarning(
+                    "[Dimensions API] One of your objects is called '" + local + "', which is also " +
+                    "the name of one of the game's. Your object is still made, but anywhere in this " +
+                    "mod that types '" + local + "' — a recipe ingredient, a drop, a shot, a trader's " +
+                    "stock — means the GAME'S '" + local + "', not yours. Rename yours if you meant " +
+                    "to point at it.");
+            }
+        }
+
+        private void WarnAboutDropsFromNowhere(DimensionDropPlan drops)
+        {
+            if (drops == null || drops.IsEmpty)
+            {
+                return;
+            }
+
+            HashSet<string> defined = new HashSet<string>();
+            AddIds(defined, selectedTemplate.GlobalMobs, delegate(DimensionMobAsset a) { return a.MobId; });
+            AddIds(defined, selectedTemplate.GlobalMobs, delegate(DimensionMobAsset a)
+            {
+                return a.EliteVariant.Enabled ? DimensionEliteVariantTemplate.IdFor(a.MobId) : null;
+            });
+            AddIds(defined, selectedTemplate.GlobalBosses, delegate(DimensionBossAsset a) { return a.BossId; });
+            AddIds(defined, selectedTemplate.GlobalAnimals, delegate(DimensionAnimalAsset a) { return a.AnimalId; });
+            AddIds(defined, selectedTemplate.GlobalCritters, delegate(DimensionCritterAsset a) { return a.CritterId; });
+            AddIds(defined, selectedTemplate.GlobalContainers, delegate(DimensionContainerAsset a) { return a.ContainerId; });
+            AddIds(defined, selectedTemplate.GlobalWorldObjects, delegate(DimensionWorldObjectAsset a) { return a.ObjectIdentifier; });
+            AddIds(defined, selectedTemplate.GlobalScenes, delegate(SceneTemplateAsset a) { return a.SceneId; });
+
+            List<string> unknown = drops.SourcesNothingDefines(defined);
+            for (int i = 0; i < unknown.Count; i++)
+            {
+                Debug.LogWarning(
+                    "[Dimensions API] Something is set to drop from '" + unknown[i] +
+                    "', but nothing in this dimension is called that. Nothing will drop, and " +
+                    "nothing else will say so — check the spelling against the creature, chest, " +
+                    "object or scene you meant.");
+            }
+        }
+
+        private static void AddIds<T>(HashSet<string> into, T[] assets, System.Func<T, string> idOf)
+            where T : UnityEngine.Object
+        {
+            for (int i = 0; assets != null && i < assets.Length; i++)
+            {
+                if (assets[i] == null)
+                {
+                    continue;
+                }
+
+                string id = idOf(assets[i]);
+                if (!string.IsNullOrEmpty(id))
+                {
+                    into.Add(id);
+                }
+            }
+        }
+
+        /// <summary>
+        /// One line about ground fog, or nothing when no block uses it.
+        /// </summary>
+        /// <remarks>
+        /// Silent when there is nothing to say. A creator who has never touched fog should not have to
+        /// read "0 ground fog blocks" every time they generate items.
+        /// </remarks>
+        private static string DescribeGroundFog(DimensionGroundFogReport fogReport)
+        {
+            int touched = fogReport.Created.Count + fogReport.Updated.Count + fogReport.Removed.Count;
+            if (touched == 0)
+            {
+                return string.Empty;
+            }
+
+            return "\n\nGround fog: " + fogReport.Created.Count + " created, " +
+                fogReport.Updated.Count + " updated, " + fogReport.Removed.Count + " removed.";
         }
 
         /// <summary>
@@ -3509,7 +4374,6 @@ namespace ExpandNullforge.EditorTools
                 Field("displayName", "Display name"),
                 Field("itemId", "Item ID"),
                 Field("archetype", "Archetype"),
-                Field("kind", "Kind"),
                 Field("description", "Description"),
                 Field("iconSprite", "Icon sprite (16x16)"),
                 Field("smallIconSprite", "Small icon (in-hand, 10x10)"),
@@ -3519,7 +4383,7 @@ namespace ExpandNullforge.EditorTools
 
             if (RequiresComponent(required, DimensionItemAuthoringComponents.InventoryItem))
             {
-                fields.Add(Field("maxStack", "Max stack"));
+                fields.Add(Field("stackable", "Stacks in one slot"));
             }
 
             if (RequiresComponent(required, DimensionItemAuthoringComponents.Loot))
@@ -3543,11 +4407,82 @@ namespace ExpandNullforge.EditorTools
                 fields.Add(Field("damageAmount", "Damage"));
             }
 
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.WeaponDamage) ||
+                RequiresComponent(required, DimensionItemAuthoringComponents.Durability))
+            {
+                fields.Add(Field("weapon", "As a weapon"));
+                fields.Add(Field("attackSounds", "What it sounds like to swing"));
+            }
+
             if (RequiresComponent(required, DimensionItemAuthoringComponents.Cooldown))
             {
                 fields.Add(Field("cooldownSeconds", "Cooldown seconds"));
             }
 
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.EquipmentConditions))
+            {
+                fields.Add(Field("effects", "What it does for you"));
+
+                // Only armour is drawn on the character, and only three body parts read a skin at
+                // all, so nothing else is asked this.
+                fields.Add(Field("equipmentSkin", "Worn on the character"));
+            }
+
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.SecondaryUse))
+            {
+                fields.Add(Field("secondaryUse", "Right-click"));
+            }
+
+            // Cooking is offered on every item rather than gated by archetype: an ingredient is a
+            // Material, a cooked dish is a Consumable, and a fish is whatever its author decided.
+            fields.Add(Field("cooking", "As food"));
+
+            // Explosives are offered on every item for the same reason: a bomb is the Bomb
+            // archetype, but an explosive barrel is a Placeable that happens to go off. On the Bomb
+            // archetype this is the headline rather than an extra, so it is named as one.
+            fields.Add(RequiresComponent(required, DimensionItemAuthoringComponents.Explosive)
+                ? Field("explosive", "What it does when it goes off")
+                : Field("explosive", "If it goes off"));
+            fields.Add(Field("basics", "Where it sits in the world"));
+            if (RequiresComponent(required, DimensionItemAuthoringComponents.Durability))
+            {
+                fields.Add(Field("durabilityMultiplier", "How sturdy it is"));
+                fields.Add(Field("repairMultiplier", "Repair cost"));
+                fields.Add(Field("reinforceCostMultiplier", "Reinforce cost"));
+            }
+            fields.Add(Field("conditions", "Conditions"));
+            fields.Add(Field("offHand", "In the off hand"));
+            fields.Add(Field("polishesInto", "Polishes into"));
+            fields.Add(Field("isAPotion", "Is a potion"));
+
+            // ---- scanning ----
+            fields.Add(Field("scansForObjectId", "Scans for"));
+            fields.Add(Field("summonsInsteadOfScanning", "Summons it instead of scanning"));
+            fields.Add(Field("scannerOnlyInBiome", "Scanner only works in this biome"));
+
+            // ---- how it wears and swings ----
+            fields.Add(Field("flatDurability", "Durability, exactly"));
+            fields.Add(Field("flatMaxDurability", "Its ceiling, exactly"));
+            fields.Add(Field("casualIgnoresItsCooldown", "Casual mode skips its cooldown"));
+            fields.Add(Field("damageIsMagic", "Its damage counts as magic"));
+            fields.Add(Field("damageIsRanged", "Its damage counts as ranged"));
+            fields.Add(Field("damageMultiplierForItsTier", "How hard it hits for its tier"));
+
+
+            // ---- its looks ----
+            fields.Add(Field("iconOffset", "Icon nudge"));
+            fields.Add(Field("variation", "Which look it is"));
+            fields.Add(Field("variationIsChosenAtRuntime", "The game picks its look"));
+            fields.Add(Field("variationItTogglesTo", "The look it flips to"));
+            fields.Add(Field("nameGendersPerLanguage", "Its name's gender, per language", true));
+
+            // ---- the rest of what it can be ----
+            fields.Add(Field("instrument", "As an instrument", true));
+            fields.Add(Field("extraLoot", "Loot besides its drops", true));
+            fields.Add(Field("worldRoles", "Its roles in the world", true));
+            fields.Add(Field("simpleTraits", "The small things it simply is", true));
+
+            fields.Add(Field("dropsFrom", "Where it drops from"));
             fields.Add(Field("rarityId", "Rarity ID"));
             fields.Add(Field("enabled", "Enabled"));
             fields.Add(Field("notes", "Notes"));
@@ -3605,6 +4540,21 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
+            // The station id is resolved at GENERATION time, not runtime, so a typo is worth calling
+            // out here rather than leaving it to become a recipe that silently never appears.
+            if (recipes.Length > 0)
+            {
+                EditorGUILayout.HelpBox(
+                    "Generating wires the whole recipe: ingredients and craft time go onto the item, and " +
+                    "the output shows up at the crafting station you name.\n\n" +
+                    "\"Crafting station ID\" is a Core Keeper object name — WoodenWorkBench, " +
+                    "CopperWorkBench, and so on. A name the game does not know is reported when you " +
+                    "generate, and that recipe appears at no station. Leave it empty to skip the " +
+                    "station entirely; blocks can still be mined where your dimension generates them.",
+                    MessageType.Info);
+                GUILayout.Space(4f);
+            }
+
             for (int i = 0; i < recipes.Length; i++)
             {
                 DimensionRecipeAsset recipe = recipes[i];
@@ -3651,6 +4601,20 @@ namespace ExpandNullforge.EditorTools
                     Field("objectId", "Object ID"),
                     Field("iconId", "Icon ID"),
                     Field("recipes", "Recipes"),
+
+                    // ---- how it works ----
+                    Field("generatesItsOwnObject", "The framework builds its object"),
+                    Field("wholeInventoryIsOneCraft", "Its whole inventory is one craft"),
+                    Field("extractsCategoryTag", "What it draws out of things"),
+                    Field("extractedAmountRange", "How much it draws at a time"),
+                    Field("defaultCraftTimeRange", "How long a craft takes"),
+                    Field("showsALoopingEffectWhileWorking", "It shows an effect while working"),
+
+                    // ---- placing and using ----
+                    Field("placementRules", "Where it may be placed", true),
+                    Field("interaction", "When a player uses it", true),
+                    Field("simpleTraits", "The small things it simply is", true),
+
                     Field("enabled", "Enabled"),
                     Field("notes", "Notes"));
             }
@@ -3683,37 +4647,6 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private void DrawSpawnRuleAssetEditors(SpawnRuleTemplateAsset[] rules, string titlePrefix)
-        {
-            if (rules == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < rules.Length; i++)
-            {
-                SpawnRuleTemplateAsset rule = rules[i];
-                if (rule == null)
-                {
-                    continue;
-                }
-
-                DrawSerializedAsset(
-                    rule,
-                    BuildAssetEditorTitle(titlePrefix, rule.name, rule.RuleId, i),
-                    Field("displayName", "Display name"),
-                    Field("ruleId", "Rule ID"),
-                    Field("zoneId", "Zone ID"),
-                    Field("hasLocalBounds", "Has local bounds"),
-                    Field("localMin", "Local min"),
-                    Field("localMaxExclusive", "Local max"),
-                    Field("subjectId", "Subject ID"),
-                    Field("subjectKind", "Subject kind"),
-                    Field("weight", "Weight"),
-                    Field("priority", "Priority"),
-                    Field("enabled", "Enabled"));
-            }
-        }
 
         private void DrawAnimalAssetEditors(DimensionAnimalAsset[] animals)
         {
@@ -3737,20 +4670,598 @@ namespace ExpandNullforge.EditorTools
                     Field("animalId", "Animal ID"),
                     Field("objectId", "Object ID"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
-                    Field("stats", "Stats"),
+                    Field("creatureStats", "Stats (every number, exactly as typed)"),
+                    Field("combat", "Combat and behaviour"),
+                    Field("aggression", "Temperament"),
+                    Field("spawnsInWorld", "Spawns in the world"),
+                    Field("spawnChance", "Spawn chance"),
+                    Field("spawnAmount", "Spawn amount"),
+                    Field("spawnsInGroups", "Spawns in groups"),
+                    Field("canSpawnInBlockedArea", "May spawn in blocked areas"),
                     Field("visual", "Visual"),
                     Field("audio", "Audio"),
                     Field("lootTable", "Loot table"),
-                    Field("spawnWeight", "Spawn weight"),
-                    Field("herdMin", "Herd min"),
-                    Field("herdMax", "Herd max"),
-                    Field("friendly", "Friendly"),
-                    Field("tameable", "Tameable"),
                     Field("enabled", "Enabled"),
                     Field("notes", "Notes"));
             }
         }
 
+
+        /// <summary>
+        /// The container editors.
+        /// </summary>
+        /// <remarks>
+        /// The fields are grouped the way the questions actually come: what it is, how big, where it
+        /// goes, how it breaks, and what happens when something is put in it. The indestructible tick
+        /// only bites on a world-placed container, and the asset says so itself rather than the
+        /// window having to explain it twice.
+        /// </remarks>
+        private void DrawContainerAssetEditors(DimensionContainerAsset[] containers)
+        {
+            if (containers == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < containers.Length; i++)
+            {
+                DimensionContainerAsset container = containers[i];
+                if (container == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    container,
+                    BuildAssetEditorTitle("Container", container.DisplayName, container.ContainerId, i),
+                    Field("displayName", "Display name"),
+                    Field("containerId", "Container ID"),
+                    Field("description", "Description"),
+                    Field("rarityId", "Rarity"),
+                    Field("labelItComesWith", "The label floating above it"),
+                    Field("sprite", "Sprite"),
+                    Field("icon", "Icon"),
+                    Field("basics", "Where it sits in the world"),
+                    Field("conditions", "Conditions"),
+                    Field("size", "Size"),
+                    Field("customSlotsAcross", "Custom slots across"),
+                    Field("customSlotsDown", "Custom slots down"),
+                    Field("upgradeableExtraSlots", "Upgradeable extra slots"),
+                    Field("isAPouch", "Is a pouch"),
+                    Field("sameSizeAtEveryLevel", "Same size at every level"),
+                    Field("onlyAcceptsCategoryTags", "Only accepts these categories"),
+                    Field("oneItemPerSlot", "One item per slot"),
+                    Field("contentsAreLocked", "Contents are locked"),
+                    Field("cannotAddItems", "Cannot add items"),
+                    Field("autoTransfer", "Auto transfer"),
+                    Field("slotRules", "Slot rules"),
+                    Field("tileSize", "Tile size"),
+                    Field("canBePlacedOnWater", "Can be placed on water"),
+                    Field("facesPlacementDirection", "Faces placement direction"),
+                    Field("origin", "Where it comes from"),
+                    Field("indestructible", "Indestructible (world-placed only)"),
+                    Field("hitsToBreak", "Hits to break"),
+                    Field("requiredMiningDamage", "Required mining damage"),
+                    Field("requiresDrill", "Requires drill"),
+                    Field("dropsContentsWhenBroken", "Drops contents when broken"),
+                    Field("dropsItselfWhenBroken", "Drops itself when broken"),
+                    // ---- reacting to an item ----
+                    Field("reactsToItemId", "Reacts to item"),
+                    Field("reactionVariation", "The look it takes when it reacts"),
+                    Field("reactionEffectId", "The effect shown as it reacts"),
+                    Field("removeColliderOnReaction", "Its collider goes when it reacts"),
+                    Field("becomesContainerId", "Becomes container"),
+                    Field("becomesLootTableId", "Becomes loot table"),
+                    Field("becomesContents", "Becomes contents"),
+
+                    // ---- what its slots accept ----
+                    Field("appliesToAllSlots", "One rule for every slot"),
+                    Field("acceptsCategoryTags", "Kinds of thing it accepts", true),
+                    Field("acceptsItemIds", "Exact items it accepts", true),
+                    Field("denyLegendary", "Legendary gear is refused"),
+                    Field("showHint", "Its slots hint at what fits"),
+
+                    // ---- appearance and placing ----
+                    Field("sprite", "Its picture in the world"),
+                    Field("icon", "Its icon in inventories"),
+                    Field("placementRules", "Where it may be placed", true),
+                    Field("melodyResponse", "It answers a tune", true),
+                    Field("interaction", "When a player uses it", true),
+                    Field("simpleTraits", "The small things it simply is", true),
+
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+
+                if (container.IndestructibleWasRefused)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Indestructible only applies to a container the world places. A container " +
+                        "players craft has to be breakable, or they can never take it back.",
+                        MessageType.Warning);
+                }
+            }
+        }
+
+        private void DrawPlantAssetEditors(DimensionPlantAsset[] plants)
+        {
+            if (plants == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < plants.Length; i++)
+            {
+                DimensionPlantAsset plant = plants[i];
+                if (plant == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    plant,
+                    BuildAssetEditorTitle("Plant", plant.DisplayName, plant.PlantId, i),
+                    Field("displayName", "Display name"),
+                    Field("plantId", "Plant ID"),
+                    Field("description", "Description"),
+                    Field("rarityId", "Rarity"),
+                    Field("seedIcon", "Seed icon"),
+                    Field("art", "What it looks like in the ground", true),
+                    Field("growthStages", "Growth stages"),
+                    Field("minutesToGrow", "Minutes to grow"),
+                    Field("staysToughWhenRipe", "Stays tough when ripe"),
+                    Field("washedAwayByWater", "Washed away by water"),
+                    Field("produceItemId", "Produce item"),
+                    Field("harvestAmount", "How many per harvest"),
+                    Field("chanceToGetTheSeedBackPercent", "Chance to get the seed back"),
+                    Field("versions", "Better versions", true),
+                    Field("ground", "Ground it grows on"),
+                    Field("spreadsOnTilesetIds", "Spreads on tilesets"),
+                    Field("minSpreadSeconds", "Min spread seconds"),
+                    Field("maxSpreadSeconds", "Max spread seconds"),
+                    Field("becomesTilesetId", "The ground it turns into"),
+                    Field("placementRules", "Where it may be planted", true),
+                    Field("simpleTraits", "The small things it simply is", true),
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+
+                EditorGUILayout.HelpBox(
+                    "Generating this writes the seed, the growing plant and the ripe plant, plus a " +
+                    "seed and a plant for every better version. They are all two objects — a seed " +
+                    "and a plant — the way Core Keeper builds its own crops.\n\n" +
+                    "A better version's place in the list decides which variation it sits on, so " +
+                    "reordering the list moves crops already planted in an existing world onto a " +
+                    "different version. Add new ones at the end.\n\n" +
+                    "It needs " + plant.PicturesNeeded + " pictures to be visible: one for each of " +
+                    "its " + plant.GrowthStages + " growth stages and one for the ripe plant. A " +
+                    "better version with pictures of its own is what makes a golden crop look " +
+                    "golden; one without looks exactly like the ordinary one.",
+                    MessageType.Info);
+            }
+        }
+
+        private void DrawWorldObjectAssetEditors(DimensionWorldObjectAsset[] worldObjects)
+        {
+            if (worldObjects == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < worldObjects.Length; i++)
+            {
+                DimensionWorldObjectAsset worldObject = worldObjects[i];
+                if (worldObject == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    worldObject,
+                    BuildAssetEditorTitle("Object", worldObject.DisplayName, worldObject.ObjectIdentifier, i),
+                    Field("displayName", "Display name"),
+                    Field("objectIdentifier", "Object ID"),
+                    Field("description", "Description"),
+                    Field("rarityId", "Rarity"),
+                    Field("sprite", "Sprite"),
+                    Field("icon", "Icon"),
+                    Field("kind", "What it is"),
+                    Field("summonsEnemyId", "Trophy summons"),
+                    Field("tileSize", "Tile size"),
+                    Field("facesPlacementDirection", "Faces placement direction"),
+                    Field("canBePlacedOnWater", "Can be placed on water"),
+                    Field("paintable", "Paintable"),
+                    Field("surfacePriority", "Surface priority"),
+                    Field("lightsTheRoomWhenPlaced", "Lights the room when placed"),
+                    Field("lightsTheRoomWhenHeld", "Lights the room when held"),
+                    Field("heldLightColor", "Held light colour"),
+                    Field("heldLightRange", "Held light range"),
+                    Field("objectItselfGlows", "The object itself glows"),
+                    Field("glowColor", "Glow colour"),
+                    Field("glowIntensity", "Glow intensity"),
+                    Field("hitsToBreak", "Hits to break"),
+                    Field("cannotBeAttacked", "Cannot be attacked"),
+                    Field("disappearsAfterSeconds", "Disappears after (seconds)"),
+                    Field("effects", "What it does for you"),
+                    Field("impactFeedback", "Hitting and breaking it"),
+                    Field("tileOutcome", "What it leaves on the tile"),
+                    Field("leavesBehind", "What it leaves standing"),
+                    Field("continuousAttack", "If it hurts things"),
+                    Field("keepsThingsSafeNearby", "Keeps things safe nearby"),
+                    Field("safeRadius", "How far the safety reaches"),
+                    Field("basics", "Where it sits in the world"),
+                    Field("conditions", "Conditions"),
+                    Field("initialFacing", "Faces this way when placed"),
+                    Field("itsColliderTurnsToo", "Its collider turns too"),
+                    Field("textItComesWith", "Text it comes with"),
+                    Field("untouchableForOneFrameOnly", "Untouchable for one frame only"),
+                    Field("isAFenceGate", "Is a fence gate"),
+                    Field("flowerOfPlantId", "Flower of plant"),
+                    Field("spawnsEnemyId", "Spawner platform produces"),
+                    Field("playersCanTravelToIt", "Players can travel to it"),
+                    Field("activateWithin", "Activate within"),
+                    Field("isTheCoreWaypoint", "Is the core waypoint"),
+                    Field("music", "Music near it"),
+                    Field("automation", "Automation"),
+                    Field("rules", "How the world treats it"),
+                    Field("alwaysDropsLoot", "Creative mode still gives its drops"),
+                    Field("secondaryUse", "Right-click"),
+                    Field("dropsFrom", "Where it drops from"),
+                    Field("wiring", "Wiring"),
+
+                    // ---- what a player does with it ----
+                    Field("interaction", "When a player uses it", true),
+                    Field("roles", "Its small roles in a base", true),
+                    Field("simpleTraits", "The small things it simply is", true),
+
+                    // ---- placing and appearance details ----
+                    Field("placementRules", "Where it may be placed", true),
+                    Field("rotationIconOffset", "Icon nudge per rotation"),
+                    Field("flowerVariation", "Which look its flower is"),
+                    Field("adaptsToSurroundings", "It changes with its surroundings", true),
+
+                    // ---- the safety zone's shape ----
+                    Field("safeAreaIsRectangular", "The safe area is a rectangle"),
+                    Field("safeWidth", "Safe area width"),
+                    Field("safeHeight", "Safe area height"),
+
+                    // ---- what it gives and holds ----
+                    Field("extraLoot", "Loot besides its drops", true),
+                    Field("extractable", "What machines can draw from it", true),
+                    Field("trader", "If it buys and sells", true),
+                    Field("nest", "If it is a nest", true),
+
+                    // ---- how it behaves ----
+                    Field("melodyResponse", "It answers a tune", true),
+                    Field("reactsToNearby", "It reacts to someone coming close", true),
+                    Field("summoningCircle", "If it summons something", true),
+                    Field("poweredMachine", "If power drives it", true),
+                    Field("keepsItsFloor", "It lays its own floor", true),
+                    Field("machineRoles", "Its machine roles", true),
+                    Field("terrainEffects", "How it changes the ground", true),
+                    Field("chainReaction", "If it sets off its neighbours", true),
+                    Field("spawnerAndOrb", "If it spawns things", true),
+                    Field("manaAndAura", "Mana and auras", true),
+                    Field("hidingAndHatching", "Hiding and hatching", true),
+                    Field("beamAndAmbience", "Beams and ambience", true),
+                    Field("eventTerminal", "If it runs an event", true),
+                    Field("finalTouches", "Final touches", true),
+
+                    // ---- the wider world ----
+                    Field("worldRoles", "Its roles in the world", true),
+                    Field("nativeWorldPlacement", "Placed once, when a world is made", true),
+
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+
+                if (worldObject.GlowsButLightsNothing)
+                {
+                    EditorGUILayout.HelpBox(
+                        "This glows but lights nothing. Core Keeper keeps those separate - a torch " +
+                        "carries the two lighting components and not the glow - so as authored it " +
+                        "will shine in a pitch-black room.",
+                        MessageType.Warning);
+                }
+
+                if (worldObject.IsATrophyThatSummonsNothing)
+                {
+                    EditorGUILayout.HelpBox(
+                        "This is a trophy with nothing to summon, so using it will do nothing.",
+                        MessageType.Warning);
+                }
+
+                if (worldObject.CanNeverBeRemoved)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Nothing can attack this and it never disappears, so a player who places " +
+                        "one can never take it back.",
+                        MessageType.Warning);
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// The projectile editors.
+        /// </summary>
+        /// <remarks>
+        /// The ordinary questions first and the exotica after, because that is what vanilla use
+        /// looks like: 41 of the game's 71 projectiles are a plain shot with a 0.2 hit radius and
+        /// nothing else ticked. Putting all 22 of the component's fields on one flat list would bury
+        /// the one that matters.
+        /// </remarks>
+
+        /// <summary>
+        /// The explosion editors.
+        /// </summary>
+        /// <remarks>
+        /// Three numbers and the ordinary object spine — that really is all an explosion is. The
+        /// terrain damage is worth its label: it is measured against the mining curve rather than
+        /// health, so the vanilla values that dig are 165 and 210 rather than anything health-like.
+        /// </remarks>
+        private void DrawExplosionAssetEditors(DimensionExplosionAsset[] explosions)
+        {
+            if (explosions == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < explosions.Length; i++)
+            {
+                DimensionExplosionAsset explosion = explosions[i];
+                if (explosion == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    explosion,
+                    BuildAssetEditorTitle("Explosion", explosion.DisplayName, explosion.ExplosionId, i),
+                    Field("displayName", "Display name"),
+                    Field("explosionId", "Explosion ID"),
+                    Field("sprite", "Sprite"),
+                    Field("lifetimeSeconds", "Lasts (seconds)"),
+                    Field("radius", "How far it reaches"),
+                    Field("leavesBehind", "What it leaves burning"),
+                    Field("feedback", "What it sounds and looks like"),
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+
+                if (explosion.ReachesNothing)
+                {
+                    EditorGUILayout.HelpBox(
+                        "The reach is zero, so this catches nothing. Vanilla runs from 1 to 4.5, " +
+                        "and an ordinary bomb's blast reaches 2.",
+                        MessageType.Warning);
+                }
+
+                if (explosion.NeverGoesAway)
+                {
+                    EditorGUILayout.HelpBox(
+                        "This has no lifetime, so it stays where it went off, doing its damage, " +
+                        "for as long as the world is loaded.",
+                        MessageType.Warning);
+                }
+
+                EditorGUILayout.HelpBox(
+                    "How much a blast hurts and how much terrain it breaks are set on whatever " +
+                    "sets it off, not here: the game writes those two numbers over the blast's " +
+                    "own every time one goes off.",
+                    MessageType.Info);
+            }
+        }
+
+        private void DrawProjectileAssetEditors(DimensionProjectileAsset[] projectiles)
+        {
+            if (projectiles == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < projectiles.Length; i++)
+            {
+                DimensionProjectileAsset projectile = projectiles[i];
+                if (projectile == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    projectile,
+                    BuildAssetEditorTitle("Projectile", projectile.DisplayName, projectile.ProjectileId, i),
+                    Field("displayName", "Display name"),
+                    Field("projectileId", "Projectile ID"),
+                    Field("sprite", "Sprite"),
+                    Field("speed", "Speed"),
+                    Field("lifetimeSeconds", "Lifetime (seconds)"),
+                    Field("hitRadius", "Hit radius"),
+                    Field("goesThroughEnemies", "Goes through enemies"),
+                    Field("explodesOnEnemies", "Bursts on enemies"),
+                    Field("damagesTerrain", "Damages terrain"),
+                    Field("terrainHitRadius", "Terrain hit radius"),
+                    Field("bounces", "Bounces off walls"),
+                    Field("flight", "How it travels"),
+                    Field("useTheGamesOwnTimings", "Use the game's own arc timings"),
+                    Field("goUpSeconds", "Seconds going up"),
+                    Field("airSeconds", "Seconds in the air"),
+                    Field("goDownSeconds", "Seconds coming down"),
+                    Field("explodeSeconds", "Seconds before it goes off"),
+                    Field("breaksTerrainWhereItLands", "Breaks terrain where it lands"),
+                    Field("isMagic", "Counts as magic"),
+                    Field("ignoresTheDamageCap", "Ignores the damage cap"),
+                    Field("onlyLandsWhereItCanSee", "Only lands in sight"),
+                    Field("scattersTilesOnTheWayDown", "Scatters tiles on the way down"),
+                    Field("scatteredTilesetId", "Tileset it scatters"),
+                    Field("scatterExtraRadius", "Extra scatter radius"),
+                    Field("leavesATileWhereItLands", "Leaves a tile where it lands"),
+                    Field("landedTilesetId", "Tileset it leaves"),
+                    Field("sounds", "What it sounds like"),
+                    Field("survivesCollision", "Survives collision"),
+                    Field("canBeShotDown", "Can be shot down"),
+                    Field("weaves", "Weaves as it flies"),
+                    Field("stopsOnUnwalkableTiles", "Stops on unwalkable tiles"),
+                    Field("dodgingDoesNotSaveYou", "A dodge still counts as a hit"),
+                    Field("shards", "Breaks into"),
+                    Field("shardObjectId", "Breaks into what"),
+                    Field("shattersOnCollision", "It shatters when it hits"),
+
+                    // ---- flight details ----
+                    Field("outAndBackSeconds", "Seconds out before it comes back"),
+                    Field("speedFollowsACurve", "Its speed follows a curve"),
+                    Field("speedCurve", "That curve"),
+                    Field("secondSpeedCurve", "A second curve, blended in"),
+                    Field("mayExplodeOnAPartialWindUp", "May go off on a partial wind-up"),
+                    Field("onlyHitsTheSameThingEvery", "Only hits the same thing every (seconds)"),
+                    Field("fliesThroughWallTypes", "Wall types it flies through", true),
+                    Field("clientPredictsIt", "The player's own game predicts it"),
+
+                    // ---- what it does to the ground ----
+                    Field("scatteredTileType", "What kind of tile it scatters"),
+                    Field("landedTileType", "What kind of tile it leaves"),
+                    Field("canPlaceTilesOnWaterAndPits", "Its tiles may land on water and pits"),
+                    Field("removesTilesWhereItLands", "It removes tiles where it lands"),
+                    Field("removedTilesetId", "Which tileset it removes"),
+                    Field("removedTileType", "Which kind of tile it removes"),
+                    Field("raggedEdges", "Its craters have ragged edges"),
+                    Field("wallsItBreaksDropNothing", "Walls it breaks drop nothing"),
+
+                    // ---- what it does to whoever it hits ----
+                    Field("pushesWhatItHits", "How hard it pushes what it hits"),
+                    Field("leavesBehindObjectId", "What it leaves behind"),
+                    Field("leavesBehindVariation", "That object's look"),
+
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+
+                if (projectile.NeverGoesAnywhere)
+                {
+                    EditorGUILayout.HelpBox(
+                        "This has no speed, so it appears where it was fired from and expires " +
+                        "without travelling.",
+                        MessageType.Warning);
+                }
+
+                if (projectile.CannotHitAnything)
+                {
+                    EditorGUILayout.HelpBox(
+                        "The hit radius is zero, so this passes through everything. Most of the " +
+                        "game uses " + DimensionProjectileAsset.OrdinaryHitRadius + ".",
+                        MessageType.Warning);
+                }
+
+                if (projectile.ShattersIntoNothing)
+                {
+                    EditorGUILayout.HelpBox(
+                        "This is set to break into pieces without saying what of.",
+                        MessageType.Warning);
+                }
+
+                if (projectile.DamagesTerrainOverNoArea)
+                {
+                    EditorGUILayout.HelpBox(
+                        "This damages terrain over an area of zero, so the terrain damage can " +
+                        "never land.",
+                        MessageType.Warning);
+                }
+            }
+        }
+
+        private void DrawVehicleAssetEditors(DimensionVehicleAsset[] vehicles)
+        {
+            if (vehicles == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < vehicles.Length; i++)
+            {
+                DimensionVehicleAsset vehicle = vehicles[i];
+                if (vehicle == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    vehicle,
+                    BuildAssetEditorTitle("Vehicle", vehicle.DisplayName, vehicle.VehicleId, i),
+                    Field("displayName", "Display name"),
+                    Field("vehicleId", "Vehicle ID"),
+                    Field("description", "Description"),
+                    Field("kind", "How it moves"),
+                    Field("sprite", "Picture"),
+                    Field("icon", "Icon"),
+                    Field("speedMultiplier", "Speed"),
+                    Field("accelerationMultiplier", "Acceleration"),
+                    Field("driftingMultiplier", "Drifting"),
+                    Field("minecartMaxSpeed", "Minecart top speed"),
+                    Field("howCloseToGetOn", "How close to get on"),
+                    Field("hitsToBreak", "Hits to break"),
+                    Field("dropsItselfWhenBroken", "Breaking gives it back"),
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+            }
+        }
+
+
+        /// <summary>
+        /// Draws the setups that change the game itself, rather than adding to it.
+        /// </summary>
+        /// <remarks>
+        /// The field list is short on purpose. Everything else the asset holds is drawn below it by
+        /// the catch-all, so nothing here can quietly become unreachable the way whole features
+        /// have before.
+        /// </remarks>
+
+        /// <summary>Draws the stat effects a mod invented.</summary>
+        private void DrawConditionAssetEditors(DimensionConditionAsset[] conditions)
+        {
+            if (conditions == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < conditions.Length; i++)
+            {
+                DimensionConditionAsset condition = conditions[i];
+                if (condition == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    condition,
+                    "Condition: " + condition.DisplayName,
+                    Field("conditionName", "Id"),
+                    Field("displayName", "Called"),
+                    Field("enabled", "Generated"),
+                    Field("effect", "What it does"));
+            }
+        }
+        private void DrawGameSetupAssetEditors(DimensionGameSetupAsset[] setups)
+        {
+            if (setups == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < setups.Length; i++)
+            {
+                DimensionGameSetupAsset setup = setups[i];
+                if (setup == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    setup,
+                    "World rules: " + setup.DisplayName,
+                    Field("setupIdentifier", "Id"),
+                    Field("displayName", "Called"),
+                    Field("enabled", "Applied"),
+                    Field("upgrading", "What upgrading costs", true),
+                    Field("fishing", "What fishing catches", true),
+                    Field("talents", "What talents give", true),
+                    Field("player", "Overrides on the player", true));
+            }
+        }
         private void DrawCritterAssetEditors(DimensionCritterAsset[] critters)
         {
             if (critters == null)
@@ -3775,8 +5286,55 @@ namespace ExpandNullforge.EditorTools
                     Field("allowedBiomeIds", "Allowed biome IDs"),
                     Field("visual", "Visual"),
                     Field("audio", "Audio"),
-                    Field("spawnWeight", "Spawn weight"),
-                    Field("scatterOnApproach", "Scatter on approach"),
+                    Field("isFlying", "Flies"),
+                    Field("spawnContinuously", "Keeps appearing"),
+                    Field("isPersistent", "Survives being left behind"),
+                    Field("allowLargerAmount", "More may gather than usual"),
+                    Field("canBeCaught", "Can be caught"),
+                    Field("home", "Picks its home by"),
+                    Field("tilesetIds", "Grounds it lives on"),
+                    Field("enabled", "Enabled"),
+                    Field("notes", "Notes"));
+            }
+        }
+
+        /// <summary>
+        /// Draws every authored dungeon.
+        /// </summary>
+        /// <remarks>
+        /// Dungeons and quests were both built, generated and tested, and neither had a panel — the
+        /// authoring-surface audit found them with no editor at all. Everything a creator could set
+        /// on one was reachable only by selecting the raw asset in the Project window, which is the
+        /// exact thing this framework exists to avoid.
+        /// </remarks>
+        private void DrawDungeonAssetEditors(DimensionDungeonAsset[] dungeons)
+        {
+            if (dungeons == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < dungeons.Length; i++)
+            {
+                DimensionDungeonAsset dungeon = dungeons[i];
+                if (dungeon == null)
+                {
+                    continue;
+                }
+
+                DrawSerializedAsset(
+                    dungeon,
+                    BuildAssetEditorTitle("Dungeon", dungeon.DisplayName, dungeon.DungeonId, i),
+                    Field("displayName", "Display name"),
+                    Field("dungeonId", "Dungeon ID"),
+                    Field("biomeId", "Biome it appears in"),
+                    Field("radius", "How far out it can appear"),
+                    Field("minDistanceFromCentre", "Never closer to the centre than"),
+                    Field("spawnChance", "Chance it appears"),
+                    Field("roomGroups", "Rooms it is built from"),
+                    Field("roomSize", "Room size"),
+                    Field("pathSize", "Corridor width"),
+                    Field("blockOtherSpawns", "Nothing else spawns inside it"),
                     Field("enabled", "Enabled"),
                     Field("notes", "Notes"));
             }
@@ -3804,12 +5362,21 @@ namespace ExpandNullforge.EditorTools
                     Field("mobId", "Mob ID"),
                     Field("objectId", "Object ID"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
-                    Field("stats", "Stats"),
+                    Field("creatureStats", "Stats (every number, exactly as typed)"),
+                    Field("combat", "Combat and behaviour"),
+                    Field("eliteVariant", "Elite variant"),
+                    Field("spawnsInWorld", "Spawns in the world"),
+                    Field("spawnChance", "Spawn chance"),
+                    Field("spawnAmount", "Spawn amount"),
+                    Field("spawnsInGroups", "Spawns in groups"),
+                    Field("canSpawnInBlockedArea", "May spawn in blocked areas"),
                     Field("visual", "Visual"),
                     Field("audio", "Audio"),
                     Field("lootTable", "Loot table"),
+                    Field("extraLoot", "Loot besides its drops", true),
+                    Field("pet", "As a pet", true),
+                    Field("simpleTraits", "The small things it simply is", true),
                     Field("aggression", "Aggression"),
-                    Field("spawnWeight", "Spawn weight"),
                     Field("behaviorScriptId", "Behavior script ID"),
                     Field("enabled", "Enabled"),
                     Field("notes", "Notes"));
@@ -3839,13 +5406,24 @@ namespace ExpandNullforge.EditorTools
                     Field("objectId", "Object ID"),
                     Field("arenaSceneId", "Arena scene ID"),
                     Field("summoningItemId", "Summoning item ID"),
-                    Field("stats", "Stats"),
+                    Field("creatureStats", "Stats (every number, exactly as typed)"),
+                    Field("combat", "Combat and behaviour"),
+                    Field("aggression", "Temperament"),
+                    Field("bossChest", "Chest it leaves behind"),
                     Field("visual", "Visual"),
                     Field("audio", "Audio"),
+                    Field("mapPin", "Map pin"),
+                    Field("fightMusic", "Fight music"),
                     Field("lootTable", "Loot table"),
-                    Field("activation", "Activation"),
                     Field("phases", "Phases"),
                     Field("respawnCooldownMinutes", "Respawn cooldown minutes"),
+
+                    // ---- kits borrowed from the game's own bosses ----
+                    Field("borrowedKit", "The Hydra and Slime kits", true),
+                    Field("moreBorrowedKits", "The Core, Wall and Scarab kits", true),
+                    Field("theRestOfTheKits", "The Bird, Robot, Octopus, Larva, Shaman and Snake kits", true),
+                    Field("simpleTraits", "The small things it simply is", true),
+
                     Field("enabled", "Enabled"),
                     Field("notes", "Notes"));
             }
@@ -3919,8 +5497,6 @@ namespace ExpandNullforge.EditorTools
             DrawNamedValue("Dimensions", preview.DimensionCount.ToString());
             DrawNamedValue("Biomes", preview.BiomeCount.ToString());
             DrawNamedValue("Scenes", preview.SceneCount.ToString());
-            DrawNamedValue("Resource nodes", preview.ResourceNodeCount.ToString());
-            DrawNamedValue("Spawn rules", preview.SpawnRuleCount.ToString());
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandWidth(true));
@@ -4091,6 +5667,174 @@ namespace ExpandNullforge.EditorTools
             return new SerializedFieldSpec(propertyName, label, true, true);
         }
 
+
+        /// <summary>
+        /// Offers every attack the game itself authored, for a creature to take whole.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THIS IS DOOR ONE. An author building a creature should never have to invent a swing from
+        /// nothing just because they wanted the Hydra's. Picking one here writes its measured
+        /// numbers into the ordinary fields below, where they stay editable — the creature does not
+        /// remember it borrowed anything, so nothing is ever silently reverted.
+        /// </para>
+        /// <para>
+        /// The list only appears on assets that have a combat block, which is what makes it a
+        /// creature. Drawing it on a workbench would be noise.
+        /// </para>
+        /// </remarks>
+        private void DrawBorrowedAttackPickers(
+            UnityEngine.Object target,
+            SerializedObject serializedObject)
+        {
+            SerializedProperty combat = serializedObject.FindProperty("combat");
+            if (combat == null || target == null)
+            {
+                return;
+            }
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField(
+                "Take an attack from something in the game",
+                EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField(
+                "It arrives complete, with the game's own numbers. Change as much or as little of " +
+                "it as you like afterwards — or nothing at all.",
+                EditorStyles.wordWrappedMiniLabel);
+
+            if (GUILayout.Button(
+                    "Browse all " + DimensionBorrowedAttacks.All.Length + " with a search box"))
+            {
+                DimensionBorrowedAttackPickerWindow.Open(target, null, null);
+            }
+
+            for (int i = 0; i < DimensionBorrowedAttacks.Kinds.Length; i++)
+            {
+                string kind = DimensionBorrowedAttacks.Kinds[i];
+                DrawOneBorrowedAttackPicker(target, serializedObject, combat, kind, LabelFor(kind));
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+
+
+        /// <summary>What a row of the picker is called, in the words an author thinks in.</summary>
+        /// <remarks>
+        /// The kinds themselves come from the generated table, so a new sort of borrowable thing
+        /// appears in the picker on its own. Anything without a phrase here falls back to its own
+        /// name, which is readable enough to ship with while a better one is chosen.
+        /// </remarks>
+        private static string LabelFor(string kind)
+        {
+            switch (kind)
+            {
+                case "Melee":
+                    return "A close-up swing";
+                case "Ranged":
+                    return "A ranged shot";
+                case "Chase":
+                    return "The way it chases";
+                case "Wander":
+                    return "The way it wanders";
+                case "Sounds":
+                    return "The sounds it makes fighting";
+                case "Charge":
+                    return "The way it charges";
+                case "Jump":
+                    return "Its leaping attack";
+                case "Explode":
+                    return "The way it explodes";
+                case "Ray":
+                    return "Its sweeping ray";
+                default:
+                    return kind;
+            }
+        }
+        /// <summary>One row of the picker: a list of attacks of one kind, and a button.</summary>
+        private void DrawOneBorrowedAttackPicker(
+            UnityEngine.Object target,
+            SerializedObject serializedObject,
+            SerializedProperty combat,
+            string kind,
+            string label)
+        {
+            DimensionBorrowedAttacks.Preset[] presets = DimensionBorrowedAttacks.OfKind(kind);
+            if (presets.Length == 0)
+            {
+                return;
+            }
+
+            string key = target.GetInstanceID() + "/" + kind;
+            int chosen;
+            if (!borrowedAttackChoices.TryGetValue(key, out chosen))
+            {
+                chosen = 0;
+            }
+
+            // The label a creator reads, not the file name the prefab was saved under. The preset's
+            // own Name stays its identity everywhere else; only this list is renamed.
+            string[] names = new string[presets.Length];
+            for (int i = 0; i < presets.Length; i++)
+            {
+                names[i] = DimensionBorrowedAttackCatalog.Label(presets[i]);
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            chosen = EditorGUILayout.Popup(label, Mathf.Clamp(chosen, 0, presets.Length - 1), names);
+            borrowedAttackChoices[key] = chosen;
+
+            if (GUILayout.Button("Take it", GUILayout.Width(72f)))
+            {
+                List<string> lost = new List<string>();
+                int written = DimensionBorrowedAttackUtility.Apply(combat, presets[chosen], lost.Add);
+                serializedObject.ApplyModifiedProperties();
+
+                if (lost.Count > 0)
+                {
+                    Debug.LogWarning(
+                        "Some of '" + names[chosen] + "' could not be written:\n" +
+                        string.Join("\n", lost.ToArray()),
+                        target);
+                }
+                else
+                {
+                    Debug.Log(
+                        "Took '" + names[chosen] + "' — " + written +
+                        " values, all of them still editable below.",
+                        target);
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        /// <summary>
+        /// A field's label with its help riding along, plus the little circled question mark that
+        /// tells an author there IS help before they think to hover.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// EVERY AUTHORING FIELD ALREADY CARRIES ITS EXPLANATION — the templates were written with a
+        /// plain-words tooltip on every single field, and Unity threads that text onto the
+        /// serialized property. What was missing was any visible sign of it: a tooltip nobody knows
+        /// exists is documentation nobody reads. So the label itself gains a "?" suffix whenever
+        /// help exists, and hovering anywhere on the label shows it.
+        /// </para>
+        /// <para>
+        /// Fields with no tooltip get no mark, deliberately: a "?" that reveals nothing teaches an
+        /// author to stop hovering.
+        /// </para>
+        /// </remarks>
+        private static GUIContent LabelWithHelp(string text, SerializedProperty property)
+        {
+            string help = property == null ? string.Empty : property.tooltip;
+            if (string.IsNullOrEmpty(help))
+            {
+                return new GUIContent(text);
+            }
+
+            return new GUIContent(text + "  ⍰", help);
+        }
         private bool DrawSerializedAsset(UnityEngine.Object target, string title, params SerializedFieldSpec[] fields)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -4116,6 +5860,10 @@ namespace ExpandNullforge.EditorTools
             SerializedObject serializedObject = GetSerializedAssetBinding(target);
             serializedObject.UpdateIfRequiredOrScript();
 
+            // ---- the first door: borrow one of the game's own attacks ----
+            // Only creatures have a combat block, so only creatures are offered this.
+            DrawBorrowedAttackPickers(target, serializedObject);
+
             EditorGUI.BeginChangeCheck();
             for (int i = 0; i < fields.Length; i++)
             {
@@ -4132,9 +5880,11 @@ namespace ExpandNullforge.EditorTools
                     continue;
                 }
 
-                GUIContent label = string.IsNullOrEmpty(field.Label)
-                    ? new GUIContent(ObjectNames.NicifyVariableName(field.PropertyName))
-                    : new GUIContent(field.Label);
+                GUIContent label = LabelWithHelp(
+                    string.IsNullOrEmpty(field.Label)
+                        ? ObjectNames.NicifyVariableName(field.PropertyName)
+                        : field.Label,
+                    property);
                 if (field.ScopeToDimensionDataBlock)
                 {
                     float propertyHeight = EditorGUI.GetPropertyHeight(
@@ -4170,6 +5920,75 @@ namespace ExpandNullforge.EditorTools
                 else
                 {
                     EditorGUILayout.PropertyField(property, label, field.IncludeChildren);
+                }
+            }
+
+            // EVERYTHING THE CURATED LIST DID NOT MENTION.
+            //
+            // The panels are a first draft: their field lists were written early, from guesses about
+            // what an asset would need, and the authoring layer has grown a long way past them. An
+            // audit of this found whole features — creature combat, dungeons, quests — built,
+            // generated and tested with no way to reach them from the dashboard at all. Maintaining
+            // every list by hand against every asset would just reintroduce that gap the next time
+            // the authoring layer moves.
+            //
+            // So a curated list means ORDERING, not permission. Whatever it leaves out is still
+            // drawn, below, under its own foldout. Fields get promoted into the lists as the UI is
+            // designed properly, and nothing is unreachable in the meantime.
+            SerializedProperty remaining = serializedObject.GetIterator();
+            bool enterChildren = true;
+            List<SerializedProperty> extras = new List<SerializedProperty>();
+            while (remaining.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (remaining.propertyPath == "m_Script")
+                {
+                    continue;
+                }
+
+                bool alreadyDrawn = false;
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    if (fields[i].PropertyName == remaining.propertyPath)
+                    {
+                        alreadyDrawn = true;
+                        break;
+                    }
+                }
+
+                if (!alreadyDrawn)
+                {
+                    extras.Add(remaining.Copy());
+                }
+            }
+
+            if (extras.Count > 0)
+            {
+                string foldoutKey = target.GetInstanceID() + "/" + title;
+                bool expanded;
+                if (!uncuratedFieldFoldouts.TryGetValue(foldoutKey, out expanded))
+                {
+                    expanded = false;
+                }
+
+                expanded = EditorGUILayout.Foldout(
+                    expanded,
+                    "Everything else (" + extras.Count + ")",
+                    true);
+                uncuratedFieldFoldouts[foldoutKey] = expanded;
+
+                if (expanded)
+                {
+                    EditorGUI.indentLevel++;
+                    for (int i = 0; i < extras.Count; i++)
+                    {
+                        EditorGUILayout.PropertyField(
+                            extras[i],
+                            LabelWithHelp(extras[i].displayName, extras[i]),
+                            true);
+                    }
+
+                    EditorGUI.indentLevel--;
                 }
             }
 
@@ -4351,52 +6170,22 @@ namespace ExpandNullforge.EditorTools
 
         private int CountResources()
         {
-            int count = selectedTemplate == null
+            return selectedTemplate == null
                 ? 0
-                : CountAssets(selectedTemplate.GlobalResourceNodes) +
-                    CountAssets(selectedTemplate.GlobalItems) +
+                : CountAssets(selectedTemplate.GlobalItems) +
                     CountAssets(selectedTemplate.GlobalRecipes) +
                     CountAssets(selectedTemplate.GlobalWorkbenches) +
                     CountAssets(selectedTemplate.GlobalLootTables);
-            BiomeTemplateAsset[] biomes = GetBiomes();
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                count += CountBiomeResources(biomes[i]);
-            }
-
-            return count;
-        }
-
-        private int CountBiomeResources(BiomeTemplateAsset biome)
-        {
-            return biome == null ? 0 : CountAssets(biome.ResourceNodes);
         }
 
         private int CountSpawns()
         {
-            int count = selectedTemplate == null
+            return selectedTemplate == null
                 ? 0
                 : CountAssets(selectedTemplate.GlobalAnimals) +
                     CountAssets(selectedTemplate.GlobalCritters) +
                     CountAssets(selectedTemplate.GlobalMobs) +
-                    CountAssets(selectedTemplate.GlobalBosses) +
-                    CountAssets(selectedTemplate.GlobalSpawnRules) +
-                    CountSceneSpawnPoints(selectedTemplate.GlobalScenes);
-            BiomeTemplateAsset[] biomes = GetBiomes();
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                count += CountBiomeSpawns(biomes[i]);
-            }
-
-            return count;
-        }
-
-        private int CountBiomeSpawns(BiomeTemplateAsset biome)
-        {
-            return biome == null
-                ? 0
-                : CountAssets(biome.SpawnRules) +
-                    CountSceneSpawnPoints(biome.ScenePool);
+                    CountAssets(selectedTemplate.GlobalBosses);
         }
 
         private int CountGenerationPasses()
@@ -4413,24 +6202,7 @@ namespace ExpandNullforge.EditorTools
 
         private int CountBiomeGenerationPasses(BiomeTemplateAsset biome)
         {
-            return biome == null ? 0 : CountAssets(biome.GetGenerationPassesWithProfile());
-        }
-
-        private int CountGenerationTables()
-        {
-            int count = selectedTemplate == null ? 0 : CountAssets(selectedTemplate.GlobalGenerationTables);
-            BiomeTemplateAsset[] biomes = GetBiomes();
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                count += CountBiomeGenerationTables(biomes[i]);
-            }
-
-            return count;
-        }
-
-        private int CountBiomeGenerationTables(BiomeTemplateAsset biome)
-        {
-            return biome == null ? 0 : CountAssets(biome.GetGenerationTablesWithProfile());
+            return biome == null ? 0 : CountAssets(biome.GenerationPasses);
         }
 
         private int CountBiomeTerrainIds()
@@ -4445,10 +6217,9 @@ namespace ExpandNullforge.EditorTools
                     continue;
                 }
 
-                count += biome.GetFloorObjectIdsWithPresets().Length;
-                count += biome.GetWallObjectIdsWithPresets().Length;
-                count += biome.GetOreObjectIdsWithPresets().Length;
-                count += biome.GetWaterObjectIdsWithPresets().Length;
+                count += biome.FloorObjectIds.Length;
+                count += biome.WallObjectIds.Length;
+                count += biome.OreObjectIds.Length;
             }
 
             return count;
@@ -4487,27 +6258,7 @@ namespace ExpandNullforge.EditorTools
                 SceneTemplateAsset scene = scenes[i];
                 if (scene != null)
                 {
-                    count += scene.AuthoredContentCount;
-                }
-            }
-
-            return count;
-        }
-
-        private static int CountSceneSpawnPoints(SceneTemplateAsset[] scenes)
-        {
-            if (scenes == null)
-            {
-                return 0;
-            }
-
-            int count = 0;
-            for (int i = 0; i < scenes.Length; i++)
-            {
-                SceneTemplateAsset scene = scenes[i];
-                if (scene != null)
-                {
-                    count += CountValues(scene.SpawnPoints);
+                    count += CountValues(scene.Triggers);
                 }
             }
 
@@ -5288,6 +7039,10 @@ namespace ExpandNullforge.EditorTools
                     ? viewModel.Navigation.ActiveSectionId
                     : viewModel.ActiveSectionId;
             }
+
+            // Readiness feeds the rail's ticks, so the frame is rebuilt from the same pass that
+            // recomputes it rather than waiting for the next interaction.
+            RefreshShell();
         }
 
         private bool TryUseProjectSelection()

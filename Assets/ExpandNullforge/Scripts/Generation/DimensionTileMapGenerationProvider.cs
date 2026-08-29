@@ -22,8 +22,61 @@ namespace ExpandNullforge.Generation
     /// The map comes from <see cref="DimensionTileMapRegistry"/>, populated when the dimension's
     /// content loads. A dimension with no registered map is not this provider's job.
     /// </summary>
-    public sealed class DimensionTileMapGenerationProvider : IDimensionGenerationProvider
+    public sealed class DimensionTileMapGenerationProvider :
+        IDimensionGenerationProvider,
+        IDimensionGenerationPassProvider
     {
+        /// <summary>
+        /// The pass-ladder face of the same paint. Without it, any generation plan naming a
+        /// terrain pass silently dropped this provider and ran the later passes over bare
+        /// void — a dimension that is empty except its one placed ruin, with nothing logged.
+        /// </summary>
+        /// <remarks>
+        /// A scoped step paints only its own rectangle. Both bounds are clipped together and
+        /// handed on as a pair, because the compiler maps local to world by the distance between
+        /// the two corners it is given — clipping only the local half would shift every painted
+        /// tile by the width of the clip.
+        /// </remarks>
+        public DimensionGenerationProviderResult TickGenerationPass(
+            DimensionGenerationPassContext context)
+        {
+            DimensionBounds local;
+            DimensionBounds absolute;
+            if (!TryResolvePaintBounds(context, out local, out absolute))
+            {
+                return DimensionGenerationProviderResult.Ready(
+                    "This step's rectangle does not reach the area being generated.");
+            }
+
+            return TickPaint(context.GenerationContext, local, absolute);
+        }
+
+        /// <summary>
+        /// The rectangle this step paints, in both coordinate spaces, or false when the step
+        /// reaches none of the area being generated.
+        /// </summary>
+        /// <remarks>
+        /// The pair travels together because the compiler maps local to world by the distance
+        /// between the two corners it is handed — clipping only the local half would shift every
+        /// painted tile by the width of the clip.
+        /// </remarks>
+        internal static bool TryResolvePaintBounds(
+            DimensionGenerationPassContext context,
+            out DimensionBounds localBounds,
+            out DimensionBounds absoluteBounds)
+        {
+            localBounds = DimensionGenerationPassBounds.Resolve(context);
+            if (!DimensionGenerationPassBounds.HasArea(localBounds))
+            {
+                absoluteBounds = default(DimensionBounds);
+                return false;
+            }
+
+            absoluteBounds =
+                DimensionGenerationPassBounds.ToAbsolute(context.GenerationContext.Area, localBounds);
+            return true;
+        }
+
         private const int MaxTilesPerTick = 384;
         private const int ReadyDelayFrames = 2;
 
@@ -49,6 +102,15 @@ namespace ExpandNullforge.Generation
 
         public DimensionGenerationProviderResult TickGeneration(DimensionGenerationContext context)
         {
+            // Single-provider mode: the whole area, which is what an unscoped step resolves to.
+            return TickPaint(context, context.Area.LocalBounds, context.Area.AbsoluteBounds);
+        }
+
+        private DimensionGenerationProviderResult TickPaint(
+            DimensionGenerationContext context,
+            DimensionBounds localBounds,
+            DimensionBounds absoluteBounds)
+        {
             if (context.ServerWorld == null || !context.ServerWorld.IsCreated)
             {
                 return DimensionGenerationProviderResult.Failed(
@@ -62,26 +124,43 @@ namespace ExpandNullforge.Generation
                     "No tile map is registered for dimension '" + context.Dimension.Id + "'.");
             }
 
-            string key = BuildKey(context.Dimension.Id, context.Area.LocalBounds);
+            // The painted rectangle is the key, not the area's: two steps scoped to different
+            // halves of one area are two jobs.
+            string key = BuildKey(context.Dimension.Id, localBounds);
 
             if (!jobs.TryGetValue(key, out PaintJob job))
             {
                 DimensionTileMapCompileResult compiled = DimensionTileMapCompiler.Compile(
                     map.EnumeratePlacements(),
-                    context.Area.LocalBounds,
-                    context.Area.AbsoluteBounds);
+                    localBounds,
+                    absoluteBounds);
 
                 for (int i = 0; i < compiled.Skipped.Count; i++)
                 {
-                    DimensionFrameworkLog.Warning("[ExpandNullforge] " + compiled.Skipped[i]);
+                    DimensionFrameworkLog.Warning(compiled.Skipped[i]);
                 }
 
                 if (compiled.WriteCount == 0)
                 {
-                    // Nothing to write for this area (all outside it, or all unresolved). Done.
+                    // Nothing painted inside this rectangle (all outside it, or all unresolved).
                     return DimensionGenerationProviderResult.Ready(
                         "No tiles to generate for this area.");
                 }
+
+                AppendScatteredOverlays(context.Dimension.Id, compiled.Writes);
+
+                // Veins after decoration and after the full base list exists: the append rides
+                // the same in-order paint, so every vein cell's wall is queued before its ore —
+                // the order the game's server demands, on pain of minted loose ore items.
+                Unity.Mathematics.int2 localShift = context.Area.LocalBounds.Min - context.Area.AbsoluteBounds.Min;
+                string veinDimensionId = context.Dimension.Id;
+                DimensionOreVeinScatter.AppendVeins(
+                    veinDimensionId,
+                    compiled.Writes,
+                    (absolutePosition, oreItemId) => DimensionOreBiomeGate.Allows(
+                        veinDimensionId,
+                        absolutePosition + localShift,
+                        oreItemId));
 
                 job = new PaintJob(compiled.Writes);
                 jobs[key] = job;
@@ -195,6 +274,83 @@ namespace ExpandNullforge.Generation
             return (dimensionId ?? string.Empty) +
                    "|" + bounds.Min.x + "," + bounds.Min.y +
                    "|" + bounds.MaxExclusive.x + "," + bounds.MaxExclusive.y;
+        }
+
+        /// <summary>
+        /// Grows each painted ground tile's own decoration on top of it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Runs once, on the compiled write list, before any painting starts. Doing it here rather
+        /// than inside the paint loop means the throttling, the progress figure and the settle delay
+        /// all account for the overlays without knowing they exist.
+        /// </para>
+        /// <para>
+        /// Only ground is decorated. Grass on a wall would be nonsense, and the overlay layers are
+        /// ground-family in the engine anyway — writing one over a wall produces a tile the renderer
+        /// has nowhere to draw. A painted cell can carry a ground AND a wall, and the wall is
+        /// written earlier in this same list, so testing the write's own type is not enough: the
+        /// cells that took a wall anywhere in this compile are collected first and skipped.
+        /// </para>
+        /// <para>
+        /// The scatter is seeded from the DIMENSION, not the save. An authored dimension's decoration
+        /// is part of its design — the author who paints a mossy cavern should get the same cavern in
+        /// every world, and every player in a multiplayer world must see the same one.
+        /// </para>
+        /// </remarks>
+        /// <remarks>
+        /// Internal rather than private so a test can drive the rule that a cell carrying a wall
+        /// grows nothing, instead of grepping for the call.
+        /// </remarks>
+        internal static void AppendScatteredOverlays(string dimensionId, List<DimensionResolvedTileWrite> writes)
+        {
+            if (!DimensionOverlayRuleRegistry.Any || writes == null || writes.Count == 0)
+            {
+                return;
+            }
+
+            ulong seed = DimensionOverlayScatter.Hash(
+                0UL, default, DimensionOverlayScatter.StableHash(dimensionId));
+
+            // Snapshot the count: the loop appends to the same list, and re-reading Count would walk
+            // over the overlays it just added and decorate the decoration.
+            int groundCount = writes.Count;
+
+            HashSet<Unity.Mathematics.int2> walled = new HashSet<Unity.Mathematics.int2>();
+            for (int i = 0; i < groundCount; i++)
+            {
+                if (writes[i].TileType == TileType.wall)
+                {
+                    walled.Add(writes[i].AbsolutePosition);
+                }
+            }
+
+            List<DimensionOverlayRule> chosen = new List<DimensionOverlayRule>();
+
+            for (int i = 0; i < groundCount; i++)
+            {
+                DimensionResolvedTileWrite write = writes[i];
+                if (write.TileType != TileType.ground || walled.Contains(write.AbsolutePosition))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<DimensionOverlayRule> rules = DimensionOverlayRuleRegistry.For(write.Tileset);
+                if (rules.Count == 0)
+                {
+                    continue;
+                }
+
+                chosen.Clear();
+                DimensionOverlayScatter.Collect(seed, write.AbsolutePosition, rules, chosen);
+                for (int r = 0; r < chosen.Count; r++)
+                {
+                    writes.Add(new DimensionResolvedTileWrite(
+                        write.AbsolutePosition,
+                        chosen[r].TileType,
+                        write.Tileset));
+                }
+            }
         }
 
         private sealed class PaintJob

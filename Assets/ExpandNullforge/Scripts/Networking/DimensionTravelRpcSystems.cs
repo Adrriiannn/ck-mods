@@ -6,6 +6,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.NetCode;
 using UnityEngine;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Networking
 {
@@ -176,7 +177,7 @@ namespace ExpandNullforge.Networking
       if (DimensionFrameworkLog.VerboseRuntimeLogging)
       {
         DimensionFrameworkLog.Verbose(
-            "[ExpandNullforge] Received dimension portal travel RPC. requestId=" +
+            "Received dimension portal travel RPC. requestId=" +
             rpc.RequestId +
             " portalId=" +
             portalId);
@@ -185,8 +186,8 @@ namespace ExpandNullforge.Networking
       Entity player;
       if (!TryResolvePlayerEntity(sourceConnection, out player))
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Portal travel RPC rejected: player entity could not be resolved. requestId=" +
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, 
+            "Portal travel RPC rejected: player entity could not be resolved. requestId=" +
             rpc.RequestId);
         SendResult(
             sourceConnection,
@@ -199,8 +200,8 @@ namespace ExpandNullforge.Networking
 
       if (string.IsNullOrEmpty(portalId))
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Portal travel RPC rejected: portal id empty. requestId=" +
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, 
+            "Portal travel RPC rejected: portal id empty. requestId=" +
             rpc.RequestId);
         SendResult(
             sourceConnection,
@@ -214,8 +215,8 @@ namespace ExpandNullforge.Networking
       Entity portalEntity;
       if (!TryFindPortalEntity(portalId, out portalEntity))
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Portal travel RPC rejected: no placed portal entity found. requestId=" +
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, 
+            "Portal travel RPC rejected: no placed portal entity found. requestId=" +
             rpc.RequestId +
             " portalId=" +
             portalId);
@@ -241,8 +242,8 @@ namespace ExpandNullforge.Networking
               : reason,
           out queuedRequestId))
       {
-        Debug.LogWarning(
-            "[ExpandNullforge] Portal travel RPC rejected: activation queue failed. requestId=" +
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, 
+            "Portal travel RPC rejected: activation queue failed. requestId=" +
             rpc.RequestId +
             " portalId=" +
             portalId);
@@ -258,7 +259,7 @@ namespace ExpandNullforge.Networking
       if (DimensionFrameworkLog.VerboseRuntimeLogging)
       {
         DimensionFrameworkLog.Verbose(
-            "[ExpandNullforge] Queued dimension portal activation from portal RPC. requestId=" +
+            "Queued dimension portal activation from portal RPC. requestId=" +
             rpc.RequestId +
             " queuedRequestId=" +
             queuedRequestId +
@@ -365,7 +366,7 @@ namespace ExpandNullforge.Networking
           portalQuery.ToEntityArray(Allocator.Temp);
       using NativeArray<DimensionPortalCD> portals =
           portalQuery.ToComponentDataArray<DimensionPortalCD>(Allocator.Temp);
-      FixedString64Bytes portalIdFixed = ToFixed64(portalId);
+      FixedString64Bytes portalIdFixed = DimensionFixedStrings.ToFixed64(portalId);
 
       for (int i = 0; i < portals.Length; i++)
       {
@@ -395,7 +396,7 @@ namespace ExpandNullforge.Networking
     {
       if (targetConnection == Entity.Null)
       {
-        Debug.LogWarning("[ExpandNullforge] Could not send dimension travel result because the target connection is null.");
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, "Could not send dimension travel result because the target connection is null.");
         return;
       }
 
@@ -405,11 +406,11 @@ namespace ExpandNullforge.Networking
         RequestId = requestId,
         Accepted = result.Accepted ? (byte)1 : (byte)0,
         Final = isFinal ? (byte)1 : (byte)0,
-        Code = ToFixed64(result.Code),
-        Message = ToFixed128(result.Message),
-        TravelId = ToFixed64(result.TravelId),
-        LoadTicketId = ToFixed64(result.LoadTicketId),
-        TargetDimensionId = ToFixed64(result.TargetDimensionId),
+        Code = DimensionFixedStrings.ToFixed64(result.Code),
+        Message = DimensionFixedStrings.ToFixed128(result.Message),
+        TravelId = DimensionFixedStrings.ToFixed64(result.TravelId),
+        LoadTicketId = DimensionFixedStrings.ToFixed64(result.LoadTicketId),
+        TargetDimensionId = DimensionFixedStrings.ToFixed64(result.TargetDimensionId),
         TargetLocalX = result.TargetLocalPosition.x,
         TargetLocalY = result.TargetLocalPosition.y,
         TargetAbsoluteX = result.TargetAbsolutePosition.x,
@@ -431,7 +432,7 @@ namespace ExpandNullforge.Networking
     {
       if (targetConnection == Entity.Null)
       {
-        Debug.LogWarning("[ExpandNullforge] Could not send dimension travel cancel result because the target connection is null.");
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, "Could not send dimension travel cancel result because the target connection is null.");
         return;
       }
 
@@ -440,9 +441,9 @@ namespace ExpandNullforge.Networking
       {
         RequestId = requestId,
         Accepted = accepted ? (byte)1 : (byte)0,
-        Code = ToFixed64(code),
-        Message = ToFixed128(message),
-        TravelId = ToFixed64(travelId)
+        Code = DimensionFixedStrings.ToFixed64(code),
+        Message = DimensionFixedStrings.ToFixed128(message),
+        TravelId = DimensionFixedStrings.ToFixed64(travelId)
       });
       EntityManager.SetComponentData(entity, new SendRpcCommandRequest
       {
@@ -463,45 +464,6 @@ namespace ExpandNullforge.Networking
       }
     }
 
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
-
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 
   [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]

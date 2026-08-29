@@ -1144,16 +1144,6 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        public static bool IsDirectOverride(
-            SerializedProperty reference,
-            DimensionPortalVisualProfileAsset profile,
-            DimensionPortalArtworkLayer layer)
-        {
-            DimensionPortalArtworkReferenceKind kind =
-                ClassifyReference(reference, profile, layer, out _);
-            return kind == DimensionPortalArtworkReferenceKind.External;
-        }
-
         public static bool IsFrameworkReference(
             DataBlockRef<SpriteAsset> reference,
             DimensionPortalArtworkLayer layer)
@@ -1806,22 +1796,6 @@ namespace ExpandNullforge.EditorTools
             return CreateOrUpdateManagedArtwork(template, profile, layer, out message, true);
         }
 
-        public static bool CreateOrUpdateFrameTextures(
-            DimensionTemplateAsset template,
-            DimensionPortalVisualProfileAsset profile,
-            Texture2D frameTexture,
-            Texture2D emissiveTexture,
-            out string message)
-        {
-            return CreateOrUpdateLayerTextures(
-                template,
-                profile,
-                DimensionPortalArtworkLayer.Frame,
-                new[] { frameTexture },
-                new[] { emissiveTexture },
-                out message);
-        }
-
         private static void InstallUpdateHook()
         {
             if (updateHookInstalled)
@@ -2075,16 +2049,16 @@ namespace ExpandNullforge.EditorTools
                         profile,
                         profileGuid,
                         descriptor);
-                    EnsureFolder(folder);
-                    string baseName = SanitizeFileName(profile.name) + "_" + descriptor.DisplayName;
+                    DimensionAssetFolders.Ensure(folder);
+                    string baseName = DimensionGeneratedPrefabUtility.SanitizeAuthoredName(profile.name, "PortalVisualProfile") + "_" + descriptor.DisplayName;
                     managedPath = AssetDatabase.GenerateUniqueAssetPath(
                         folder + "/" + baseName + ".asset");
                     managed = UnityEngine.Object.Instantiate(source);
                     managed.name = Path.GetFileNameWithoutExtension(managedPath);
                     SetSpriteAssetAddress(
                         managed,
-                        ComputeStableAddressPart(managedPath, 0x706F7274616C6172UL),
-                        ComputeStableAddressPart(managedPath, 0x7469737472796170UL));
+                        DimensionSpriteAssetAddress.Part(managedPath, 0x706F7274616C6172UL),
+                        DimensionSpriteAssetAddress.Part(managedPath, 0x7469737472796170UL));
                     AssetDatabase.CreateAsset(managed, managedPath);
                     managedWasCreated = true;
                 }
@@ -2097,8 +2071,8 @@ namespace ExpandNullforge.EditorTools
                 ReadSpriteAssetAddress(managed, out long addressLow, out long addressHigh);
                 if (addressLow == 0L && addressHigh == 0L)
                 {
-                    addressLow = ComputeStableAddressPart(managedPath, 0x706F7274616C6172UL);
-                    addressHigh = ComputeStableAddressPart(managedPath, 0x7469737472796170UL);
+                    addressLow = DimensionSpriteAssetAddress.Part(managedPath, 0x706F7274616C6172UL);
+                    addressHigh = DimensionSpriteAssetAddress.Part(managedPath, 0x7469737472796170UL);
                 }
 
                 // Build the replacement SpriteAsset away from the live authored object.
@@ -4115,23 +4089,6 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static void EnsureFolder(string folder)
-        {
-            string normalized = NormalizeAssetPath(folder);
-            string[] parts = normalized.Split('/');
-            string current = parts.Length > 0 ? parts[0] : string.Empty;
-            for (int i = 1; i < parts.Length; i++)
-            {
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    AssetDatabase.CreateFolder(current, parts[i]);
-                }
-
-                current = next;
-            }
-        }
-
         internal static string AssetPathToAbsolutePath(string assetPath)
         {
             string normalized = NormalizeAssetPath(assetPath);
@@ -4171,36 +4128,6 @@ namespace ExpandNullforge.EditorTools
                     normalizedAsset.StartsWith(
                         normalizedFolder + "/",
                         StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static string SanitizeFileName(string value)
-        {
-            string source = string.IsNullOrEmpty(value) ? "PortalVisualProfile" : value;
-            char[] invalid = Path.GetInvalidFileNameChars();
-            for (int i = 0; i < invalid.Length; i++)
-            {
-                source = source.Replace(invalid[i], '_');
-            }
-
-            return source.Replace('/', '_').Replace('\\', '_').Trim();
-        }
-
-        private static long ComputeStableAddressPart(string value, ulong salt)
-        {
-            unchecked
-            {
-                const ulong offsetBasis = 14695981039346656037UL;
-                const ulong prime = 1099511628211UL;
-                ulong hash = offsetBasis ^ salt;
-                string source = value ?? string.Empty;
-                for (int i = 0; i < source.Length; i++)
-                {
-                    hash ^= source[i];
-                    hash *= prime;
-                }
-
-                return (long)(hash == 0UL ? salt | 1UL : hash);
-            }
         }
 
         private static LayerDescriptor GetDescriptor(DimensionPortalArtworkLayer layer)
@@ -4538,7 +4465,7 @@ namespace ExpandNullforge.EditorTools
                     false);
             try
             {
-                string fileStem = SanitizeFileName(managed.name) + "_Editable_Anim0";
+                string fileStem = DimensionGeneratedPrefabUtility.SanitizeAuthoredName(managed.name, "Portal") + "_Editable_Anim0";
                 if (!TryMaterializeSelectedTexture(
                         colorSource,
                         current.ColorTexture,
@@ -5891,7 +5818,7 @@ namespace ExpandNullforge.EditorTools
                 : DimensionPortalArtworkEditorUtility.InstantiateSnapshot(manifest);
             try
             {
-                string assetStem = SanitizeFileName(target.name) + "_Swirls";
+                string assetStem = DimensionGeneratedPrefabUtility.SanitizeAuthoredName(target.name, "Portal") + "_Swirls";
                 string destinationPath = AssetDatabase.GenerateUniqueAssetPath(
                     destinationFolder + "/" + assetStem + ".asset");
                 SpriteAsset clone = UnityEngine.Object.Instantiate(sourceAsset);
@@ -6230,10 +6157,10 @@ namespace ExpandNullforge.EditorTools
                     "The Swirls SpriteAsset address could not be assigned.");
             }
 
-            low.longValue = ComputeStableAddressPart(
+            low.longValue = DimensionSpriteAssetAddress.Part(
                 assetPath,
                 0x737769726C617274UL);
-            high.longValue = ComputeStableAddressPart(
+            high.longValue = DimensionSpriteAssetAddress.Part(
                 assetPath,
                 0x706F7274616C7377UL);
             serialized.ApplyModifiedPropertiesWithoutUndo();
@@ -6319,24 +6246,6 @@ namespace ExpandNullforge.EditorTools
             AssetDatabase.SaveAssetIfDirty(current);
         }
 
-        private static long ComputeStableAddressPart(string value, ulong salt)
-        {
-            unchecked
-            {
-                const ulong offsetBasis = 14695981039346656037UL;
-                const ulong prime = 1099511628211UL;
-                ulong hash = offsetBasis ^ salt;
-                string source = value ?? string.Empty;
-                for (int i = 0; i < source.Length; i++)
-                {
-                    hash ^= source[i];
-                    hash *= prime;
-                }
-
-                return (long)(hash == 0UL ? salt | 1UL : hash);
-            }
-        }
-
         private static bool AssetPathIsWithin(string assetPath, string folder)
         {
             string normalizedAsset = NormalizeAssetPath(assetPath);
@@ -6357,16 +6266,5 @@ namespace ExpandNullforge.EditorTools
             return string.IsNullOrEmpty(path) ? string.Empty : path.Replace('\\', '/');
         }
 
-        private static string SanitizeFileName(string value)
-        {
-            string source = string.IsNullOrEmpty(value) ? "Portal" : value;
-            char[] invalid = Path.GetInvalidFileNameChars();
-            for (int i = 0; i < invalid.Length; i++)
-            {
-                source = source.Replace(invalid[i], '_');
-            }
-
-            return source.Replace('/', '_').Replace('\\', '_').Trim();
-        }
     }
 }

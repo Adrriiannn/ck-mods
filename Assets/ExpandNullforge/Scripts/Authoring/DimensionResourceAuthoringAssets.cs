@@ -9,17 +9,23 @@ namespace ExpandNullforge.Authoring
     // filename, and the mismatch silently severed every dashboard-created asset's script on
     // the next domain reload. Only plain serializable templates and enums may stay here.
 
+    /// <summary>
+    /// Which of the framework's three item shapes an item is, as the generator branches on it.
+    /// </summary>
+    /// <remarks>
+    /// Not a creator's choice — the button that makes the item sets it. Only these three values
+    /// have ever changed what is generated: an ordinary item, a tileset's block, and a portal item
+    /// (which is forced to Rare so it reads as the special tool it is). The list used to also offer
+    /// CraftableItem, Ore, Bar, Liquid, Fish and Custom; nothing anywhere read them, and each named
+    /// something a working surface already decides — a tileset says which item is its ore, cooking
+    /// says which item can be caught. The numbers are left where they were so an item saved with one
+    /// of the removed values reads as an ordinary item rather than as a block.
+    /// </remarks>
     public enum DimensionItemKind
     {
         BaseItem = 0,
-        CraftableItem = 1,
-        Ore = 2,
-        Bar = 3,
         Block = 4,
-        Liquid = 5,
-        Fish = 6,
-        PortalItem = 7,
-        Custom = 100
+        PortalItem = 7
     }
 
     [Serializable]
@@ -52,8 +58,19 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private string displayName = string.Empty;
         [SerializeField] private int minAmount = 1;
         [SerializeField] private int maxAmount = 1;
+        [Tooltip("How often this drops, from 0 to 1. 1 means it always drops; 0.05 means one kill " +
+                 "in twenty. Each row takes its own chance, so several rows can all drop at once.")]
+        [Range(0f, 1f)]
         [SerializeField] private float dropChance = 1f;
+
+        // NO LONGER READ, AND NO LONGER DRAWN. The chance above is what decides the odds now, and
+        // the table is built so that it is true — which leaves a share nothing to divide. It stays
+        // serialized so that a table authored before this keeps loading rather than erroring, and
+        // it is hidden rather than deleted so nobody types a number into a control that reaches
+        // nothing. A row that still carries one is said out loud at generate time.
+        [HideInInspector]
         [SerializeField] private int weight = 1;
+
         [SerializeField] private bool enabled = true;
 
         public string ItemId

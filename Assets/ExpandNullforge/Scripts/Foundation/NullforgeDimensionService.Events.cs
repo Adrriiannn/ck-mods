@@ -92,46 +92,6 @@ namespace ExpandNullforge.Foundation
       }
     }
 
-    private void RaiseGenerationTableChanged(
-        DimensionGenerationTableDefinition table,
-        DimensionGenerationTableChangeKind changeKind,
-        bool previousEnabled,
-        bool currentEnabled,
-        string reason)
-    {
-      Action<DimensionGenerationTableChangedEvent> handler = GenerationTableChanged;
-      if (handler != null)
-      {
-        handler(
-            new DimensionGenerationTableChangedEvent(
-                table,
-                changeKind,
-                previousEnabled,
-                currentEnabled,
-                reason ?? string.Empty));
-      }
-    }
-
-    private void RaiseGenerationTableEntryChanged(
-        DimensionGenerationTableEntryDefinition entry,
-        DimensionGenerationTableChangeKind changeKind,
-        bool previousEnabled,
-        bool currentEnabled,
-        string reason)
-    {
-      Action<DimensionGenerationTableEntryChangedEvent> handler = GenerationTableEntryChanged;
-      if (handler != null)
-      {
-        handler(
-            new DimensionGenerationTableEntryChangedEvent(
-                entry,
-                changeKind,
-                previousEnabled,
-                currentEnabled,
-                reason ?? string.Empty));
-      }
-    }
-
     private void RaisePlayerVisitChanged(
         DimensionPlayerVisitRecord previousVisit,
         DimensionPlayerVisitRecord currentVisit,
@@ -302,26 +262,6 @@ namespace ExpandNullforge.Foundation
       }
     }
 
-    private void RaiseEnvironmentProfileChanged(
-        DimensionEnvironmentProfile profile,
-        DimensionEnvironmentProfileChangeKind changeKind,
-        bool previousEnabled,
-        bool currentEnabled,
-        string reason)
-    {
-      Action<DimensionEnvironmentProfileChangedEvent> handler = EnvironmentProfileChanged;
-      if (handler != null)
-      {
-        handler(
-            new DimensionEnvironmentProfileChangedEvent(
-                profile,
-                changeKind,
-                previousEnabled,
-                currentEnabled,
-                reason ?? string.Empty));
-      }
-    }
-
     private void RaiseSceneChanged(
         DimensionSceneDefinition scene,
         DimensionSceneChangeKind changeKind,
@@ -375,46 +315,6 @@ namespace ExpandNullforge.Foundation
         handler(
             new DimensionEncounterChangedEvent(
                 encounter,
-                changeKind,
-                previousEnabled,
-                currentEnabled,
-                reason ?? string.Empty));
-      }
-    }
-
-    private void RaiseSpawnRuleChanged(
-        DimensionSpawnRule rule,
-        DimensionSpawnRuleChangeKind changeKind,
-        bool previousEnabled,
-        bool currentEnabled,
-        string reason)
-    {
-      Action<DimensionSpawnRuleChangedEvent> handler = SpawnRuleChanged;
-      if (handler != null)
-      {
-        handler(
-            new DimensionSpawnRuleChangedEvent(
-                rule,
-                changeKind,
-                previousEnabled,
-                currentEnabled,
-                reason ?? string.Empty));
-      }
-    }
-
-    private void RaiseResourceNodeChanged(
-        DimensionResourceNodeDefinition node,
-        DimensionResourceNodeChangeKind changeKind,
-        bool previousEnabled,
-        bool currentEnabled,
-        string reason)
-    {
-      Action<DimensionResourceNodeChangedEvent> handler = ResourceNodeChanged;
-      if (handler != null)
-      {
-        handler(
-            new DimensionResourceNodeChangedEvent(
-                node,
                 changeKind,
                 previousEnabled,
                 currentEnabled,

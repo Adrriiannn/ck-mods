@@ -55,7 +55,7 @@ namespace ExpandNullforge.EditorTools
                 return Failure("The save root must be inside Assets. Current root: " + rootFolder);
             }
 
-            if (!EnsureFolder(rootFolder))
+            if (!DimensionAssetFolders.EnsureExists(rootFolder))
             {
                 return Failure("Could not create save root folder: " + rootFolder);
             }
@@ -69,7 +69,7 @@ namespace ExpandNullforge.EditorTools
             for (int i = 0; i < requiredFolders.Count; i++)
             {
                 string requiredFolder = requiredFolders[i];
-                if (!EnsureFolder(requiredFolder))
+                if (!DimensionAssetFolders.EnsureExists(requiredFolder))
                 {
                     return Failure("Dimension folder could not be created: " + requiredFolder);
                 }
@@ -305,59 +305,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             folders.Add(normalized);
-        }
-
-        private static bool EnsureFolder(string folder)
-        {
-            string normalized = NormalizeAssetPath(folder);
-            if (!IsAssetFolderPath(normalized))
-            {
-                return false;
-            }
-
-            if (AssetDatabase.IsValidFolder(normalized))
-            {
-                return true;
-            }
-
-            string[] parts = normalized.Split('/');
-            string current = "Assets";
-            for (int i = 1; i < parts.Length; i++)
-            {
-                if (string.IsNullOrEmpty(parts[i]))
-                {
-                    continue;
-                }
-
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    string guid = AssetDatabase.CreateFolder(current, parts[i]);
-                    string createdPath = string.IsNullOrEmpty(guid)
-                        ? string.Empty
-                        : NormalizeAssetPath(AssetDatabase.GUIDToAssetPath(guid));
-
-                    if (!string.IsNullOrEmpty(createdPath) && createdPath != next)
-                    {
-                        AssetDatabase.DeleteAsset(createdPath);
-                        return false;
-                    }
-
-                    if (!AssetDatabase.IsValidFolder(next))
-                    {
-                        AssetDatabase.Refresh();
-                    }
-
-                    if (!AssetDatabase.IsValidFolder(next))
-                    {
-                        return false;
-                    }
-                }
-
-                current = next;
-            }
-
-            return AssetDatabase.IsValidFolder(normalized);
         }
 
         private static string NormalizeAssetPath(string path)

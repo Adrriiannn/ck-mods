@@ -1825,7 +1825,7 @@ namespace ExpandNullforge.EditorTools
             SerializedObject serialized = new SerializedObject(profile);
             serialized.Update();
             SerializedProperty reference = serialized.FindProperty(
-                GetReferencePropertyName(layer));
+                DimensionPortalPackageEditorUtility.GetReferencePropertyName(layer));
             Assert.That(reference, Is.Not.Null);
             if (asset == null)
             {
@@ -1850,7 +1850,7 @@ namespace ExpandNullforge.EditorTools
             SerializedObject serialized = new SerializedObject(profile);
             serialized.Update();
             DimensionPortalArtworkEditorUtility.ClassifyReference(
-                serialized.FindProperty(GetReferencePropertyName(layer)),
+                serialized.FindProperty(DimensionPortalPackageEditorUtility.GetReferencePropertyName(layer)),
                 profile,
                 layer,
                 out SpriteAsset asset);
@@ -1867,28 +1867,11 @@ namespace ExpandNullforge.EditorTools
             serialized.Update();
             DimensionPortalArtworkReferenceKind actual =
                 DimensionPortalArtworkEditorUtility.ClassifyReference(
-                    serialized.FindProperty(GetReferencePropertyName(layer)),
+                    serialized.FindProperty(DimensionPortalPackageEditorUtility.GetReferencePropertyName(layer)),
                     profile,
                     layer,
                     out asset);
             Assert.That(actual, Is.EqualTo(expected), layer.ToString());
-        }
-
-        private static string GetReferencePropertyName(DimensionPortalArtworkLayer layer)
-        {
-            switch (layer)
-            {
-                case DimensionPortalArtworkLayer.Frame:
-                    return "portalFrameSpriteAsset";
-                case DimensionPortalArtworkLayer.ChargeSweep:
-                    return "chargeWaveSpriteAsset";
-                case DimensionPortalArtworkLayer.Milestones:
-                    return "milestoneSpriteAsset";
-                case DimensionPortalArtworkLayer.Center:
-                    return "centerEffectSpriteAsset";
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(layer), layer, null);
-            }
         }
 
         /// <summary>
@@ -2212,21 +2195,10 @@ namespace ExpandNullforge.EditorTools
                 source.a > 0.5f ? source.a - 0.45f : source.a + 0.45f);
         }
 
+        /// <summary>Makes the fixture folder exist, the same way production does.</summary>
         private static void EnsureFolder(string folder)
         {
-            string normalized = NormalizePath(folder);
-            string[] parts = normalized.Split('/');
-            string current = parts[0];
-            for (int i = 1; i < parts.Length; i++)
-            {
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    AssetDatabase.CreateFolder(current, parts[i]);
-                }
-
-                current = next;
-            }
+            DimensionAssetFolders.Ensure(folder);
         }
 
         private static string NormalizePath(string path)

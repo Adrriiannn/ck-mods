@@ -1,0 +1,860 @@
+using System.Collections.Generic;
+using ExpandNullforge.Authoring;
+using UnityEditor;
+using UnityEditor.Events;
+using UnityEngine;
+using UnityEngine.Events;
+
+namespace ExpandNullforge.EditorTools
+{
+    /// <summary>
+    /// Builds the second prefab — the one a player actually walks up to — and wires the use to it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A THING IN CORE KEEPER IS TWO PREFABS. The entity prefab is the data the simulation runs on;
+    /// the graphical prefab is what stands in the world, and the interaction lives there. An author
+    /// answers one question — "what does using it do?" — and this is the only place that knows the
+    /// answer means a second prefab with an <c>InteractableObject</c> on a child, a behaviour
+    /// component beside it, two <c>UnityEvent</c> listeners wired between them, and
+    /// <c>LocalInteractableAuthoring</c> back on the entity so the converter notices any of it.
+    /// </para>
+    /// <para>
+    /// THE CONVERTER FAILS LOUDLY AND UNHELPFULLY IF THE WIRING IS MISSING.
+    /// <c>LocalInteractableConverter</c> reads the graphical prefab's first
+    /// <c>InteractableObject</c>, counts persistent listeners on its two event lists, and logs
+    /// "No local interaction events registered on entity" when it finds none. That error is the
+    /// symptom of a half-built object, so this never adds the authoring component without also
+    /// wiring at least one listener.
+    /// </para>
+    /// <para>
+    /// THE LISTENERS ARE PERSISTENT, NOT RUNTIME. A listener added with <c>+=</c> lives only as long
+    /// as the object does and is not saved; <c>UnityEventTools.AddPersistentListener</c> writes it
+    /// into the prefab, which is what the converter reads at bake time. This is the same wiring the
+    /// portal pipeline uses.
+    /// </para>
+    /// </remarks>
+    internal static class DimensionInteractionVisualUtility
+    {
+        /// <summary>The name given to the child that carries the interaction.</summary>
+        private const string InteractableChildName = "Interactable";
+
+        /// <summary>The suffix on the generated graphical prefab's file name.</summary>
+        private const string VisualSuffix = "Visual";
+
+        /// <summary>The name given to the child that carries the object's picture.</summary>
+        private const string BodyChildName = "Body";
+
+        /// <summary>
+        /// The name Core Keeper's own graphical prefabs give the child that flips left and right.
+        /// </summary>
+        /// <remarks>
+        /// Kept identical to vanilla — <c>Chest.prefab</c>, <c>VendingMachine.prefab</c> and
+        /// <c>SignText.prefab</c> all hang their art under a child called this — so anyone opening a
+        /// generated prefab beside a ripped one sees the same shape.
+        /// </remarks>
+        private const string ScalerChildName = "XScaler";
+
+        /// <summary>
+        /// Makes the entity match what the author asked for: builds or refreshes its graphical
+        /// prefab when it is usable, and takes the wiring off when it is not.
+        /// </summary>
+        /// <param name="root">The entity prefab being generated.</param>
+        /// <param name="interaction">What the author answered.</param>
+        /// <param name="folder">Where the entity prefab is being written.</param>
+        /// <param name="assetStem">The entity's file name without its extension.</param>
+        /// <param name="report">Somewhere to say what was quietly dropped.</param>
+        /// <param name="drawsItself">
+        /// The caller wants this object to SHOW something as well as do something. It gets a
+        /// renderer on its graphical prefab, and the prefab is written even when nothing uses the
+        /// object — a chest nobody can open still has to be visible where it stands.
+        /// </param>
+        /// <param name="ownBody">
+        /// The picture to bake, for the case where the graphical prefab is one of a kind. As soon as
+        /// anything uses the object the prefab is POOLED and shared with every other object of that
+        /// use, so the baked value is overwritten on every occupy and only the renderer itself
+        /// matters — see <see cref="ExpandNullforge.Objects.DimensionAuthoredBody"/>.
+        /// </param>
+        public static void Apply(
+            GameObject root,
+            DimensionInteractionTemplate interaction,
+            string folder,
+            string assetStem,
+            System.Action<string> report,
+            bool drawsItself = false,
+            Sprite ownBody = null)
+        {
+            if (root == null || interaction == null)
+            {
+                return;
+            }
+
+            // Ahead of every early return below: an object that shows words needs the store however
+            // the rest of this method turns out.
+            ApplyTheStoreForFloatingWords(root);
+            ApplyBeingNameable(root, interaction);
+
+            bool wantsAVisual = interaction.IsUsable || (drawsItself && ownBody != null);
+            if (!wantsAVisual)
+            {
+                DimensionObjectSpine.TryRemoveComponent<Interaction.LocalInteractableAuthoring>(root);
+
+                if (drawsItself && report != null)
+                {
+                    report(
+                        "has no picture and nothing that uses it, so nothing is drawn where it " +
+                        "stands. Give it a sprite, or set what using it does.");
+                }
+
+                return;
+            }
+
+            if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(assetStem))
+            {
+                DimensionObjectSpine.TryRemoveComponent<Interaction.LocalInteractableAuthoring>(root);
+
+                if (report != null)
+                {
+                    report(
+                        "can be used, but there is nowhere to write the prefab a player walks up " +
+                        "to, so using it would do nothing.");
+                }
+
+                return;
+            }
+
+            GameObject visual = BuildVisualPrefab(
+                interaction, folder, assetStem, report, drawsItself, ownBody);
+            if (visual == null)
+            {
+                DimensionObjectSpine.TryRemoveComponent<Interaction.LocalInteractableAuthoring>(root);
+                return;
+            }
+
+            ObjectAuthoring objectAuthoring = root.GetComponent<ObjectAuthoring>();
+            if (objectAuthoring != null)
+            {
+                objectAuthoring.graphicalPrefab = visual;
+            }
+
+            // Only when something actually uses it. LocalInteractableConverter reads the graphical
+            // prefab's first InteractableObject and logs "No local interaction events registered on
+            // entity" when it finds none, so a purely decorative body must not carry this.
+            if (interaction.IsUsable)
+            {
+                if (root.GetComponent<Interaction.LocalInteractableAuthoring>() == null)
+                {
+                    root.AddComponent<Interaction.LocalInteractableAuthoring>();
+                }
+            }
+            else
+            {
+                DimensionObjectSpine.TryRemoveComponent<Interaction.LocalInteractableAuthoring>(root);
+            }
+
+            WarnAboutABenchWithNothingToCraft(root, interaction, report);
+
+            if (report != null && interaction.IsUsable && interaction.NobodyCanEverReachIt)
+            {
+                report(
+                    "can be used from no distance at all, so no player can ever be close enough " +
+                    "to use it.");
+            }
+
+            WarnAboutANameTagInsideTheAnimal(interaction, report);
+        }
+
+        /// <summary>
+        /// Gives anything with words floating over it somewhere to keep them, and takes an empty
+        /// store away again from anything that no longer shows any.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE WORDS ARE NOT A FIELD ON THE OBJECT. They are a <c>DescriptionBuffer</c> on the
+        /// entity, put there by <c>DescriptionConverter</c> the moment it sees
+        /// <c>DescriptionAuthoring</c> — with or without any starting text. Without the buffer
+        /// <c>WorldLabel.GetName</c> returns null, the floating text never renders, and the writing
+        /// window is a box a player types into that saves nothing.
+        /// </para>
+        /// <para>
+        /// A CHEST NEEDS THIS AS MUCH AS A SIGN DOES, which is the correction here.
+        /// <c>Chest : WorldLabel</c>, and <c>Chest.Use</c> refuses to make the chest the active
+        /// world label unless the entity has the buffer, so a generated container without one had a
+        /// dead name field in its window. The previous version of this method stripped the
+        /// component off everything that was not a sign, which took it back off every container the
+        /// spine had just given one to.
+        /// </para>
+        /// <para>
+        /// NOTHING IS REMOVED HERE ANY MORE, and the reason the removal was narrowed rather than
+        /// dropped was wrong. It used to take the component off whenever words did not float above
+        /// the object and <c>initialText</c> was empty, on the argument that
+        /// <c>DimensionObjectSpine.ApplyFacingAndText</c> had already written the author's own text
+        /// — but the container and workbench generators never call <c>ApplyFacingAndText</c> at
+        /// all. Their store comes from <c>DimensionObjectSpine.ApplyPlacedObject</c>, which gives
+        /// one to every placed object because that is what vanilla chests carry, and which runs
+        /// before this. So a container whose interaction was left at the default had the store
+        /// stripped one pass after it was given, and — per this file's own reading of
+        /// <c>Chest.Use</c> — its rename box saved nothing.
+        /// </para>
+        /// <para>
+        /// Every generator that reaches this method puts its object through
+        /// <c>ApplyPlacedObject</c> first (containers, workbenches, world objects), so a removal
+        /// here could only ever undo that pass. An empty store costs a player nothing: it is an
+        /// empty <c>DescriptionBuffer</c>, which is exactly what a vanilla placed object has.
+        /// </para>
+        /// </remarks>
+        private static void ApplyTheStoreForFloatingWords(GameObject root)
+        {
+            if (root.GetComponent<DescriptionAuthoring>() == null)
+            {
+                root.AddComponent<DescriptionAuthoring>();
+            }
+        }
+
+        /// <summary>
+        /// Lets an animal be given a name, because the window that tends it always offers to.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// NOT COSMETIC, AND NOT OPTIONAL. <c>CattleUI.SetName</c> sends the name straight to the
+        /// server with no check that the animal can hold one, and the server answers with
+        /// <c>EntityUtility.GetComponentData&lt;NameCD&gt;</c>
+        /// (<c>PlayerCommand/ServerSystem.cs:482</c>), which THROWS when the component is absent. So
+        /// a generated animal without <c>NameAuthoring</c> is not an animal with a greyed-out name
+        /// box; it is an animal that throws on the server the first time somebody names it.
+        /// </para>
+        /// <para>
+        /// <c>NameAuthoring</c> is an empty marker class whose converter does nothing but
+        /// <c>EnsureHasComponent&lt;NameCD&gt;</c>, so adding it costs one component and no
+        /// decisions. The name tag above the animal reads the same <c>NameCD</c>, which is why this
+        /// belongs beside the tag rather than in the object-roles panel: the roles panel's
+        /// "can be named" tick is a choice, and this is a requirement of the use.
+        /// </para>
+        /// </remarks>
+        private static void ApplyBeingNameable(
+            GameObject root,
+            DimensionInteractionTemplate interaction)
+        {
+            if (!interaction.ItCarriesANameTag)
+            {
+                return;
+            }
+
+            if (root.GetComponent<NameAuthoring>() == null)
+            {
+                root.AddComponent<NameAuthoring>();
+            }
+        }
+
+        /// <summary>
+        /// Says so when an object is set to open a crafting window it has no recipes for.
+        /// </summary>
+        /// <remarks>
+        /// This is the one warning in this file that survives the framework views, and it is not
+        /// about art. <c>CraftingHandler</c>'s constructor reads <c>CraftingCD</c> off the entity
+        /// with <c>EntityUtility.GetComponentData</c>, which throws when the component is absent, and
+        /// <c>CraftingBuilding.OnOccupied</c> builds that handler the moment the object is drawn. So
+        /// an object that answers "opens a crafting bench" without carrying <c>CraftingAuthoring</c>
+        /// does not open an empty window — it never appears at all. Only the Workbench asset writes
+        /// that component, which is why the fix names it.
+        /// </remarks>
+        private static void WarnAboutABenchWithNothingToCraft(
+            GameObject root,
+            DimensionInteractionTemplate interaction,
+            System.Action<string> report)
+        {
+            if (report == null ||
+                interaction.WhatUsingItDoes != DimensionUseBehaviour.OpensACraftingBench ||
+                root.GetComponent<CraftingAuthoring>() != null)
+            {
+                return;
+            }
+
+            report(
+                "opens a crafting bench but has no recipes of its own, and the game reads a " +
+                "recipe list before it draws the object, so it would never appear where it was " +
+                "placed. Make it a Workbench instead, which carries the recipes, or set what " +
+                "using it does to something else.");
+        }
+
+        /// <summary>
+        /// Says so when an animal's name tag would be drawn inside the animal.
+        /// </summary>
+        /// <remarks>
+        /// The height that floats a chest's label nicely — the default, and the game's own chest
+        /// value — is half a tile, and half a tile above an animal's feet is its middle. This is the
+        /// one case where the shared default is wrong rather than merely unadventurous, so it is
+        /// worth a sentence; anything above half a tile is left alone, because how high a name
+        /// belongs over a creature is the author's judgement, not the framework's.
+        /// </remarks>
+        private static void WarnAboutANameTagInsideTheAnimal(
+            DimensionInteractionTemplate interaction,
+            System.Action<string> report)
+        {
+            if (report == null ||
+                !interaction.ItCarriesANameTag ||
+                interaction.HowHighTheWordsFloat > 0.5f)
+            {
+                return;
+            }
+
+            report(
+                "is tended like an animal, and its name would float " +
+                interaction.HowHighTheWordsFloat.ToString("0.###") +
+                " tiles up, which is inside most animals rather than above them. Raise how high " +
+                "the words float — the game's own camel uses 2.");
+        }
+
+        /// <summary>
+        /// Writes the prefab a player walks up to, replacing whatever was there before.
+        /// </summary>
+        /// <remarks>
+        /// Rebuilt from scratch each generate rather than edited in place. The wiring is a graph of
+        /// references between a behaviour component and two event lists on a child, and patching
+        /// that graph in place is how a stale listener survives a changed answer.
+        /// </remarks>
+        private static GameObject BuildVisualPrefab(
+            DimensionInteractionTemplate interaction,
+            string folder,
+            string assetStem,
+            System.Action<string> report,
+            bool drawsItself,
+            Sprite ownBody)
+        {
+            string path = folder.TrimEnd('/') + "/" + assetStem + VisualSuffix + ".prefab";
+
+            GameObject root = new GameObject(assetStem + VisualSuffix);
+            try
+            {
+                MonoBehaviour behaviour = interaction.IsUsable
+                    ? AddUseBehaviour(root, interaction, report)
+                    : null;
+                if (interaction.IsUsable && behaviour == null)
+                {
+                    return null;
+                }
+
+                Transform scaler = AddScaler(root, behaviour);
+
+                if (drawsItself)
+                {
+                    AddBody(root, scaler, behaviour, ownBody, report);
+                }
+
+                AddFloatingWords(root, behaviour, interaction);
+
+                if (!interaction.IsUsable)
+                {
+                    // Nothing uses it, so it needs no interactable and no listeners — and, just as
+                    // importantly, no component of the game's own. A graphical prefab with no
+                    // EntityMonoBehaviour on it takes CreateGraphicalObjectSystem's other branch and
+                    // is Instantiated per entity rather than fetched from a shared pool, so the
+                    // picture baked below is the one that shows.
+                    return SaveDuringABatch(root, path);
+                }
+
+                AddInteractable(
+                    root,
+                    behaviour,
+                    interaction.Reach,
+                    interaction.WorksFromAnySide,
+                    interaction.OnlyWhoeverClaimedIt,
+                    interaction.HowStronglyItAsksToBeUsed,
+                    interaction.AFlatOutlineColour,
+                    interaction.OnlyThisFactionMayUseIt,
+                    interaction.WhatUsingItDoes,
+                    report);
+
+                GameObject written = SaveDuringABatch(root, path);
+                if (written == null)
+                {
+                    if (report != null)
+                    {
+                        report(
+                            "can be used, but the prefab a player walks up to could not be written " +
+                            "to '" + path + "', so using it would do nothing.");
+                    }
+
+                    return null;
+                }
+
+                return written;
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+
+        /// <summary>
+        /// Builds the child a player actually walks up to, and wires the use to it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Lifted out of <see cref="BuildVisualPrefab"/> unchanged so the creature entry below can
+        /// use the identical wiring rather than a second copy of it. The two entries differ in one
+        /// thing only — where the body comes from — and that difference is the whole reason there
+        /// are two.
+        /// </para>
+        /// <para>
+        /// <c>CreateGraphicalObjectSystem</c> only fills <c>InteractableObjectReferenceCD</c> from
+        /// the view's own field, and <c>LocalInteractionSystem</c> reads the use event off THAT
+        /// component and gives up when it is null. Without the assignment every generated object
+        /// baked its wiring correctly and then did nothing at all when a player used it, and it
+        /// never drew an outline either — <c>EntityMonoBehaviour.UpdateOutline</c> reads the same
+        /// field.
+        /// </para>
+        /// </remarks>
+        private static InteractableObject AddInteractable(
+            GameObject root,
+            MonoBehaviour behaviour,
+            float reach,
+            bool worksFromAnySide,
+            bool onlyWhoeverClaimedIt,
+            float howStronglyItAsksToBeUsed,
+            bool aFlatOutlineColour,
+            string onlyThisFactionMayUseIt,
+            DimensionUseBehaviour what,
+            System.Action<string> report)
+        {
+            GameObject child = new GameObject(InteractableChildName);
+            child.transform.SetParent(root.transform, false);
+
+            InteractableObject interactable = child.AddComponent<InteractableObject>();
+            interactable.radius = reach;
+            interactable.ignorePlayerDirection = worksFromAnySide;
+            interactable.allowToUseOnlyWhenClaimed = onlyWhoeverClaimedIt;
+            interactable.weightMultiplier = howStronglyItAsksToBeUsed;
+            interactable.useDiscreteOutlineColor = aFlatOutlineColour;
+            interactable.additionalOutlineControllers = new List<OutlineController>();
+            interactable.spriteObjects = new List<Pug.Sprite.SpriteObject>();
+
+            FactionID faction;
+            if (!string.IsNullOrEmpty(onlyThisFactionMayUseIt))
+            {
+                if (System.Enum.TryParse(onlyThisFactionMayUseIt, false, out faction))
+                {
+                    interactable.requiredFactionToInteract = faction;
+                }
+                else if (report != null)
+                {
+                    report(
+                        "may only be used by '" + onlyThisFactionMayUseIt +
+                        "', which is not a faction the game has, so anyone can use it.");
+                }
+            }
+
+            Transform point = new GameObject("InteractionPoint").transform;
+            point.SetParent(child.transform, false);
+            interactable.interactingPoints = new List<Transform> { point };
+
+            EntityMonoBehaviour view = behaviour as EntityMonoBehaviour;
+            if (view != null)
+            {
+                view.interactable = interactable;
+            }
+
+            WireUse(interactable, behaviour, what);
+            return interactable;
+        }
+
+        /// <summary>
+        /// Wires a use onto a creature's own animated body, rather than building a body for it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A SEPARATE ENTRY, AND NOT A SHORTCUT. <see cref="Apply"/> cannot be pointed at a creature
+        /// however tempting it looks: it builds its OWN graphical prefab out of one still picture
+        /// and assigns it over <c>ObjectAuthoring.graphicalPrefab</c>, which is where the creature
+        /// generator has already put the animated body it built at
+        /// <c>DimensionCreatureGenerator.cs:532</c>. Calling it on a creature throws that body away
+        /// and replaces an animal with a photograph of one. Whoever is tempted to simplify these
+        /// two back into one should read that line first.
+        /// </para>
+        /// <para>
+        /// WHAT IT DOES ADD is exactly the half a creature is missing: the interactable child, its
+        /// reach and faction, the <c>view.interactable</c> assignment, the two persistent listeners,
+        /// and — for an animal — the name tag that <c>Cattle.UpdateName</c> dereferences every frame
+        /// with no null check. The caller saves the prefab afterwards, as it already does.
+        /// </para>
+        /// <para>
+        /// THE OTHER HALF IS ON THE ENTITY, not here: <c>LocalInteractableAuthoring</c> has to be on
+        /// the creature's own prefab or <c>LocalInteractableConverter</c> never looks at any of
+        /// this. The creature generator adds it beside the call to this method.
+        /// </para>
+        /// </remarks>
+        public static void ApplyToACreatureView(
+            GameObject viewRoot,
+            MonoBehaviour behaviour,
+            DimensionUseBehaviour what,
+            DimensionCreatureTendingTemplate tending,
+            System.Action<string> report)
+        {
+            if (viewRoot == null || behaviour == null || what == DimensionUseBehaviour.Nothing)
+            {
+                return;
+            }
+
+            DimensionCreatureTendingTemplate numbers =
+                tending ?? new DimensionCreatureTendingTemplate();
+
+            AddInteractable(
+                viewRoot,
+                behaviour,
+                numbers.HowCloseAPlayerMustBe,
+                numbers.WorksFromAnySide,
+                false,
+                numbers.HowStronglyItAsksToBeUsed,
+                false,
+                numbers.OnlyThisFactionMayUseIt,
+                what,
+                report);
+
+            // THE NAME TAG IS NOT DECORATION. Cattle.UpdateName, OnShow and OnHide all dereference
+            // nameTag with no check, from a per-frame pass, and Cattle.GetName answers null until
+            // the entity has a NameCD to read — which is why the creature's habits also put
+            // NameAuthoring on. Without both halves the tending window offers to name an animal
+            // that has nowhere to keep the name.
+            Cattle cattle = behaviour as Cattle;
+            if (cattle != null)
+            {
+                cattle.nameTag = DimensionFloatingTextUtility.AddNameTagAboveIt(
+                    viewRoot, numbers.HowHighItsNameFloats);
+
+                if (numbers.ItsNameWouldFloatInsideIt && report != null)
+                {
+                    report(
+                        "can be tended, and its name would float " +
+                        numbers.HowHighItsNameFloats.ToString("0.###") +
+                        " tiles up, which is inside most animals rather than above them. Raise how " +
+                        "high its name floats — the game's own cow uses 2.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Writes a brand-new prefab asset from inside a generator's asset-editing batch.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// EVERY GENERATOR WRAPS ITS RUN IN <c>AssetDatabase.StartAssetEditing</c>, which holds the
+        /// importer back so a hundred prefabs cost one import instead of a hundred. Inside that
+        /// window <c>SaveAsPrefabAsset</c> still writes the file, but it reports failure and hands
+        /// back null, because the asset it would return has not been imported yet. That is fine for
+        /// the entity prefabs, whose return value nobody reads — and fatal here, where the returned
+        /// reference is the whole point: it is what goes into <c>graphicalPrefab</c>.
+        /// </para>
+        /// <para>
+        /// So the batch is paused for exactly this one save and started again straight after. The
+        /// pause is balanced, so the generator's own <c>StopAssetEditing</c> still closes the window
+        /// it opened. This costs one import per usable object, which is the price of the reference
+        /// being real.
+        /// </para>
+        /// </remarks>
+        private static GameObject SaveDuringABatch(GameObject root, string path)
+        {
+            AssetDatabase.StopAssetEditing();
+            try
+            {
+                bool saved;
+                GameObject written = PrefabUtility.SaveAsPrefabAsset(root, path, out saved);
+                if (saved && written != null)
+                {
+                    return written;
+                }
+
+                // The file may still be on disk even when the save reported failure, so the path is
+                // asked directly before giving up on it.
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            }
+            finally
+            {
+                AssetDatabase.StartAssetEditing();
+            }
+        }
+        /// <summary>
+        /// Gives the visual prefab something to draw.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A plain <c>SpriteRenderer</c> rather than one of the game's <c>SpriteObject</c>s. A
+        /// SpriteObject is addressed into a compiled sprite ATLAS and cannot be pointed at a loose
+        /// Sprite an author dropped into a field, so a renderer is the only thing that can draw
+        /// what was actually authored. It is the same shape the boss body already uses.
+        /// </para>
+        /// <para>
+        /// THE BAKED SPRITE ONLY COUNTS ON A PREFAB NOTHING POOLS. When the object carries an
+        /// EntityMonoBehaviour, Core Keeper hands out a shared instance per component type, so the
+        /// value written here is replaced on every occupy by the view reading the entity's own
+        /// object record. It is still written, because a prefab opened in the inspector with an
+        /// empty renderer reads as a mistake.
+        /// </para>
+        /// </remarks>
+        private static void AddBody(
+            GameObject root,
+            Transform scaler,
+            MonoBehaviour behaviour,
+            Sprite sprite,
+            System.Action<string> report)
+        {
+            GameObject bodyObject = new GameObject(BodyChildName);
+            bodyObject.transform.SetParent(scaler != null ? scaler : root.transform, false);
+
+            SpriteRenderer renderer = bodyObject.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.color = Color.white;
+            renderer.drawMode = SpriteDrawMode.Simple;
+            renderer.spriteSortPoint = SpriteSortPoint.Center;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.enabled = sprite != null;
+
+            ExpandNullforge.Objects.IDimensionAuthoredBody dressable =
+                behaviour as ExpandNullforge.Objects.IDimensionAuthoredBody;
+            if (dressable != null)
+            {
+                dressable.Body = renderer;
+                return;
+            }
+
+            if (behaviour != null && report != null)
+            {
+                // Unreachable for the six uses the framework knows: each has a view of its own that
+                // implements IDimensionAuthoredBody. It stays as the tripwire for a seventh added
+                // later — whoever adds it will see this rather than a silently blank object.
+                report(
+                    "is used in a way that has no framework body yet (" +
+                    behaviour.GetType().Name + "). Core Keeper hands out one shared body per " +
+                    "component type, so its picture would be whichever object claimed that type " +
+                    "first. Set what using it does to one of the listed uses if the picture " +
+                    "matters.");
+            }
+        }
+
+        /// <summary>
+        /// Hangs the words that float above the object, for the uses that have any.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THREE OF THE SEVEN USES SHOW WORDS IN THE AIR, and each wants a different component
+        /// pointed at a different field. A chest and a sign are both <c>WorldLabel</c>s and want
+        /// <c>worldLabel</c>; an animal is a <c>Cattle</c> and wants <c>nameTag</c>. The other four
+        /// get nothing, because the game's own bench, character and vending machine have nothing.
+        /// </para>
+        /// <para>
+        /// THIS IS NOT DECORATION FOR A CHEST. <c>Chest.Use</c> only makes the chest the player's
+        /// active world label when <c>worldLabel != null</c> (<c>Chest.cs:34-35</c>), and the naming
+        /// box inside the chest window writes to the active world label and nowhere else
+        /// (<c>ChestInventoryUI.cs:70-75</c>). Until this line existed, every generated container
+        /// opened a window whose name field could be typed into and saved nothing.
+        /// </para>
+        /// <para>
+        /// NOR FOR AN ANIMAL. Without the tag, <c>Cattle.UpdateName</c>, <c>OnShow</c> and
+        /// <c>OnHide</c> all dereference null, which is why the framework's animal view used to
+        /// override its whole per-frame pass away and lose the leash rope with it.
+        /// </para>
+        /// </remarks>
+        private static void AddFloatingWords(
+            GameObject root,
+            MonoBehaviour behaviour,
+            DimensionInteractionTemplate interaction)
+        {
+            if (behaviour == null)
+            {
+                return;
+            }
+
+            if (interaction.WordsFloatAboveIt)
+            {
+                WorldLabel label = behaviour as WorldLabel;
+                if (label != null)
+                {
+                    label.worldLabel = DimensionFloatingTextUtility.AddWordsThatFloatAboveIt(
+                        root, interaction.HowHighTheWordsFloat);
+                }
+
+                return;
+            }
+
+            if (interaction.ItCarriesANameTag)
+            {
+                Cattle cattle = behaviour as Cattle;
+                if (cattle != null)
+                {
+                    cattle.nameTag = DimensionFloatingTextUtility.AddNameTagAboveIt(
+                        root, interaction.HowHighTheWordsFloat);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gives the body the child that flips it left and right, the way every vanilla graphical
+        /// prefab has one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// NOT DECORATION — IT IS A NULL CHECK THE GAME NEVER DOES.
+        /// <c>EntityMonoBehaviour.SetOrientation</c> ends in <c>this.XScaler.localScale = ...</c>
+        /// with no guard, and it is reached from <c>UpdateAnimatorSpeedAndOrientation</c>, which
+        /// <c>UpdateGraphicalObjectSystem</c> calls for every entity every frame. The animal and the
+        /// character both answer <c>true</c> to <c>updateAnimOrientation</c>, so they reach it as
+        /// soon as their facing direction is non-zero.
+        /// </para>
+        /// <para>
+        /// AND THE POOL MAKES IT WORSE THAN "ONLY FOR THOSE TWO". <c>currentFacingVector</c> is a
+        /// field on the shared instance, so a view that drew a facing object a moment ago carries
+        /// that direction into the next object it is handed to, whatever its behaviour. Every view
+        /// gets the child.
+        /// </para>
+        /// </remarks>
+        private static Transform AddScaler(GameObject root, MonoBehaviour behaviour)
+        {
+            EntityMonoBehaviour view = behaviour as EntityMonoBehaviour;
+            if (view == null)
+            {
+                return null;
+            }
+
+            GameObject scaler = new GameObject(ScalerChildName);
+            scaler.transform.SetParent(root.transform, false);
+            view.XScaler = scaler.transform;
+            return scaler.transform;
+        }
+
+        /// <summary>Puts the component that actually does the thing on the visual prefab.</summary>
+        /// <remarks>
+        /// EVERY ONE OF THESE IS A FRAMEWORK SUBCLASS, NEVER THE GAME'S OWN COMPONENT, and that is
+        /// not a preference. Core Keeper pools graphical objects by component TYPE
+        /// (<c>MemoryManager.CreateModdedPrefabPool</c> registers the type with <c>TryAdd</c>) and
+        /// <c>CreateGraphicalObjectSystem</c> asks the pool for a body rather than instantiating the
+        /// prefab, so the first prefab to claim a type is the one every later object of that type is
+        /// drawn as. For <c>Chest</c>, <c>SignText</c> and <c>VendingMachine</c> the winner is one of
+        /// the game's own prefabs — the ripped corpus has exactly one asset carrying each, all three
+        /// listed in <c>Resources/PooledGraphicalObjectBank.asset</c>. For <c>CraftingBuilding</c>,
+        /// <c>Cattle</c> and <c>NPC</c> no vanilla prefab carries the base type at all, so the winner
+        /// is whichever generated object loaded first — every later station wearing the first
+        /// station's picture. Both failures have the same fix.
+        /// </remarks>
+        private static MonoBehaviour AddUseBehaviour(
+            GameObject root,
+            DimensionInteractionTemplate interaction,
+            System.Action<string> report)
+        {
+            switch (interaction.WhatUsingItDoes)
+            {
+                case DimensionUseBehaviour.OpensLikeAChest:
+                {
+                    Chest chest =
+                        root.AddComponent<ExpandNullforge.Containers.DimensionContainerView>();
+                    chest.showSortAndQuickStackButtons = interaction.ShowsSortAndQuickStackButtons;
+                    return chest;
+                }
+
+                case DimensionUseBehaviour.OpensACraftingBench:
+                    return root.AddComponent<ExpandNullforge.Objects.DimensionCraftingBenchView>();
+
+                case DimensionUseBehaviour.TendedLikeAnAnimal:
+                    return root.AddComponent<ExpandNullforge.Objects.DimensionCattleView>();
+
+                case DimensionUseBehaviour.TalkedToLikeAnNpc:
+                    return root.AddComponent<ExpandNullforge.Objects.DimensionNpcView>();
+
+                case DimensionUseBehaviour.ReadLikeASign:
+                    // Deliberately NOT a SignText subclass: that class dereferences two atlas-backed
+                    // SpriteObject fields every frame from a private method. See DimensionSignView.
+                    return root.AddComponent<ExpandNullforge.Objects.DimensionSignView>();
+
+                case DimensionUseBehaviour.SellsLikeAShop:
+                    // The Forlorn Metropolis machines' own behaviour: Interact opens the buy window
+                    // over the entity's baked item buffer. Borrowed by subclassing it.
+                    return root.AddComponent<ExpandNullforge.Objects.DimensionShopView>();
+
+                default:
+                    if (report != null)
+                    {
+                        report(
+                            "is marked as usable in a way the framework does not know how to build, " +
+                            "so using it would do nothing.");
+                    }
+
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Wires the two calls — using it, and walking away from it — into the prefab itself.
+        /// </summary>
+        /// <remarks>
+        /// Both lists are replaced rather than appended to, so regenerating never leaves a listener
+        /// from a previous answer sitting behind the new one.
+        /// </remarks>
+        private static void WireUse(
+            InteractableObject interactable,
+            MonoBehaviour behaviour,
+            DimensionUseBehaviour what)
+        {
+            UnityEvent onUse = new UnityEvent();
+            UnityEvent onLeave = new UnityEvent();
+
+            switch (what)
+            {
+                case DimensionUseBehaviour.OpensLikeAChest:
+                {
+                    Chest chest = (Chest)behaviour;
+                    UnityEventTools.AddPersistentListener(onUse, chest.Use);
+                    UnityEventTools.AddPersistentListener(onLeave, chest.OnPlayerLeftChest);
+                    break;
+                }
+
+                case DimensionUseBehaviour.OpensACraftingBench:
+                {
+                    CraftingBuilding bench = (CraftingBuilding)behaviour;
+                    UnityEventTools.AddPersistentListener(onUse, bench.Use);
+                    UnityEventTools.AddPersistentListener(onLeave, bench.OnPlayerLeftBuilding);
+                    break;
+                }
+
+                case DimensionUseBehaviour.TendedLikeAnAnimal:
+                {
+                    Cattle cattle = (Cattle)behaviour;
+                    UnityEventTools.AddPersistentListener(onUse, cattle.Interact);
+                    UnityEventTools.AddPersistentListener(onLeave, cattle.OnPlayerLeft);
+                    break;
+                }
+
+                case DimensionUseBehaviour.TalkedToLikeAnNpc:
+                {
+                    NPC npc = (NPC)behaviour;
+                    UnityEventTools.AddPersistentListener(onUse, npc.Interact);
+                    UnityEventTools.AddPersistentListener(onLeave, npc.OnPlayerLeft);
+                    break;
+                }
+
+                case DimensionUseBehaviour.ReadLikeASign:
+                {
+                    // Typed as the framework view rather than SignText because the sign is the one
+                    // use that does NOT derive from the game's component — see DimensionSignView for
+                    // the every-frame null dereference that rules it out. The two method names are
+                    // the same, so the wiring the converter reads is unchanged.
+                    ExpandNullforge.Objects.DimensionSignView sign =
+                        (ExpandNullforge.Objects.DimensionSignView)behaviour;
+                    UnityEventTools.AddPersistentListener(onUse, sign.Interact);
+                    UnityEventTools.AddPersistentListener(onLeave, sign.OnPlayerLeft);
+                    break;
+                }
+
+                case DimensionUseBehaviour.SellsLikeAShop:
+                {
+                    VendingMachine shop = (VendingMachine)behaviour;
+                    UnityEventTools.AddPersistentListener(onUse, shop.Interact);
+                    UnityEventTools.AddPersistentListener(onLeave, shop.OnPlayerLeft);
+                    break;
+                }
+            }
+
+            interactable.onUseActions = new List<UnityEvent> { onUse };
+            interactable.onTriggerExitActions = new List<UnityEvent> { onLeave };
+        }
+    }
+}

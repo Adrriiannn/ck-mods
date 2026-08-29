@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -5,6 +6,7 @@ using System.Text;
 using ExpandNullforge.Api;
 using ExpandNullforge.Authoring;
 using ExpandNullforge.Portals;
+using ExpandNullforge.Scenes;
 using Pug.Sprite;
 using PugMod;
 using Unity.Mathematics;
@@ -36,7 +38,12 @@ namespace ExpandNullforge.EditorTools
         public string Message { get; private set; }
     }
 
-    internal static class DimensionRuntimeConsumerBootstrapUtility
+    // PARTIAL ON PURPOSE. Every domain the framework grows needs a few lines emitted into the
+    // generated bootstrap, and funnelling all of them through this one file made it both huge
+    // and a merge bottleneck. A domain now brings its own file — see
+    // DimensionRuntimeConsumerBootstrapUtility.<Domain>.cs — and this file keeps the shape of
+    // the generated bootstrap plus the ordered list of calls that fills it.
+    internal static partial class DimensionRuntimeConsumerBootstrapUtility
     {
         private const string FrameworkModName = "ExpandNullforge";
         private const string FrameworkAssemblyReference = "ExpandNullforge";
@@ -58,7 +65,6 @@ namespace ExpandNullforge.EditorTools
         private const string PortalChargeProgressSpriteAssetPath = "Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalChargeProgress.asset";
         private const string PortalEmissiveWaveSpriteAssetPath = "Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalEmissiveWave.asset";
         private const string PortalCenterEffectSpriteAssetPath = "Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalCenterEffect.asset";
-        private const string PortalCustomSwirlSpriteAssetPath = "Assets/ExpandNullforge/PortalVisuals/SpriteAsset/PortalCustomSwirl.asset";
         private const string PortalInventoryIconPath = "Assets/ExpandNullforge/VanillaPortalReference/Sprite/lootsprites_667.asset";
         private const string PortalSmallIconPath = "Assets/ExpandNullforge/VanillaPortalReference/Sprite/lootsprites_668.asset";
         private const string PortalLightObjectName = "PugLight";
@@ -72,10 +78,6 @@ namespace ExpandNullforge.EditorTools
         private const long PortalCenterEffectSpriteAssetAddressHigh = -2439472303744231237L;
         private const long PortalCustomSwirlSpriteAssetAddressLow = -6475803387308123471L;
         private const long PortalCustomSwirlSpriteAssetAddressHigh = 7342631739284561011L;
-        private const long PortalShadowSpriteAssetAddressLow = 4349564516605416516L;
-        private const long PortalShadowSpriteAssetAddressHigh = 255574181269321872L;
-        private const long PortalShadowCasterSpriteAssetAddressLow = -5105114853745537339L;
-        private const long PortalShadowCasterSpriteAssetAddressHigh = -6927483553930170639L;
         private static readonly Vector3 PortalSpritePivotPosition =
             new Vector3(1.0f, 0.0f, -0.4375f);
         // The instant portal occupies a single tile, so its visual centers on the entity tile
@@ -167,12 +169,26 @@ namespace ExpandNullforge.EditorTools
             string generatedFolder = templateFolder + "/Generated";
             string portalFolder = generatedFolder + "/Portal";
             string scriptFolder = modRoot + "/Scripts/Generated";
-            EnsureFolder(generatedFolder);
-            EnsureFolder(portalFolder);
-            EnsureFolder(scriptFolder);
+            DimensionAssetFolders.Ensure(generatedFolder);
+            DimensionAssetFolders.Ensure(portalFolder);
+            DimensionAssetFolders.Ensure(scriptFolder);
 
             DimensionRuntimeManifestAsset manifestAsset =
                 EnsureRuntimeManifestAsset(template, preview, generatedFolder);
+
+            // The painted map lives on the layout asset, which is authoring truth; the manifest
+            // carries a copy so it ships in the bundle and the runtime can register it. This is
+            // the whole of the wiring between the Paint tab and the game — everything downstream
+            // of SetTileMap was already finished and had no caller.
+            //
+            // It runs BEFORE the tileMapBounds read below, or the minimum zones and generation
+            // passes would be sized to the PREVIOUS export's map.
+            if (manifestAsset != null)
+            {
+                manifestAsset.SetTileMap(
+                    template.LayoutTemplate == null ? null : template.LayoutTemplate.PaintedTileMap);
+                EditorUtility.SetDirty(manifestAsset);
+            }
 
             // A painted tile map defines the biome's real extent. The compiled starter zone and
             // terrain pass default to the small landing pad, which would clip the painted map at
@@ -183,11 +199,23 @@ namespace ExpandNullforge.EditorTools
                 tileMapBounds = manifestAsset.TileMap.LocalBounds;
             }
 
-            GameObject visualPrefab = EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot, false);
-            GameObject itemVisualPrefab = EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot, true);
-            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, PortalEntityVariant.Entry);
-            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, PortalEntityVariant.Return);
-            EnsurePortalEntityPrefab(portalOutput, itemVisualPrefab, portalFolder, PortalEntityVariant.Item);
+            // The entry portal's access rule rides along so a RequiredItems portal gains its
+            // offering window — the slots, their ghosts, and the look each author chose. It is
+            // resolved before the prefabs because both halves need it: the visual prefab carries
+            // the look table, the entity carries the slots themselves.
+            DimensionPortalAccessRuleAsset entryRule = FindPortalRule(
+                template,
+                DimensionPortalAccessKind.PlacedPortal,
+                portalOutput.DimensionId,
+                false);
+
+            GameObject visualPrefab =
+                EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot, false, entryRule);
+            GameObject itemVisualPrefab =
+                EnsurePortalVisualPrefab(portalOutput, portalFolder, modRoot, true, entryRule);
+            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, PortalEntityVariant.Entry, entryRule);
+            EnsurePortalEntityPrefab(portalOutput, visualPrefab, portalFolder, PortalEntityVariant.Return, null);
+            EnsurePortalEntityPrefab(portalOutput, itemVisualPrefab, portalFolder, PortalEntityVariant.Item, null);
             EnsureGeneratedBootstrapScript(portalOutput, modDisplayName, scriptFolder, tileMapBounds, template);
             EnsurePortalTextDataBlocks(portalOutput, modRoot);
             EnsurePortalLocalization(portalOutput, modRoot);
@@ -229,7 +257,8 @@ namespace ExpandNullforge.EditorTools
             DimensionRuntimePortalOutput portalOutput,
             string portalFolder,
             string modRoot,
-            bool itemPortal)
+            bool itemPortal,
+            DimensionPortalAccessRuleAsset entryRule)
         {
             string visualStem = itemPortal ? "ItemPortalVisual" : "PortalVisual";
             string path = portalFolder + "/" + portalOutput.AssetStem + visualStem + ".prefab";
@@ -247,6 +276,7 @@ namespace ExpandNullforge.EditorTools
                 RemoveComponentByName(root, "Portal", portal);
                 RemoveMissingMonoBehaviours(root);
                 ConfigurePortalRuntimeFields(portal, portalOutput, itemPortal);
+                ApplyPortalOfferingLooks(portal, entryRule, itemPortal);
                 WirePortalVisualReferences(root, portal, visualOutput, portalFolder, modRoot, itemPortal);
                 RewriteInteractableCallbacks(root, portal);
                 if (itemPortal)
@@ -313,7 +343,8 @@ namespace ExpandNullforge.EditorTools
             DimensionRuntimePortalOutput portalOutput,
             GameObject visualPrefab,
             string portalFolder,
-            PortalEntityVariant variant)
+            PortalEntityVariant variant,
+            DimensionPortalAccessRuleAsset entryRule)
         {
             string portalKind = variant == PortalEntityVariant.Return
                 ? "ReturnPortal"
@@ -327,6 +358,7 @@ namespace ExpandNullforge.EditorTools
             {
                 root.name = portalOutput.AssetStem + portalKind + "Entity";
                 EnsurePortalEntityAuthoring(root, portalOutput, visualPrefab, variant);
+                EnsurePortalOffering(root, variant, entryRule);
 
                 GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, path);
                 ConfigureGhostAuthoringComponent(saved, path);
@@ -344,6 +376,205 @@ namespace ExpandNullforge.EditorTools
                     Object.DestroyImmediate(root);
                 }
             }
+        }
+
+        /// <summary>
+        /// Gives the entry portal its offering window: one inventory slot per required item, the
+        /// name list the runtime resolves into slot rules, and the look each author chose.
+        /// </summary>
+        /// <remarks>
+        /// Only the placed entry portal asks for an offering. The return portal must always work
+        /// (stranding a player inside a dimension is never a feature), and the instant item portal
+        /// is its own consumable price.
+        /// </remarks>
+        /// <summary>
+        /// One slot per distinct item, in authored order. The same item named twice is one slot
+        /// asking for the summed amount — a window with two half answers to one question would
+        /// read as a bug — and the merged slot keeps the first look an author actually chose,
+        /// whichever row carried it.
+        /// </summary>
+        private static List<DimensionPortalRequiredItemTemplate> MergePortalOfferingItems(
+            DimensionPortalAccessRuleAsset entryRule)
+        {
+            List<DimensionPortalRequiredItemTemplate> merged =
+                new List<DimensionPortalRequiredItemTemplate>();
+            if (entryRule == null || entryRule.RequiredItems == null)
+            {
+                return merged;
+            }
+
+            Dictionary<string, int> indexOf = new Dictionary<string, int>();
+            DimensionPortalRequiredItemTemplate[] required = entryRule.RequiredItems;
+            for (int i = 0; i < required.Length; i++)
+            {
+                string itemId = required[i].ItemId;
+                if (string.IsNullOrEmpty(itemId))
+                {
+                    continue;
+                }
+
+                int existing;
+                if (!indexOf.TryGetValue(itemId, out existing))
+                {
+                    indexOf[itemId] = merged.Count;
+                    merged.Add(required[i]);
+                    continue;
+                }
+
+                DimensionPortalRequiredItemTemplate first = merged[existing];
+                bool firstLookIsUntouched =
+                    first.SlotLook == Portals.DimensionPortalOfferingLook.GhostOfTheItem &&
+                    first.SlotSprite == null &&
+                    first.SlotDimness <= 0f;
+                bool adoptIncomingLook = firstLookIsUntouched;
+                merged[existing] = new DimensionPortalRequiredItemTemplate(
+                    first.ItemId,
+                    first.DisplayName,
+                    first.Amount + required[i].Amount,
+                    first.ConsumeOnTravel || required[i].ConsumeOnTravel,
+                    adoptIncomingLook ? required[i].SlotLook : first.SlotLook,
+                    adoptIncomingLook ? required[i].SlotSprite : first.SlotSprite,
+                    adoptIncomingLook ? required[i].SlotDimness : first.SlotDimness);
+            }
+
+            return merged;
+        }
+
+        /// <summary>
+        /// Writes the offering look table onto the visual prefab, which is where
+        /// <see cref="Portals.DimensionPortal"/> lives and therefore where the slot UI reads it.
+        /// Slot order matches <see cref="MergePortalOfferingItems"/> exactly, so a slot index
+        /// means the same thing to the entity buffer and to the hint patch.
+        /// </summary>
+        /// <remarks>
+        /// The placed entry and return portals share this prefab, so the table alone must never
+        /// imply a window: the entity's offering buffer decides that, and only the entry portal
+        /// has one.
+        /// </remarks>
+        private static void ApplyPortalOfferingLooks(
+            Portals.DimensionPortal portal,
+            DimensionPortalAccessRuleAsset entryRule,
+            bool itemPortal)
+        {
+            if (portal == null)
+            {
+                return;
+            }
+
+            List<DimensionPortalRequiredItemTemplate> merged = itemPortal
+                ? new List<DimensionPortalRequiredItemTemplate>()
+                : MergePortalOfferingItems(entryRule);
+
+            SerializedObject serializedPortal = new SerializedObject(portal);
+            serializedPortal.Update();
+            SerializedProperty slots = serializedPortal.FindProperty("offeringSlots");
+            if (slots == null)
+            {
+                return;
+            }
+
+            slots.arraySize = merged.Count;
+            for (int i = 0; i < merged.Count; i++)
+            {
+                SerializedProperty slot = slots.GetArrayElementAtIndex(i);
+                slot.FindPropertyRelative("itemName").stringValue = merged[i].ItemId;
+                slot.FindPropertyRelative("amount").intValue = merged[i].Amount;
+                // intValue, not enumValueIndex: the index maps into the enum's name array and
+                // only coincides with the numeric value while the enum stays sequential.
+                slot.FindPropertyRelative("look").intValue = (int)merged[i].SlotLook;
+                slot.FindPropertyRelative("customSprite").objectReferenceValue =
+                    merged[i].SlotSprite;
+                slot.FindPropertyRelative("dimness").floatValue = merged[i].SlotDimness;
+            }
+
+            serializedPortal.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void EnsurePortalOffering(
+            GameObject root,
+            PortalEntityVariant variant,
+            DimensionPortalAccessRuleAsset entryRule)
+        {
+            // Merge first, then decide: a rule can nominally use required items while every row
+            // is blank, which asks for nothing and must clean up like asking for nothing.
+            List<DimensionPortalRequiredItemTemplate> merged =
+                variant == PortalEntityVariant.Entry && entryRule != null &&
+                entryRule.UsesRequiredItems
+                    ? MergePortalOfferingItems(entryRule)
+                    : new List<DimensionPortalRequiredItemTemplate>();
+
+            if (merged.Count == 0)
+            {
+                InventoryAuthoring staleInventory = root.GetComponent<InventoryAuthoring>();
+                if (staleInventory != null)
+                {
+                    Object.DestroyImmediate(staleInventory, true);
+                }
+
+                ExpandNullforge.Portals.DimensionPortalOfferingAuthoring staleOffering =
+                    root.GetComponent<ExpandNullforge.Portals.DimensionPortalOfferingAuthoring>();
+                if (staleOffering != null)
+                {
+                    Object.DestroyImmediate(staleOffering, true);
+                }
+
+                return;
+            }
+
+
+            // InventoryAuthoring's OnValidate walks its lists the moment the component is added,
+            // and they ship without initialisers — the same trap the object spine documents. Add
+            // inside a quiet window and give the lists real values immediately.
+            InventoryAuthoring inventory = root.GetComponent<InventoryAuthoring>();
+            if (inventory == null)
+            {
+                bool logging = Debug.unityLogger.logEnabled;
+                Debug.unityLogger.logEnabled = false;
+                try
+                {
+                    inventory = root.AddComponent<InventoryAuthoring>();
+                }
+                catch (System.Exception)
+                {
+                    inventory = root.GetComponent<InventoryAuthoring>();
+                }
+                finally
+                {
+                    Debug.unityLogger.logEnabled = logging;
+                }
+            }
+
+            inventory.sizeX = merged.Count;
+            inventory.sizeY = 1;
+            inventory.maxExtraSize = 0;
+            inventory.canOnlyContainOneItemPerSlot = false;
+            // Slot rules are written at runtime, once item names can resolve to ids — a mod's own
+            // items have no id until the mod loads, so nothing useful can be baked here.
+            inventory.slotRequirements = new List<SlotRequirement>();
+            inventory.itemsInInventory = new List<ObjectData>();
+
+            ExpandNullforge.Portals.DimensionPortalOfferingAuthoring offering =
+                root.GetComponent<ExpandNullforge.Portals.DimensionPortalOfferingAuthoring>();
+            if (offering == null)
+            {
+                offering = root.AddComponent<ExpandNullforge.Portals.DimensionPortalOfferingAuthoring>();
+            }
+
+            offering.entries = new List<ExpandNullforge.Portals.DimensionPortalOfferingAuthoringEntry>();
+            for (int i = 0; i < merged.Count; i++)
+            {
+                offering.entries.Add(new ExpandNullforge.Portals.DimensionPortalOfferingAuthoringEntry
+                {
+                    itemName = merged[i].ItemId,
+                    amount = merged[i].Amount,
+                    look = merged[i].SlotLook,
+                    dimness = merged[i].SlotDimness,
+                    consumeOnTravel = merged[i].ConsumeOnTravel,
+                });
+            }
+
+            // The look table itself belongs to the visual prefab, where DimensionPortal lives;
+            // ApplyPortalOfferingLooks writes it there against this same merged order.
         }
 
         private static void EnsurePortalEntityAuthoring(
@@ -1267,191 +1498,6 @@ namespace ExpandNullforge.EditorTools
             return generated;
         }
 
-        private static GeneratedPortalSpriteAsset EnsureIntegratedPortalChargingSpriteAsset(
-            DimensionRuntimePortalOutput portalOutput,
-            string portalFolder,
-            string modRoot,
-            SpriteAsset bodySource,
-            SpriteAsset waveSource,
-            bool trimDuplicateTerminalFrame)
-        {
-            if (bodySource == null || waveSource == null)
-            {
-                throw new System.InvalidOperationException(
-                    "The animated portal charge fallback requires both frame and charge SpriteAssets.");
-            }
-
-            Texture2D bodyTexture = bodySource.staticSpriteData == null
-                ? null
-                : bodySource.staticSpriteData.texture;
-            SerializedObject serializedWave = new SerializedObject(waveSource);
-            serializedWave.Update();
-            SerializedProperty sourceAnimations = serializedWave.FindProperty("m_animations");
-            if (bodyTexture == null || sourceAnimations == null || sourceAnimations.arraySize == 0)
-            {
-                throw new System.InvalidOperationException(
-                    "The animated portal charge fallback needs a static frame texture and animation index 0.");
-            }
-
-            SerializedProperty sourceAnimation = sourceAnimations.GetArrayElementAtIndex(0);
-            SerializedProperty sourceSpriteData =
-                sourceAnimation.FindPropertyRelative("m_spriteData");
-            SerializedProperty sourceTextureProperty = sourceSpriteData == null
-                ? null
-                : sourceSpriteData.FindPropertyRelative("texture");
-            SerializedProperty sourceEmissiveProperty = sourceSpriteData == null
-                ? null
-                : sourceSpriteData.FindPropertyRelative("emissiveTexture");
-            SerializedProperty sourceFrameCountProperty =
-                sourceAnimation.FindPropertyRelative("srcFrameCount");
-            SerializedProperty sourceFpsProperty = sourceAnimation.FindPropertyRelative("fps");
-            Texture2D waveTexture = sourceEmissiveProperty == null
-                ? null
-                : sourceEmissiveProperty.objectReferenceValue as Texture2D;
-            if (waveTexture == null && sourceTextureProperty != null)
-            {
-                waveTexture = sourceTextureProperty.objectReferenceValue as Texture2D;
-            }
-
-            int sourceFrameCount = sourceFrameCountProperty == null
-                ? 0
-                : sourceFrameCountProperty.intValue;
-            float sourceFps = sourceFpsProperty == null
-                ? 0.0f
-                : sourceFpsProperty.floatValue;
-            if (waveTexture == null || sourceFrameCount <= 0 || sourceFps <= 0.0f)
-            {
-                throw new System.InvalidOperationException(
-                    "Animation index 0 in the charge sweep SpriteAsset has no valid texture, frame count, or FPS.");
-            }
-
-            int outputFrameCount = trimDuplicateTerminalFrame && sourceFrameCount > 1
-                ? sourceFrameCount - 1
-                : sourceFrameCount;
-            string assetName = SanitizeAssetFileName(
-                portalOutput.AssetStem + "PortalChargingBody",
-                "DimensionPortalChargingBody");
-            string outputAssetPath = portalFolder + "/" + assetName + ".asset";
-            string bodySheetPath = portalFolder + "/" + assetName + "Body.png";
-            string emissiveSheetPath = portalFolder + "/" + assetName + "Emissive.png";
-
-            WriteIntegratedPortalChargingTextures(
-                bodyTexture,
-                waveTexture,
-                sourceFrameCount,
-                outputFrameCount,
-                bodySheetPath,
-                emissiveSheetPath);
-            Texture2D generatedBody = AssetDatabase.LoadAssetAtPath<Texture2D>(bodySheetPath);
-            Texture2D generatedEmissive =
-                AssetDatabase.LoadAssetAtPath<Texture2D>(emissiveSheetPath);
-            if (generatedBody == null || generatedEmissive == null)
-            {
-                throw new System.InvalidOperationException(
-                    "Could not import the generated animated portal charge textures.");
-            }
-
-            string addressSeed = portalOutput.PortalObjectName + ":generated-portal-charging-body";
-            long addressLow = ComputeStableAddressPart(addressSeed, 0x6368617267656264UL);
-            long addressHigh = ComputeStableAddressPart(addressSeed, 0x706F7274616C7761UL);
-            float outputFps = sourceFps * outputFrameCount / sourceFrameCount;
-            SpriteAsset staged = Object.Instantiate(waveSource);
-            try
-            {
-                staged.name = assetName;
-                SerializedObject serializedStaged = new SerializedObject(staged);
-                serializedStaged.Update();
-                SetSerializedLong(serializedStaged, "m_address.m_low", addressLow);
-                SetSerializedLong(serializedStaged, "m_address.m_high", addressHigh);
-                SerializedProperty animations = serializedStaged.FindProperty("m_animations");
-                animations.arraySize = 1;
-                SerializedProperty animation = animations.GetArrayElementAtIndex(0);
-                SerializedProperty spriteData = animation.FindPropertyRelative("m_spriteData");
-                spriteData.FindPropertyRelative("texture").objectReferenceValue = generatedBody;
-                spriteData.FindPropertyRelative("emissiveTexture").objectReferenceValue =
-                    generatedEmissive;
-                SerializedProperty pivotProperty = spriteData.FindPropertyRelative("pivot");
-                if (pivotProperty != null && bodySource.staticSpriteData != null)
-                {
-                    pivotProperty.vector2Value = new Vector2(
-                        bodySource.staticSpriteData.pivot.x,
-                        bodySource.staticSpriteData.pivot.y);
-                }
-
-                animation.FindPropertyRelative("srcFrameCount").intValue = outputFrameCount;
-                animation.FindPropertyRelative("fps").floatValue = outputFps;
-                SerializedProperty loopProperty = animation.FindPropertyRelative("loop");
-                if (loopProperty != null)
-                {
-                    loopProperty.boolValue = true;
-                }
-
-                SerializedProperty frameData = animation.FindPropertyRelative("frameData");
-                if (frameData != null)
-                {
-                    frameData.arraySize = outputFrameCount;
-                }
-
-                serializedStaged.ApplyModifiedPropertiesWithoutUndo();
-
-                SpriteAsset generated = AssetDatabase.LoadAssetAtPath<SpriteAsset>(outputAssetPath);
-                if (generated == null)
-                {
-                    AssetDatabase.CreateAsset(staged, outputAssetPath);
-                    generated = staged;
-                    staged = null;
-                }
-                else
-                {
-                    EditorUtility.CopySerialized(staged, generated);
-                    generated.name = assetName;
-                }
-
-                // CopySerialized carries the source data-block address. Reapply the generated
-                // address after every copy, then make it durable before the manifest can observe
-                // the asset. Creating/registering the clone first leaves a duplicate source
-                // address in the manifest while the prefab points at an address no asset owns.
-                SetSpriteAssetAddress(generated, addressLow, addressHigh);
-                EditorUtility.SetDirty(generated);
-                AssetDatabase.SaveAssetIfDirty(generated);
-                AssetDatabase.ImportAsset(
-                    outputAssetPath,
-                    ImportAssetOptions.ForceSynchronousImport);
-                generated = AssetDatabase.LoadAssetAtPath<SpriteAsset>(outputAssetPath);
-                ValidateIntegratedPortalChargingSpriteAsset(
-                    generated,
-                    outputAssetPath,
-                    addressLow,
-                    addressHigh,
-                    generatedBody,
-                    generatedEmissive,
-                    outputFrameCount,
-                    outputFps);
-
-                EnsureSpriteAssetManifestContains(modRoot, outputAssetPath);
-                AssetDatabase.SaveAssets();
-
-                // A previously generated duplicate can already be cached under the authored
-                // charge asset's address. Rebuild both resolver layers only after the repaired
-                // asset and manifest are fully durable.
-                DimensionPortalArtworkEditorUtility.InvalidateReferenceCache();
-                ScriptableDataEditorUtility.InvalidateDataBlockCache<SpriteAsset>();
-                return new GeneratedPortalSpriteAsset
-                {
-                    AddressLow = addressLow,
-                    AddressHigh = addressHigh,
-                    Asset = generated
-                };
-            }
-            finally
-            {
-                if (staged != null)
-                {
-                    Object.DestroyImmediate(staged);
-                }
-            }
-        }
-
         private static void DeleteLegacyIntegratedPortalChargingAssets(
             DimensionRuntimePortalOutput portalOutput,
             string portalFolder,
@@ -1478,182 +1524,6 @@ namespace ExpandNullforge.EditorTools
             if (AssetDatabase.LoadAssetAtPath<Texture2D>(emissivePath) != null)
             {
                 AssetDatabase.DeleteAsset(emissivePath);
-            }
-        }
-
-        private static void ValidateIntegratedPortalChargingSpriteAsset(
-            SpriteAsset generated,
-            string assetPath,
-            long addressLow,
-            long addressHigh,
-            Texture2D bodyTexture,
-            Texture2D emissiveTexture,
-            int frameCount,
-            float fps)
-        {
-            if (generated == null)
-            {
-                throw new System.InvalidOperationException(
-                    "Could not reload the generated portal charging SpriteAsset at " +
-                    assetPath + ".");
-            }
-
-            if (generated.address.lowBits != addressLow ||
-                generated.address.highBits != addressHigh)
-            {
-                throw new System.InvalidOperationException(
-                    "The generated portal charging SpriteAsset did not retain its unique " +
-                    "data-block address after import.");
-            }
-
-            SerializedObject serialized = new SerializedObject(generated);
-            serialized.Update();
-            SerializedProperty animations = serialized.FindProperty("m_animations");
-            SerializedProperty animation = animations == null || animations.arraySize != 1
-                ? null
-                : animations.GetArrayElementAtIndex(0);
-            SerializedProperty spriteData = animation == null
-                ? null
-                : animation.FindPropertyRelative("m_spriteData");
-            SerializedProperty textureProperty = spriteData == null
-                ? null
-                : spriteData.FindPropertyRelative("texture");
-            SerializedProperty emissiveProperty = spriteData == null
-                ? null
-                : spriteData.FindPropertyRelative("emissiveTexture");
-            SerializedProperty frameCountProperty = animation == null
-                ? null
-                : animation.FindPropertyRelative("srcFrameCount");
-            SerializedProperty fpsProperty = animation == null
-                ? null
-                : animation.FindPropertyRelative("fps");
-            if (textureProperty == null || emissiveProperty == null ||
-                frameCountProperty == null || fpsProperty == null ||
-                textureProperty.objectReferenceValue != bodyTexture ||
-                emissiveProperty.objectReferenceValue != emissiveTexture ||
-                frameCountProperty.intValue != frameCount ||
-                !Mathf.Approximately(fpsProperty.floatValue, fps))
-            {
-                throw new System.InvalidOperationException(
-                    "The generated portal charging SpriteAsset did not retain its generated " +
-                    "textures or animation contract after import.");
-            }
-        }
-
-        private static void WriteIntegratedPortalChargingTextures(
-            Texture2D bodySource,
-            Texture2D waveSource,
-            int sourceFrameCount,
-            int outputFrameCount,
-            string bodySheetPath,
-            string emissiveSheetPath)
-        {
-            string bodyPath = NormalizeAssetPath(AssetDatabase.GetAssetPath(bodySource));
-            string wavePath = NormalizeAssetPath(AssetDatabase.GetAssetPath(waveSource));
-            string bodyAbsolute = AssetPathToAbsolutePath(bodyPath);
-            string waveAbsolute = AssetPathToAbsolutePath(wavePath);
-            if (string.IsNullOrEmpty(bodyAbsolute) ||
-                string.IsNullOrEmpty(waveAbsolute) ||
-                !bodyPath.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase) ||
-                !wavePath.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase) ||
-                !File.Exists(bodyAbsolute) ||
-                !File.Exists(waveAbsolute))
-            {
-                throw new System.InvalidOperationException(
-                    "Portal frame and animated charge override textures must be saved PNG files.");
-            }
-
-            Texture2D decodedBody = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            Texture2D decodedWave = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            Texture2D bodySheet = null;
-            Texture2D emissiveSheet = null;
-            try
-            {
-                if (!decodedBody.LoadImage(File.ReadAllBytes(bodyAbsolute)) ||
-                    !decodedWave.LoadImage(File.ReadAllBytes(waveAbsolute)))
-                {
-                    throw new System.InvalidOperationException(
-                        "Could not decode the portal frame or animated charge override PNG.");
-                }
-
-                int frameWidth = decodedWave.width / sourceFrameCount;
-                if (sourceFrameCount <= 0 ||
-                    decodedWave.width % sourceFrameCount != 0 ||
-                    frameWidth != decodedBody.width ||
-                    decodedWave.height != decodedBody.height)
-                {
-                    throw new System.InvalidOperationException(
-                        "The animated charge override must use the same per-frame dimensions as the selected portal frame. " +
-                        "Frame: " + decodedBody.width + " x " + decodedBody.height +
-                        ", charge sheet: " + decodedWave.width + " x " + decodedWave.height +
-                        ", frames: " + sourceFrameCount + ".");
-                }
-
-                int outputWidth = frameWidth * outputFrameCount;
-                Color32[] sourceBodyPixels = decodedBody.GetPixels32();
-                Color32[] sourceWavePixels = decodedWave.GetPixels32();
-                Color32[] bodyPixels = new Color32[outputWidth * decodedBody.height];
-                Color32[] emissivePixels = new Color32[outputWidth * decodedBody.height];
-                for (int y = 0; y < decodedBody.height; y++)
-                {
-                    int bodyRow = y * frameWidth;
-                    int outputRow = y * outputWidth;
-                    for (int frame = 0; frame < outputFrameCount; frame++)
-                    {
-                        System.Array.Copy(
-                            sourceBodyPixels,
-                            bodyRow,
-                            bodyPixels,
-                            outputRow + frame * frameWidth,
-                            frameWidth);
-                    }
-
-                    System.Array.Copy(
-                        sourceWavePixels,
-                        y * decodedWave.width,
-                        emissivePixels,
-                        outputRow,
-                        outputWidth);
-                }
-
-                bodySheet = new Texture2D(
-                    outputWidth,
-                    decodedBody.height,
-                    TextureFormat.RGBA32,
-                    false);
-                bodySheet.SetPixels32(bodyPixels);
-                bodySheet.Apply(false, false);
-                emissiveSheet = new Texture2D(
-                    outputWidth,
-                    decodedBody.height,
-                    TextureFormat.RGBA32,
-                    false);
-                emissiveSheet.SetPixels32(emissivePixels);
-                emissiveSheet.Apply(false, false);
-                WriteBinaryAssetIfChanged(bodySheetPath, bodySheet.EncodeToPNG());
-                WriteBinaryAssetIfChanged(emissiveSheetPath, emissiveSheet.EncodeToPNG());
-                ConfigureGeneratedSpriteTextureImporter(
-                    bodySheetPath,
-                    outputWidth,
-                    decodedBody.height);
-                ConfigureGeneratedSpriteTextureImporter(
-                    emissiveSheetPath,
-                    outputWidth,
-                    decodedBody.height);
-            }
-            finally
-            {
-                Object.DestroyImmediate(decodedBody);
-                Object.DestroyImmediate(decodedWave);
-                if (bodySheet != null)
-                {
-                    Object.DestroyImmediate(bodySheet);
-                }
-
-                if (emissiveSheet != null)
-                {
-                    Object.DestroyImmediate(emissiveSheet);
-                }
             }
         }
 
@@ -1919,10 +1789,10 @@ namespace ExpandNullforge.EditorTools
             string outputAssetPath = portalFolder + "/" + assetName + ".asset";
             string addressSeed =
                 portalOutput.PortalObjectName + ":generated-portal-palette:" + layerKey;
-            long addressLow = ComputeStableAddressPart(
+            long addressLow = DimensionSpriteAssetAddress.Part(
                 addressSeed,
                 0x70616C657474656CUL);
-            long addressHigh = ComputeStableAddressPart(
+            long addressHigh = DimensionSpriteAssetAddress.Part(
                 addressSeed,
                 0x706F7274616C7669UL);
 
@@ -2794,22 +2664,22 @@ namespace ExpandNullforge.EditorTools
                 portalOutput.PortalObjectName + ":generated-portal-outline-support-mask";
             string capAddressSeed =
                 portalOutput.PortalObjectName + ":generated-portal-outline-cap";
-            long addressLow = ComputeStableAddressPart(
+            long addressLow = DimensionSpriteAssetAddress.Part(
                 addressSeed,
                 0x706F7274616C6F75UL);
-            long addressHigh = ComputeStableAddressPart(
+            long addressHigh = DimensionSpriteAssetAddress.Part(
                 addressSeed,
                 0x746C696E656D6173UL);
-            long supportAddressLow = ComputeStableAddressPart(
+            long supportAddressLow = DimensionSpriteAssetAddress.Part(
                 supportAddressSeed,
                 0x737570706F72746DUL);
-            long supportAddressHigh = ComputeStableAddressPart(
+            long supportAddressHigh = DimensionSpriteAssetAddress.Part(
                 supportAddressSeed,
                 0x61736B706F727461UL);
-            long capAddressLow = ComputeStableAddressPart(
+            long capAddressLow = DimensionSpriteAssetAddress.Part(
                 capAddressSeed,
                 0x6361706F75746C69UL);
-            long capAddressHigh = ComputeStableAddressPart(
+            long capAddressHigh = DimensionSpriteAssetAddress.Part(
                 capAddressSeed,
                 0x6E656361706F7274UL);
 
@@ -3686,6 +3556,68 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>
+        /// Creates the same configured ready-burst (DeathBlink) subtree used by generated portal
+        /// prefabs, for an editor preview host. The authored placement, tint, emission, size and
+        /// sprite overrides are all baked by the shared construction path, so the Studio replay
+        /// is the runtime burst by construction.
+        /// </summary>
+        internal static GameObject CreatePortalReadyBurstParticlePreview(
+            Transform parent,
+            DimensionPortalVisualProfileAsset visualProfile)
+        {
+            if (parent == null ||
+                (visualProfile != null && !visualProfile.PlayReadyFlash))
+            {
+                return null;
+            }
+
+            GameObject template =
+                AssetDatabase.LoadAssetAtPath<GameObject>(PortalVisualTemplatePath);
+            Transform source = template == null
+                ? null
+                : FindDescendantTransform(template.transform, "GatherEnergy");
+            if (source == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Could not find the vanilla portal GatherEnergy particle subtree at " +
+                    PortalVisualTemplatePath + ".");
+            }
+
+            GameObject preview = CreatePortalParticleEffectRoot(
+                source,
+                parent,
+                "PortalStudioReadyBurst",
+                visualProfile,
+                true);
+            if (preview == null)
+            {
+                return null;
+            }
+
+            // The shared path bakes the authored pixel offset into the generated-prefab world
+            // placement. The preview keeps only that offset (the canvas supplies the anchor),
+            // in the projection where screen Y is world Y + world Z.
+            Vector2 offsetPixels = visualProfile == null
+                ? Vector2.zero
+                : visualProfile.ReadyFlashOffsetPixels;
+            preview.transform.localPosition = new Vector3(
+                offsetPixels.x / DimensionPortalVisualContract.PixelsPerUnit,
+                offsetPixels.y / DimensionPortalVisualContract.PixelsPerUnit,
+                0.0f);
+            preview.SetActive(true);
+            return preview;
+        }
+
+        /// <summary>
+        /// The vanilla floor-shadow sprite a generated portal falls back to when the profile
+        /// authors none. Exposed so the Studio previews exactly the sprite that ships.
+        /// </summary>
+        internal static Sprite LoadDefaultPortalShadowSprite()
+        {
+            return AssetDatabase.LoadAssetAtPath<Sprite>(PortalShadowSpritePath);
+        }
+
+        /// <summary>
         /// Gives Portal Studio the same ParticleAdd/Lightning material selection and backing
         /// texture that the generated runtime portal receives, while keeping the temporary
         /// material instances owned by the preview renderer rather than writing assets.
@@ -3693,7 +3625,8 @@ namespace ExpandNullforge.EditorTools
         internal static void ConfigurePortalPersistentParticlePreviewMaterials(
             GameObject effectRoot,
             DimensionPortalVisualProfileAsset visualProfile,
-            ICollection<Material> ownedMaterials)
+            ICollection<Material> ownedMaterials,
+            bool readyBurst = false)
         {
             if (effectRoot == null || ownedMaterials == null)
             {
@@ -3702,7 +3635,7 @@ namespace ExpandNullforge.EditorTools
 
             Texture2D textureOverride = ResolvePortalParticleTextureOverride(
                 visualProfile,
-                false);
+                readyBurst);
             if (textureOverride == null)
             {
                 return;
@@ -3949,6 +3882,23 @@ namespace ExpandNullforge.EditorTools
 
                 ParticleSystem.EmissionModule emission = particleSystem.emission;
                 emission.rateOverTimeMultiplier *= emissionMultiplier;
+                // The ready burst emits through burst counts, not a rate, so scaling only the
+                // rate multiplier would leave the authored value with nothing to act on.
+                if (readyBurst && emission.burstCount > 0)
+                {
+                    ParticleSystem.Burst[] bursts =
+                        new ParticleSystem.Burst[emission.burstCount];
+                    emission.GetBursts(bursts);
+                    for (int burstIndex = 0; burstIndex < bursts.Length; burstIndex++)
+                    {
+                        ParticleSystem.MinMaxCurve count = bursts[burstIndex].count;
+                        count.constantMin *= emissionMultiplier;
+                        count.constantMax *= emissionMultiplier;
+                        bursts[burstIndex].count = count;
+                    }
+
+                    emission.SetBursts(bursts);
+                }
 
                 ConfigurePortalParticleSprites(
                     particleSystem,
@@ -5206,16 +5156,9 @@ namespace ExpandNullforge.EditorTools
         private static void RemoveComponentIfPresent<T>(GameObject root)
             where T : Component
         {
-            if (root == null)
-            {
-                return;
-            }
-
-            T component = root.GetComponent<T>();
-            if (component != null)
-            {
-                Object.DestroyImmediate(component, true);
-            }
+            // Routed through the one dependency-aware removal, so a RequireComponent cannot
+            // silently defeat authoritative generation. See DimensionObjectSpine.TryRemoveComponent.
+            DimensionObjectSpine.TryRemoveComponent<T>(root);
         }
 
         private static void RemoveComponentByName(
@@ -5283,12 +5226,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             return null;
-        }
-
-        private static GameObject FindDescendantGameObject(Transform root, string childName)
-        {
-            Transform transform = FindDescendantTransform(root, childName);
-            return transform != null ? transform.gameObject : null;
         }
 
         private static void AssignSerializedObjectReferenceList(
@@ -5537,7 +5474,18 @@ namespace ExpandNullforge.EditorTools
                 SanitizeIdentifier(portalOutput.DimensionId, "Dimension") +
                 "RuntimeBootstrap";
             string path = scriptFolder + "/" + className + ".cs";
-            string content = BuildBootstrapScript(portalOutput, className, tileMapBounds, template);
+
+            // Resolved the same way DimensionItemGenerator resolves it — settings.metadata.name, or
+            // empty when there is no ModBuilderSettings. Using the display-name helper instead would
+            // fall back to a FOLDER name where the generator falls back to empty, and the two would
+            // then qualify object names differently: every recipe would point at a name that does
+            // not exist.
+            ModBuilderSettings modSettings =
+                DimensionApiModFolderUtility.ResolveModSettingsForAssetPath(scriptFolder);
+            string modName = modSettings == null ? string.Empty : (modSettings.metadata.name ?? string.Empty);
+
+            string content =
+                BuildBootstrapScript(portalOutput, className, tileMapBounds, template, modName);
             WriteTextAssetIfChanged(path, content);
         }
 
@@ -5552,7 +5500,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             string folder = modRoot + "/Data/TextDataBlock/Items";
-            EnsureFolder(folder);
+            DimensionAssetFolders.Ensure(folder);
 
             string displayName = portalOutput.PortalDisplayName;
             string description = BuildPortalDescription(portalOutput);
@@ -5595,8 +5543,8 @@ namespace ExpandNullforge.EditorTools
             string displayName,
             string description)
         {
-            long addressLow = ComputeStableAddressPart(objectName, 0x6E756C6C666F7267UL);
-            long addressHigh = ComputeStableAddressPart(objectName, 0x657870616E646E66UL);
+            long addressLow = DimensionSpriteAssetAddress.Part(objectName, 0x6E756C6C666F7267UL);
+            long addressHigh = DimensionSpriteAssetAddress.Part(objectName, 0x657870616E646E66UL);
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("%YAML 1.1");
             builder.AppendLine("%TAG !u! tag:unity3d.com,2011:");
@@ -5676,7 +5624,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             string localizationFolder = modRoot + "/Localization";
-            EnsureFolder(localizationFolder);
+            DimensionAssetFolders.Ensure(localizationFolder);
 
             string path = localizationFolder + "/Localization.csv";
             string absolutePath = AssetPathToAbsolutePath(path);
@@ -5934,29 +5882,6 @@ namespace ExpandNullforge.EditorTools
             return string.IsNullOrEmpty(result) ? fallback : result;
         }
 
-        private static long ComputeStableAddressPart(string value, ulong salt)
-        {
-            unchecked
-            {
-                const ulong offsetBasis = 14695981039346656037UL;
-                const ulong prime = 1099511628211UL;
-                ulong hash = offsetBasis ^ salt;
-                string source = value ?? string.Empty;
-                for (int i = 0; i < source.Length; i++)
-                {
-                    hash ^= source[i];
-                    hash *= prime;
-                }
-
-                if (hash == 0UL)
-                {
-                    hash = salt | 1UL;
-                }
-
-                return (long)hash;
-            }
-        }
-
         private static string BuildPortalDescription(DimensionRuntimePortalOutput portalOutput)
         {
             return "Portal to " + portalOutput.DimensionDisplayName + ".";
@@ -5966,15 +5891,21 @@ namespace ExpandNullforge.EditorTools
             DimensionRuntimePortalOutput portalOutput,
             string className,
             DimensionBounds tileMapBounds,
-            DimensionTemplateAsset template)
+            DimensionTemplateAsset template,
+            string modName)
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("using System.Collections.Generic;");
             builder.AppendLine("using ExpandNullforge.Api;");
             builder.AppendLine("using ExpandNullforge.Authoring;");
+            builder.AppendLine("using ExpandNullforge.Creatures;");
             builder.AppendLine("using ExpandNullforge.Foundation;");
+            builder.AppendLine("using ExpandNullforge.Loot;");
+            builder.AppendLine("using ExpandNullforge.Plants;");
             builder.AppendLine("using ExpandNullforge.Portals;");
+            builder.AppendLine("using ExpandNullforge.Scenes;");
             builder.AppendLine("using ExpandNullforge.Tilesets;");
+            builder.AppendLine("using ExpandNullforge.Zones;");
             builder.AppendLine("using PugMod;");
             builder.AppendLine("using Unity.Mathematics;");
             builder.AppendLine("using UnityEngine;");
@@ -5996,7 +5927,7 @@ namespace ExpandNullforge.EditorTools
             AppendIntConstant(builder, "DimensionLocalMaxX", portalOutput.Dimension.LocalBounds.MaxExclusive.x);
             AppendIntConstant(builder, "DimensionLocalMaxY", portalOutput.Dimension.LocalBounds.MaxExclusive.y);
             AppendIntConstant(builder, "DimensionGenerationVersion", portalOutput.Dimension.GenerationVersion);
-            AppendIntConstant(builder, "DimensionSpaceKindValue", (int)portalOutput.Dimension.SpaceKind);
+            AppendIntConstant(builder, "DimensionTypeValue", (int)portalOutput.Dimension.Type);
             AppendIntConstant(builder, "DimensionCapabilitiesValue", (int)portalOutput.Dimension.Capabilities);
             AppendIntConstant(builder, "DimensionLifecycleStateValue", (int)portalOutput.Dimension.LifecycleState);
             AppendConstant(builder, "EntryPortalId", portalOutput.EntryPortal.PortalId);
@@ -6099,6 +6030,18 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      return;");
             builder.AppendLine("    }");
             builder.AppendLine();
+            builder.AppendLine("    // A condition must claim its number BEFORE the game builds its condition");
+            builder.AppendLine("    // table during world conversion; asset load is the only window. Without this");
+            builder.AppendLine("    // branch a shipped mod's conditions never register — the baked ConditionIDs");
+            builder.AppendLine("    // on its items would point past the game's table into nothing.");
+            builder.AppendLine("    ExpandNullforge.Authoring.DimensionConditionAsset conditionAsset =");
+            builder.AppendLine("        obj as ExpandNullforge.Authoring.DimensionConditionAsset;");
+            builder.AppendLine("    if (conditionAsset != null)");
+            builder.AppendLine("    {");
+            builder.AppendLine("      ExpandNullforge.Conditions.DimensionConditionAssetRuntime.Register(conditionAsset);");
+            builder.AppendLine("      return;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
             builder.AppendLine("    DimensionRuntimeManifestAsset manifest = obj as DimensionRuntimeManifestAsset;");
             builder.AppendLine("    if (manifest == null)");
             builder.AppendLine("    {");
@@ -6111,6 +6054,17 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      manifestsApplied = false;");
             builder.AppendLine("      portalDefinitionsRegistered = false;");
             builder.AppendLine("    }");
+            builder.AppendLine();
+            builder.AppendLine("    // The sprite half of the boss presentation: pin icons and body sprites are");
+            builder.AppendLine("    // Unity objects that only exist now, with the bundle loaded. The names and");
+            builder.AppendLine("    // terms were baked above; this joins the two halves.");
+            builder.AppendLine("    DimensionBossPresentationRegistry.AttachIcons(manifest.SourceTemplate);");
+            builder.AppendLine();
+            builder.AppendLine("    // Talent pictures are the same shape of problem as the boss pins: the file the");
+            builder.AppendLine("    // game takes a mod's talents from carries a name, an effect and a value, and no");
+            builder.AppendLine("    // field for a picture. The sprite only exists once the bundle is loaded, so it");
+            builder.AppendLine("    // is read off the template here and handed to the talent window as it draws.");
+            builder.AppendLine("    ExpandNullforge.Skills.DimensionTalentIconRegistry.AttachFrom(manifest.SourceTemplate);");
             builder.AppendLine();
             builder.AppendLine("    // Register the painted tile map the moment the manifest asset loads — before the");
             builder.AppendLine("    // world generates the dimension area. DimensionTileMapRegistry is a plain static");
@@ -6184,10 +6138,14 @@ namespace ExpandNullforge.EditorTools
             // without any placed rule keeps the legacy always-craftable default.)
             if (IsPlacedPortalCraftable(template))
             {
-                builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
-                builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
+                builder.AppendLine("    DimensionCraftingRegistry.Register(");
+                builder.AppendLine("        new DimensionCraftingRecipeDefinition(");
                 builder.AppendLine("            PortalObjectName,");
-                builder.AppendLine("            ObjectID.WoodenWorkBench,");
+                builder.Append("            ")
+                    .Append(ResolveCraftingStationArgument(
+                        FindCraftablePlacedRule(template),
+                        "the placed portal"))
+                    .AppendLine(",");
                 builder.AppendLine("            1,");
                 builder.AppendLine("            CraftingTimeSeconds,");
                 builder.AppendLine("            PortalDisplayName));");
@@ -6219,7 +6177,12 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("            ReturnRequireGeneratedArea,");
             builder.AppendLine("            ReturnAllowFallbackPosition,");
             builder.AppendLine("            PortalDisplayName + \" Return\",");
-            builder.AppendLine("            ReturnInteractable));");
+            builder.AppendLine("            ReturnInteractable,");
+            // Only an Arena's exit waits to be earned; every other type keeps the always-on
+            // guarantee that a dimension can never trap a player.
+            builder.AppendLine(
+                "            armedByVictory: " +
+                (portalOutput.Dimension.Type == DimensionType.Arena ? "true" : "false") + "));");
 
             // Portal sounds, straight from the template's dashboard settings. The placed portal
             // only has an activation sound (Peak mode by construction); the instant portal uses
@@ -6255,13 +6218,27 @@ namespace ExpandNullforge.EditorTools
                 for (int i = 0; i < portalDrops.Count; i++)
                 {
                     PortalDropEmission drop = portalDrops[i];
+
+                    // A portal key can be set to drop off one of the mod's own creatures like any
+                    // other item, so both names go through the same qualifier the authored-drop
+                    // walk uses, and the source's table travels with the row for the same reason.
+                    string portalDropSource = IsModOwnedObjectName(template, drop.Target)
+                        ? DimensionObjectNamespace.Qualify(modName, drop.Target)
+                        : drop.Target;
+                    string portalDropItem = IsModOwnedObjectName(template, drop.Item)
+                        ? DimensionObjectNamespace.Qualify(modName, drop.Item)
+                        : drop.Item;
+                    string portalDropTable = SourceLootTableNameOf(template, modName, drop.Target);
+
                     builder.AppendLine("    DimensionPortalDropRegistry.Register(");
-                    builder.Append("        ").Append(ToCSharpString(drop.Target)).AppendLine(",");
-                    builder.Append("        ").Append(ToCSharpString(drop.Item)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(portalDropSource)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(portalDropItem)).AppendLine(",");
                     builder.Append("        ").Append(drop.Weight.ToString(inv)).AppendLine("f,");
                     builder.Append("        ").Append(drop.Chance.ToString(inv)).AppendLine("f,");
                     builder.Append("        ").Append(drop.Min.ToString(inv)).AppendLine(",");
-                    builder.Append("        ").Append(drop.Max.ToString(inv)).AppendLine(");");
+                    builder.Append("        ").Append(drop.Max.ToString(inv)).AppendLine(",");
+                    builder.AppendLine("        string.Empty,");
+                    builder.Append("        ").Append(ToCSharpString(portalDropTable)).AppendLine(");");
                 }
             }
 
@@ -6279,15 +6256,17 @@ namespace ExpandNullforge.EditorTools
                     builder.Append("        ").Append(ToCSharpString(ip.ToDimension)).AppendLine(",");
                     builder.Append("        ").Append(ip.Duration.ToString(invItem)).AppendLine("f);");
 
-                    // Make the item portal craftable at the same station as the placed portal (the
-                    // Wooden Workbench). Ingredients come from the item's own InventoryItem authoring
-                    // (empty unless the creator adds a recipe that outputs it).
+                    // The item portal is craftable at whichever station its own rule names, and at
+                    // the Wooden Workbench when it names none. Ingredients come from the item's own
+                    // InventoryItem authoring (empty unless the creator adds a recipe that outputs it).
                     if (ip.Craftable)
                     {
-                        builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
-                        builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
+                        builder.AppendLine("    DimensionCraftingRegistry.Register(");
+                        builder.AppendLine("        new DimensionCraftingRecipeDefinition(");
                         builder.Append("            ").Append(ToCSharpString(ip.Item)).AppendLine(",");
-                        builder.AppendLine("            ObjectID.WoodenWorkBench,");
+                        builder.Append("            ")
+                            .Append(ResolveCraftingStationArgument(ip.Station, "the item portal"))
+                            .AppendLine(",");
                         builder.AppendLine("            1,");
                         builder.AppendLine("            CraftingTimeSeconds,");
                         builder.Append("            ").Append(ToCSharpString(ip.DisplayName)).AppendLine("));");
@@ -6295,7 +6274,33 @@ namespace ExpandNullforge.EditorTools
                 }
             }
 
+            SayWhenOneOfOursSharesAGameObjectsName(template);
+
+            AppendPortalWorldSceneRegistration(builder, template, portalOutput, modName);
             AppendBlockCraftingRegistrations(builder, template);
+            AppendRegionTitleRegistrations(builder, template, modName);
+            AppendOreBiomeGateRegistrations(builder, template, modName);
+            AppendTerrainMaterialRegistrations(builder, template);
+            AppendCreatureSpawnRegistrations(builder, template, modName);
+            AppendBossPhaseRegistrations(builder, template, modName);
+            AppendBossPresentationRegistrations(builder, template, modName);
+            AppendLootTableRegistrations(builder, template, modName);
+            AppendRespawnRegistrations(builder, template, modName);
+            AppendDungeonRegistrations(builder, template, modName);
+            AppendRecipeCraftingRegistrations(builder, template, modName);
+            AppendAuthoredDropRegistrations(builder, template, modName);
+            AppendSceneRegistrations(builder, template, modName);
+            // The domains that live in their own partial files. Each one is the single line
+            // that makes its emission reachable — a partial with no caller is exactly the
+            // written-and-never-run failure this framework keeps finding.
+            AppendCreaturePresentationRegistrations(builder, template, modName);
+            AppendPlantPresentationRegistrations(builder, template, modName);
+            AppendFoodRegistrations(builder, template, modName);
+            AppendExplosiveRegistrations(builder, template, modName);
+            AppendObjectLinkRegistrations(builder, template, modName);
+            AppendWorldRulesRegistrations(builder, template, modName);
+            AppendSkillExperienceRegistrations(builder, template, modName);
+            AppendDimensionMusicRegistrations(builder, template);
 
             builder.AppendLine("    staticRuntimeExtrasRegistered = true;");
             builder.AppendLine("  }");
@@ -6359,6 +6364,12 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      return false;");
             builder.AppendLine("    }");
             builder.AppendLine();
+
+            // Last, and deliberately so: the pin can only put an older layout back once the current
+            // one is fully in place, because it works by replacing zones rather than pre-empting them.
+            builder.AppendLine("    RegisterLayoutVersions();");
+            builder.AppendLine("    DimensionLayoutPinService.ApplyForCurrentWorld(current);");
+            builder.AppendLine();
             builder.AppendLine("    minimumRuntimeDefinitionsRegistered = true;");
             builder.AppendLine("    return true;");
             builder.AppendLine("  }");
@@ -6373,7 +6384,7 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("            new int2(DimensionLocalMinX, DimensionLocalMinY),");
             builder.AppendLine("            new int2(DimensionLocalMaxX, DimensionLocalMaxY)),");
             builder.AppendLine("        DimensionGenerationVersion,");
-            builder.AppendLine("        (DimensionSpaceKind)DimensionSpaceKindValue,");
+            builder.AppendLine("        DimensionTypeMigration.Normalize(DimensionTypeValue),");
             builder.AppendLine("        (DimensionCapabilityFlags)DimensionCapabilitiesValue,");
             builder.AppendLine("        (DimensionLifecycleState)DimensionLifecycleStateValue);");
             builder.AppendLine("  }");
@@ -6460,6 +6471,7 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine();
             AppendMinimumZonesMethod(builder, portalOutput, tileMapBounds);
             AppendMinimumGenerationPassesMethod(builder, portalOutput, tileMapBounds);
+            AppendLayoutVersionsMethod(builder, portalOutput, template);
             builder.AppendLine("  private bool ApplyManifests(IDimensionService current)");
             builder.AppendLine("  {");
             builder.AppendLine("    if (manifestsApplied)");
@@ -6809,10 +6821,112 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("    }");
             builder.AppendLine();
             builder.AppendLine("    lastFailureCode = failureCode;");
-            builder.AppendLine("    Debug.LogWarning(\"[\" + DimensionId + \"] \" + message);");
+            // Through the framework's own door, not a raw Debug call: an emitted Debug.LogWarning
+            // ships ungated logging with a prefix of its own inside every mod built with this
+            // framework, and nobody can quieten it.
+            builder.AppendLine("    DimensionConsumerLog.ProblemOnce(DimensionId, failureCode, message);");
             builder.AppendLine("  }");
             builder.AppendLine("}");
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// Emits every layout version the author published, so an existing save can be generated from
+        /// the one that made it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each archived version is written out as its own set of zone registrations. That is more
+        /// generated code than emitting only the current layout, but it is the only way pinning can be
+        /// real: a world that says "I was made by v2" needs v2 to still exist inside the shipped mod,
+        /// long after the author has rebuilt the layout out of different rings.
+        /// </para>
+        /// <para>
+        /// The drift policy is emitted alongside, because it is the author's current intent and has to
+        /// be able to change without invalidating anything already published.
+        /// </para>
+        /// </remarks>
+        private static void AppendLayoutVersionsMethod(
+            StringBuilder builder,
+            DimensionRuntimePortalOutput portalOutput,
+            DimensionTemplateAsset template)
+        {
+            builder.AppendLine("  private void RegisterLayoutVersions()");
+            builder.AppendLine("  {");
+
+            DimensionLayoutTemplateAsset layout = template == null ? null : template.LayoutTemplate;
+            DimensionLayoutArchiveEntry[] published =
+                layout == null ? new DimensionLayoutArchiveEntry[0] : layout.PublishedVersions;
+
+            if (layout == null || published.Length == 0)
+            {
+                // Nothing published means nothing to pin to. Saves still work — they simply generate
+                // from whatever layout is installed, which is the behaviour before this existed.
+                builder.AppendLine("  }");
+                builder.AppendLine();
+                return;
+            }
+
+            string dimensionId = ToCSharpString(portalOutput.DimensionId);
+
+            builder.AppendLine("    DimensionLayoutDriftPolicyRegistry.Register(");
+            builder.Append("        ").Append(dimensionId).AppendLine(",");
+            builder.Append("        DimensionLayoutDriftPolicy.")
+                .Append(layout.DriftPolicy.ToString()).AppendLine(");");
+            builder.AppendLine();
+
+            builder.AppendLine("    DimensionLayoutVersionRegistry.RegisterCurrent(");
+            builder.Append("        ").Append(dimensionId).AppendLine(",");
+            builder.Append("        ")
+                .Append(layout.LayoutVersion.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.Append("        ").Append(ToCSharpString(layout.CurrentFingerprint)).AppendLine(");");
+            builder.AppendLine();
+
+            for (int v = 0; v < published.Length; v++)
+            {
+                DimensionLayoutArchiveEntry entry = published[v];
+                if (entry == null || entry.Regions.Length == 0)
+                {
+                    continue;
+                }
+
+                builder.AppendLine("    {");
+                builder.AppendLine("      var zones = new System.Collections.Generic.List<DimensionZoneDefinition>();");
+
+                for (int r = 0; r < entry.Regions.Length; r++)
+                {
+                    DimensionLayoutArchivedRegion region = entry.Regions[r];
+                    if (region == null || string.IsNullOrEmpty(region.ZoneId))
+                    {
+                        continue;
+                    }
+
+                    builder.AppendLine("      zones.Add(new DimensionZoneDefinition(");
+                    builder.Append("          ").Append(ToCSharpString(region.ZoneId)).AppendLine(",");
+                    builder.Append("          ").Append(ToCSharpString(
+                        string.IsNullOrEmpty(region.DisplayName) ? region.BiomeId : region.DisplayName))
+                        .AppendLine(",");
+                    builder.Append("          ").Append(dimensionId).AppendLine(",");
+                    AppendBoundsConstructor(builder, region.LocalBounds, "          ");
+                    builder.AppendLine(",");
+                    builder.Append("          ").Append(ToCSharpString(region.BiomeId)).AppendLine(",");
+                    builder.Append("          ")
+                        .Append(region.Priority.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+                    builder.AppendLine("          true));");
+                }
+
+                builder.AppendLine("      DimensionLayoutVersionRegistry.RegisterVersion(");
+                builder.Append("          ").Append(dimensionId).AppendLine(",");
+                builder.Append("          ")
+                    .Append(entry.Version.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+                builder.Append("          ").Append(ToCSharpString(entry.Fingerprint)).AppendLine(",");
+                builder.AppendLine("          zones);");
+                builder.AppendLine("    }");
+                builder.AppendLine();
+            }
+
+            builder.AppendLine("  }");
+            builder.AppendLine();
         }
 
         private static void AppendMinimumZonesMethod(
@@ -6968,13 +7082,2712 @@ namespace ExpandNullforge.EditorTools
                     continue;
                 }
 
-                builder.AppendLine("    DimensionPortalCraftingRegistry.Register(");
-                builder.AppendLine("        new DimensionPortalCraftingRecipeDefinition(");
+                builder.AppendLine("    DimensionCraftingRegistry.Register(");
+                builder.AppendLine("        new DimensionCraftingRecipeDefinition(");
                 builder.Append("            ").Append(ToCSharpString(itemId)).AppendLine(",");
                 builder.AppendLine("            ObjectID.WoodenWorkBench,");
                 builder.AppendLine("            1,");
                 builder.AppendLine("            0f,");
                 builder.Append("            ").Append(ToCSharpString(tileset.BlockName + " Block")).AppendLine("));");
+            }
+        }
+
+        /// <summary>
+        /// Emits the title card each custom biome shows the first time a player walks into it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The tilesets a biome is recognised by are DERIVED, not authored a second time: a biome
+        /// already names the floor and wall blocks it builds itself from, and each of those blocks
+        /// belongs to a tileset. Asking the author to also list "which tilesets mean this biome" would
+        /// be asking the same question twice, and the two answers would eventually disagree — at which
+        /// point a title fires for a place the player is not standing in.
+        /// </para>
+        /// <para>
+        /// A biome made entirely of vanilla blocks emits nothing. Its tilesets are Core Keeper's own,
+        /// and claiming them would mean walking onto ordinary stone announced this mod's biome.
+        /// </para>
+        /// </remarks>
+        /// <summary>
+        /// Emits each biome's ore list as a waiting gate registration.
+        /// </summary>
+        /// <remarks>
+        /// The bootstrap knows which ores a biome names but not where the biome lies — the
+        /// bounds only exist once the manifest's zones apply. So the emission registers the
+        /// LIST, and the manifest-apply path marries it to each zone carrying the biome's id
+        /// (<c>DimensionOreBiomeGate.BindZone</c>). Before this, the gate's one Register call
+        /// sat on a method with no callers and every biome ore chip was decorative.
+        /// </remarks>
+        private static void AppendOreBiomeGateRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            BiomeTemplateAsset[] biomes = template == null ? null : template.Biomes;
+            if (biomes == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < biomes.Length; i++)
+            {
+                BiomeTemplateAsset biome = biomes[i];
+                if (biome == null || !biome.Enabled)
+                {
+                    continue;
+                }
+
+                System.Collections.Generic.IReadOnlyList<string> ores =
+                    biome.OreObjectIds;
+                if (ores == null || ores.Count == 0)
+                {
+                    continue;
+                }
+
+                builder.Append("    ExpandNullforge.Generation.DimensionOreBiomeGate.RegisterBiomeOres(")
+                    .Append(ToCSharpString(template.DimensionId))
+                    .Append(", ")
+                    .Append(ToCSharpString(biome.BiomeId))
+                    .Append(", new string[] { ");
+                bool wroteOre = false;
+                for (int o = 0; o < ores.Count; o++)
+                {
+                    if (string.IsNullOrEmpty(ores[o]))
+                    {
+                        continue;
+                    }
+
+                    string oreName = IsModOwnedObjectName(template, ores[o])
+                        ? DimensionObjectNamespace.Qualify(modName, ores[o])
+                        : ores[o];
+                    if (wroteOre)
+                    {
+                        builder.Append(", ");
+                    }
+
+                    builder.Append(ToCSharpString(oreName));
+                    wroteOre = true;
+                }
+
+                builder.AppendLine(" });");
+            }
+        }
+
+        /// <summary>
+        /// Emits what each biome's ground and walls are made of.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The other half of the same shape the ore gate uses: the bootstrap knows which block a
+        /// biome names but not where the biome lies, so it registers the CHOICE and zone
+        /// registration marries it to the geography. Before this the terrain provider carried one
+        /// hardcoded tileset and every generated dimension came out a dirt platform, whatever the
+        /// Biome page said.
+        /// </para>
+        /// <para>
+        /// A biome whose Ground and Walls both name something unresolvable emits nothing at all,
+        /// rather than a row of dirt. The rows are read last-one-wins, so a meaningless row would
+        /// take a cell away from an overlapping biome that did resolve. The unresolved entry is
+        /// reported by the compiler's <c>biome-terrain-block-unresolved</c> issue instead.
+        /// </para>
+        /// <para>
+        /// A biome that resolves only one half gets that half and dirt for the other, so naming a
+        /// floor and no wall gives the floor rather than nothing.
+        /// </para>
+        /// </remarks>
+        private static void AppendTerrainMaterialRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template)
+        {
+            BiomeTemplateAsset[] biomes = template == null ? null : template.Biomes;
+            if (biomes == null)
+            {
+                return;
+            }
+
+            DimensionTilesetAsset[] tilesets = template.Tilesets;
+            for (int i = 0; i < biomes.Length; i++)
+            {
+                BiomeTemplateAsset biome = biomes[i];
+                if (biome == null || !biome.Enabled || string.IsNullOrEmpty(biome.BiomeId))
+                {
+                    continue;
+                }
+
+                int groundTileset;
+                string groundNamed;
+                bool groundHasGround;
+                DimensionBiomeTerrainSource groundSource = DimensionBiomeTerrainMaterial.ResolveFirst(
+                    biome.FloorObjectIds, tilesets, out groundTileset, out groundNamed, out groundHasGround);
+
+                int wallTileset;
+                string wallNamed;
+                bool wallHasGround;
+                DimensionBiomeTerrainSource wallSource = DimensionBiomeTerrainMaterial.ResolveFirst(
+                    biome.WallObjectIds, tilesets, out wallTileset, out wallNamed, out wallHasGround);
+
+                bool groundResolved = groundSource == DimensionBiomeTerrainSource.ModBlock ||
+                                      groundSource == DimensionBiomeTerrainSource.VanillaBlock;
+                bool wallResolved = wallSource == DimensionBiomeTerrainSource.ModBlock ||
+                                    wallSource == DimensionBiomeTerrainSource.VanillaBlock;
+                if (!groundResolved && !wallResolved)
+                {
+                    continue;
+                }
+
+                System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+                builder
+                    .Append("    ExpandNullforge.Generation.DimensionTerrainMaterialRegistry.RegisterBiomeMaterial(")
+                    .Append(ToCSharpString(template.DimensionId))
+                    .Append(", ")
+                    .Append(ToCSharpString(biome.BiomeId))
+                    .Append(", ")
+                    .Append((groundResolved
+                        ? groundTileset
+                        : ExpandNullforge.Generation.DimensionTerrainMaterialRegistry.DefaultTileset)
+                        .ToString(inv))
+                    .Append(", ")
+                    .Append((wallResolved
+                        ? wallTileset
+                        : ExpandNullforge.Generation.DimensionTerrainMaterialRegistry.DefaultTileset)
+                        .ToString(inv))
+                    .AppendLine(");");
+            }
+        }
+
+        private static void AppendRegionTitleRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            BiomeTemplateAsset[] biomes = template == null ? null : template.Biomes;
+            DimensionTilesetAsset[] tilesets = template == null ? null : template.Tilesets;
+            if (biomes == null || tilesets == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < biomes.Length; i++)
+            {
+                BiomeTemplateAsset biome = biomes[i];
+                if (biome == null || !biome.Enabled)
+                {
+                    continue;
+                }
+
+                List<int> tilesetIds = CollectBiomeTilesetIds(biome, tilesets);
+                if (tilesetIds.Count == 0)
+                {
+                    continue;
+                }
+
+                AppendBiomeAtmosphereRegistration(builder, biome, tilesetIds);
+
+                if (!biome.ShowTitleOnDiscovery)
+                {
+                    continue;
+                }
+
+                UnityEngine.Color color = biome.TitleColor;
+                string iconName = string.IsNullOrEmpty(biome.TitleIconObjectId)
+                    ? string.Empty
+                    : (IsModOwnedObjectName(template, biome.TitleIconObjectId)
+                        ? DimensionObjectNamespace.Qualify(modName, biome.TitleIconObjectId)
+                        : biome.TitleIconObjectId);
+
+                builder.AppendLine("    DimensionRegionTitleRegistry.Register(");
+                builder.Append("        ").Append(ToCSharpString(biome.BiomeId)).AppendLine(",");
+
+                // The localization term, not the text. The generator writes the biome's display name
+                // into the mod's own CSV under this key, so a translated mod translates its titles too.
+                builder.Append("        ")
+                    .Append(ToCSharpString(DimensionBiomeTitleTerms.ForBiome(modName, biome.BiomeId)))
+                    .AppendLine(",");
+
+                builder.Append("        new UnityEngine.Color(")
+                    .Append(color.r.ToString("R", CultureInfo.InvariantCulture)).Append("f, ")
+                    .Append(color.g.ToString("R", CultureInfo.InvariantCulture)).Append("f, ")
+                    .Append(color.b.ToString("R", CultureInfo.InvariantCulture)).Append("f, 1f),");
+                builder.AppendLine();
+
+                builder.Append("        new int[] { ");
+                for (int t = 0; t < tilesetIds.Count; t++)
+                {
+                    if (t > 0)
+                    {
+                        builder.Append(", ");
+                    }
+
+                    builder.Append(tilesetIds[t].ToString(CultureInfo.InvariantCulture));
+                }
+
+                builder.AppendLine(" },");
+                builder.Append("        ").Append(ToCSharpString(iconName)).AppendLine(");");
+            }
+
+            AppendNamedAreaRegistrations(builder, template, modName);
+        }
+
+        /// <summary>
+        /// Emits each named area: one name fanned out to the title, ambience and music
+        /// registries under a synthetic area id, carried by its signature blocks.
+        /// </summary>
+        /// <remarks>
+        /// The game has no "area" object — the Meadow is three tile-counting systems agreeing.
+        /// The synthetic "area:" id keeps a named area from ever colliding with a real biome's
+        /// id in the shared registries, while the framework's own current-biome derivation
+        /// (top tileset → registered id) makes standing among the area's blocks read as being
+        /// IN the area, which is what fires its title and music.
+        /// </remarks>
+        private static void AppendNamedAreaRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            DimensionNamedAreaAsset[] areas = template == null ? null : template.NamedAreas;
+            if (areas == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < areas.Length; i++)
+            {
+                DimensionNamedAreaAsset area = areas[i];
+                if (area == null || !area.Enabled || string.IsNullOrEmpty(area.AreaId))
+                {
+                    continue;
+                }
+
+                List<int> tilesetIds = new List<int>();
+                DimensionTilesetAsset[] blocks = area.Blocks;
+                for (int b = 0; b < blocks.Length; b++)
+                {
+                    if (blocks[b] != null && blocks[b].Enabled && !tilesetIds.Contains(blocks[b].TilesetId))
+                    {
+                        tilesetIds.Add(blocks[b].TilesetId);
+                    }
+                }
+
+                if (tilesetIds.Count == 0)
+                {
+                    Debug.LogWarning(
+                        "[ExpandNullforge] Named area '" + area.AreaId + "' names no blocks, so " +
+                        "nothing could ever stand inside it. It was left out.");
+                    continue;
+                }
+
+                string syntheticId = "area:" + area.AreaId;
+                string tilesetLiteral = BuildIntArrayLiteral(tilesetIds);
+
+                if (area.ShowTitleOnDiscovery)
+                {
+                    UnityEngine.Color color = area.TitleColor;
+                    string iconName = string.IsNullOrEmpty(area.TitleIconObjectId)
+                        ? string.Empty
+                        : (IsModOwnedObjectName(template, area.TitleIconObjectId)
+                            ? DimensionObjectNamespace.Qualify(modName, area.TitleIconObjectId)
+                            : area.TitleIconObjectId);
+
+                    builder.AppendLine("    DimensionRegionTitleRegistry.Register(");
+                    builder.Append("        ").Append(ToCSharpString(syntheticId)).AppendLine(",");
+                    builder.Append("        ")
+                        .Append(ToCSharpString(DimensionBiomeTitleTerms.ForBiome(modName, syntheticId)))
+                        .AppendLine(",");
+                    builder.Append("        new UnityEngine.Color(")
+                        .Append(color.r.ToString("R", CultureInfo.InvariantCulture)).Append("f, ")
+                        .Append(color.g.ToString("R", CultureInfo.InvariantCulture)).Append("f, ")
+                        .Append(color.b.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f, 1f),");
+                    builder.Append("        ").Append(tilesetLiteral).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(iconName)).AppendLine(");");
+                }
+
+                if (!string.IsNullOrEmpty(area.AmbienceSoundKey) ||
+                    !string.IsNullOrEmpty(area.MusicRosterName))
+                {
+                    builder.AppendLine("    DimensionBiomeAtmosphereRegistry.Register(");
+                    builder.Append("        ").Append(ToCSharpString(syntheticId)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(area.AmbienceSoundKey)).AppendLine(",");
+                    builder.Append("        ")
+                        .Append(area.AmbienceVolume.ToString("R", CultureInfo.InvariantCulture))
+                        .AppendLine("f,");
+                    builder.Append("        ").Append(ToCSharpString(area.MusicRosterName)).AppendLine(",");
+                    builder.Append("        ").Append(tilesetLiteral).AppendLine(");");
+                }
+            }
+        }
+
+        private static string BuildIntArrayLiteral(List<int> values)
+        {
+            StringBuilder literal = new StringBuilder("new int[] { ");
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (i > 0)
+                {
+                    literal.Append(", ");
+                }
+
+                literal.Append(values[i].ToString(CultureInfo.InvariantCulture));
+            }
+
+            literal.Append(" }");
+            return literal.ToString();
+        }
+
+        /// <summary>
+        /// Emits each dungeon: its size, where it may grow, and which scenes fill which rooms.
+        /// </summary>
+        /// <remarks>
+        /// A dungeon with no entrance is reported but still emitted. It is a real mistake — the player
+        /// finds a sealed pocket of rooms — but it is also a legitimate mid-build state, and refusing
+        /// to generate it would stop an author testing the rooms they have so far.
+        /// </remarks>
+        private static void AppendDungeonRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            DimensionDungeonAsset[] dungeons = template == null ? null : template.GlobalDungeons;
+            if (dungeons == null || dungeons.Length == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < dungeons.Length; i++)
+            {
+                DimensionDungeonAsset dungeon = dungeons[i];
+                if (dungeon == null || !dungeon.Enabled)
+                {
+                    continue;
+                }
+
+                if (!dungeon.HasEntrance)
+                {
+                    Debug.LogWarning(
+                        "[ExpandNullforge] Dungeon '" + dungeon.DungeonId + "' has no entrance rooms. " +
+                        "It will still generate, but players will find a sealed pocket of rooms with " +
+                        "no way in.");
+                }
+
+                builder.AppendLine("    {");
+                builder.AppendLine(
+                    "      var dungeonRooms = new System.Collections.Generic.List<DimensionDungeonRoomGroup>();");
+
+                DimensionDungeonRoomGroupTemplate[] groups = dungeon.RoomGroups;
+                for (int g = 0; g < groups.Length; g++)
+                {
+                    DimensionDungeonRoomGroupTemplate group = groups[g];
+                    if (group == null || group.Rooms.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    builder.Append("      dungeonRooms.Add(new DimensionDungeonRoomGroup(")
+                        .Append("DimensionDungeonRoomRole.").Append(group.Role.ToString()).Append(", ")
+                        .Append(group.MinRooms.ToString(CultureInfo.InvariantCulture)).Append(", ")
+                        .Append(group.MaxRooms.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(", new string[] {");
+
+                    for (int r = 0; r < group.Rooms.Length; r++)
+                    {
+                        SceneTemplateAsset room = group.Rooms[r];
+                        if (room == null || string.IsNullOrEmpty(room.SceneId))
+                        {
+                            continue;
+                        }
+
+                        builder.Append("        ")
+                            .Append(ToCSharpString(
+                                DimensionObjectNamespace.Qualify(modName, room.SceneId)))
+                            .AppendLine(",");
+                    }
+
+                    builder.AppendLine("      }));");
+                }
+
+                builder.AppendLine("      DimensionDungeonRegistry.Register(new DimensionDungeonDefinition(");
+                builder.Append("          ")
+                    .Append(ToCSharpString(DimensionObjectNamespace.Qualify(modName, dungeon.DungeonId)))
+                    .AppendLine(",");
+                builder.Append("          ").Append(ToCSharpString(dungeon.BiomeId)).AppendLine(",");
+                builder.Append("          ")
+                    .Append(dungeon.Radius.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+                builder.Append("          ")
+                    .Append(dungeon.RoomSize.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+                builder.Append("          ")
+                    .Append(dungeon.PathSize.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+                builder.Append("          ")
+                    .Append(dungeon.SpawnChance.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+                builder.Append("          ")
+                    .Append(dungeon.MinDistanceFromCentre.ToString(CultureInfo.InvariantCulture))
+                    .AppendLine(",");
+                builder.AppendLine("          " + (dungeon.BlockOtherSpawns ? "true" : "false") + ",");
+                builder.Append("          dungeonRooms");
+                AppendDungeonShapeArguments(builder, template, dungeon, modName);
+                // Fillings are independent of the shape template: a dungeon of default rules
+                // with authored contents is the common first dungeon.
+                AppendDungeonFillings(builder, template, dungeon, modName);
+
+                // Where it grows inside the author's own dimension — vanilla's placer never
+                // runs there, so without these arguments the dungeon could only ever appear
+                // in the Overworld.
+                if (dungeon.GrowsInThisDimension)
+                {
+                    builder.AppendLine(",");
+                    builder.Append("          dimensionId: ")
+                        .Append(ToCSharpString(template.DimensionId)).AppendLine(",");
+                    builder.Append("          dimensionPlacement: DimensionScenePlacementMode.")
+                        .Append(dungeon.DimensionPlacement.ToString()).AppendLine(",");
+                    builder.Append("          exactLocalPosition: new Unity.Mathematics.int2(")
+                        .Append(dungeon.DimensionExactPosition.x.ToString(CultureInfo.InvariantCulture))
+                        .Append(", ")
+                        .Append(dungeon.DimensionExactPosition.y.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine("),");
+                    builder.Append("          minRadiusTiles: ")
+                        .Append(dungeon.DimensionMinRadius.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(",");
+                    builder.Append("          maxRadiusTiles: ")
+                        .Append(dungeon.DimensionMaxRadius.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(",");
+                    builder.Append("          countPerArea: ")
+                        .Append(dungeon.DimensionCount.ToString(CultureInfo.InvariantCulture));
+                }
+
+                builder.AppendLine("));");
+
+                // The Overworld pin: one guaranteed copy on the game's own unique-placement
+                // rails. The pin's NAME is the save's memory of the dungeon — it is derived
+                // from the qualified id and must never change once worlds exist, or an
+                // updated mod places a second copy.
+                if (dungeon.PinnedInOverworld)
+                {
+                    string pinName = DimensionObjectNamespace.Qualify(modName, dungeon.DungeonId);
+                    string pinError;
+                    if (!DimensionCustomSceneNames.IsValid(pinName, out pinError))
+                    {
+                        Debug.LogWarning(
+                            "[ExpandNullforge] Dungeon '" + dungeon.DungeonId + "' cannot be " +
+                            "pinned into the Overworld: " + pinError);
+                    }
+                    else
+                    {
+                        builder.AppendLine("      DimensionUniqueDungeonRegistry.Register(");
+                        builder.AppendLine("          new DimensionUniqueDungeonDefinition(");
+                        builder.Append("              ")
+                            .Append(ToCSharpString(DimensionObjectNamespace.Qualify(modName, dungeon.DungeonId)))
+                            .AppendLine(",");
+                        builder.Append("              ").Append(ToCSharpString(pinName)).AppendLine(",");
+                        builder.AppendLine("              " + (dungeon.PinnedAtExactSpot ? "true" : "false") + ",");
+                        builder.Append("              new int2(")
+                            .Append(dungeon.PinnedPosition.x.ToString(CultureInfo.InvariantCulture))
+                            .Append(", ")
+                            .Append(dungeon.PinnedPosition.y.ToString(CultureInfo.InvariantCulture))
+                            .AppendLine("),");
+                        builder.Append("              ")
+                            .Append(dungeon.PinnedDistanceFromCore.ToString(CultureInfo.InvariantCulture))
+                            .AppendLine(",");
+                        builder.Append("              ").Append(ToCSharpString(dungeon.PinnedBiomeName)).AppendLine(",");
+                        builder.AppendLine("              " + (dungeon.PinnedSpawnsImmediately ? "true" : "false") + "));");
+                    }
+                }
+
+                builder.AppendLine("    }");
+            }
+        }
+
+        /// <summary>
+        /// Emits the shape template's runtime mirrors as extra registration arguments, so the
+        /// authored shape survives into the built mod instead of stopping at the asset.
+        /// </summary>
+        /// <remarks>
+        /// A dungeon whose shape template was never switched on emits nothing extra and behaves
+        /// exactly as before this existed. Generated-dungeon and single-handmade-room are
+        /// alternatives; asking for both gets the generated dungeon and a warning, because
+        /// letting the game decide which wins is how content works in testing and not in worlds.
+        /// </remarks>
+        private static void AppendDungeonShapeArguments(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            DimensionDungeonAsset dungeon,
+            string modName)
+        {
+            DimensionDungeonShapeTemplate shape = dungeon.GeneratedShape;
+            if (shape == null)
+            {
+                return;
+            }
+
+            if (shape.IsBothGeneratedAndHandmade)
+            {
+                Debug.LogWarning(
+                    "[ExpandNullforge] Dungeon '" + dungeon.DungeonId + "' is marked as both a " +
+                    "generated dungeon and a single handmade room. They are alternatives; the " +
+                    "generated dungeon wins.");
+            }
+
+            if (shape.IsASingleHandmadeRoom && !shape.GeneratesADungeon)
+            {
+                // The author names WHICH of the dungeon's own places it is; the first place in
+                // its room groups is only the fallback. The named place must be one of them,
+                // because a dungeon room is looked up by the name this dimension registered it
+                // under — a name from anywhere else resolves to nothing and the dungeon is
+                // skipped at assembly with no way for the author to see why.
+                string singleSceneName = NamedRoomSceneName(dungeon, modName, shape.SingleRoomSceneId);
+                if (singleSceneName == null && !string.IsNullOrEmpty(shape.SingleRoomSceneId))
+                {
+                    Debug.LogWarning(
+                        "[ExpandNullforge] Dungeon '" + dungeon.DungeonId + "' is the single " +
+                        "handmade room '" + shape.SingleRoomSceneId + "', which is not one of " +
+                        "the places in its room groups. Add that place to a room group, or " +
+                        "clear the field to use the first place it names. It falls back to the " +
+                        "first place for this build.");
+                }
+
+                if (string.IsNullOrEmpty(singleSceneName))
+                {
+                    singleSceneName = FirstRoomSceneName(dungeon, modName);
+                }
+
+                if (string.IsNullOrEmpty(singleSceneName))
+                {
+                    Debug.LogWarning(
+                        "[ExpandNullforge] Dungeon '" + dungeon.DungeonId + "' is a single " +
+                        "handmade room but its room groups name no place, so there is nothing " +
+                        "to be. It will assemble as a generated dungeon instead.");
+                    return;
+                }
+
+                builder.AppendLine(",");
+                builder.Append("          singleScene: new DimensionDungeonSingleScene(")
+                    .Append(ToCSharpString(singleSceneName))
+                    .Append(", ")
+                    .Append(shape.KeepsClearRadius.ToString(CultureInfo.InvariantCulture))
+                    .Append(")");
+                return;
+            }
+
+            if (!shape.GeneratesADungeon)
+            {
+                return;
+            }
+
+            builder.AppendLine(",");
+            builder.AppendLine("          shape: new DimensionDungeonShape(");
+            builder.Append("              ")
+                .Append(shape.Seed.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.Append("              ")
+                .Append(shape.Radius.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.AppendLine("              " + (shape.HasAShapedOutline ? "true" : "false") + ",");
+            builder.Append("              ")
+                .Append(shape.OutlineWobble.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+            builder.Append("              ")
+                .Append(shape.OutlineBusyness.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+            builder.AppendLine("              " + (shape.OutlineFollowsTheRooms ? "true" : "false") + ",");
+            builder.AppendLine("              " + (shape.IsRectangular ? "true" : "false") + ",");
+            builder.Append("              ")
+                .Append(shape.RoomFillSize.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+            builder.Append("              ")
+                .Append(shape.PathFillSize.ToString("R", CultureInfo.InvariantCulture)).Append("f)");
+
+            DimensionDungeonRoom[] rooms = shape.Rooms;
+            if (rooms.Length > 0)
+            {
+                builder.AppendLine(",");
+                builder.AppendLine("          roomRules: new DimensionDungeonRoomRule[] {");
+                for (int i = 0; i < rooms.Length; i++)
+                {
+                    DimensionDungeonRoom room = rooms[i];
+                    builder.Append("            new DimensionDungeonRoomRule { Placement = DimensionRoomPlacement.")
+                        .Append(room.Placement.ToString())
+                        .Append(", Kind = (DimensionRoomKind)")
+                        .Append(((int)room.Kind).ToString(CultureInfo.InvariantCulture))
+                        .Append(", MinCount = ").Append(room.HowMany.x.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MaxCount = ").Append(room.HowMany.y.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MinRadius = ").Append(room.HowBig.x.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MaxRadius = ").Append(room.HowBig.y.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MinSpacing = ").Append(room.HowFarApart.x.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MaxSpacing = ").Append(room.HowFarApart.y.ToString(CultureInfo.InvariantCulture))
+                        .Append(", AngleMinDegrees = ").Append(room.AtWhatAngle.x.ToString(CultureInfo.InvariantCulture))
+                        .Append("f, AngleMaxDegrees = ").Append(room.AtWhatAngle.y.ToString(CultureInfo.InvariantCulture))
+                        .Append("f, AlignedWithTheCore = ").Append(room.AlignedWithTheCore ? "true" : "false")
+                        .Append(", StraightPaths = ").Append(room.StraightPathsToThem ? "true" : "false")
+                        .Append(", MayOverlapOtherRooms = ").Append(room.MayOverlapOtherRooms ? "true" : "false")
+                        .Append(", MayOverlapKinds = (DimensionRoomKind)")
+                        .Append(((int)room.MayOverlapKinds).ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(" },");
+                }
+
+                builder.Append("          }");
+            }
+
+            DimensionDungeonPath[] paths = shape.Paths;
+            if (paths.Length > 0)
+            {
+                builder.AppendLine(",");
+                builder.AppendLine("          pathRules: new DimensionDungeonPathRule[] {");
+                for (int i = 0; i < paths.Length; i++)
+                {
+                    DimensionDungeonPath path = paths[i];
+                    builder.Append("            new DimensionDungeonPathRule { Placement = DimensionPathPlacement.")
+                        .Append(path.Placement.ToString())
+                        .Append(", Kind = (DimensionRoomKind)")
+                        .Append(((int)path.Kind).ToString(CultureInfo.InvariantCulture))
+                        .Append(", MinCount = ").Append(path.HowMany.x.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MaxCount = ").Append(path.HowMany.y.ToString(CultureInfo.InvariantCulture))
+                        .Append(", Width = ").Append(path.Width.ToString("R", CultureInfo.InvariantCulture))
+                        .Append("f, Straight = ").Append(path.Straight ? "true" : "false")
+                        .Append(", MayCrossPaths = ").Append(path.MayCrossPaths ? "true" : "false")
+                        .Append(", MayCrossPathKinds = (DimensionRoomKind)")
+                        .Append(((int)path.MayCrossPathKinds).ToString(CultureInfo.InvariantCulture))
+                        .Append(", MayCrossRooms = ").Append(path.MayCrossRooms ? "true" : "false")
+                        .Append(", MayCrossRoomKinds = (DimensionRoomKind)")
+                        .Append(((int)path.MayCrossRoomKinds).ToString(CultureInfo.InvariantCulture))
+                        .Append(", StartsFrom = (DimensionRoomKind)")
+                        .Append(((int)path.StartsFrom).ToString(CultureInfo.InvariantCulture))
+                        .Append(", EndsAt = (DimensionRoomKind)")
+                        .Append(((int)path.EndsAt).ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(" },");
+                }
+
+                builder.Append("          }");
+            }
+
+            string[] outlineBlocks = shape.OutlineBlockIds;
+            bool wroteOutline = false;
+            for (int i = 0; i < outlineBlocks.Length; i++)
+            {
+                if (string.IsNullOrEmpty(outlineBlocks[i]))
+                {
+                    continue;
+                }
+
+                if (!wroteOutline)
+                {
+                    builder.AppendLine(",");
+                    builder.Append("          outlineBlockIds: new string[] { ");
+                    wroteOutline = true;
+                }
+                else
+                {
+                    builder.Append(", ");
+                }
+
+                // A mod-owned block ships under its qualified name; a vanilla one keeps the
+                // name the game already knows it by.
+                string blockName = IsModOwnedObjectName(template, outlineBlocks[i])
+                    ? DimensionObjectNamespace.Qualify(modName, outlineBlocks[i])
+                    : outlineBlocks[i];
+                builder.Append(ToCSharpString(blockName));
+            }
+
+            if (wroteOutline)
+            {
+                builder.Append(" }");
+            }
+
+            DimensionDungeonSwap[] swaps = shape.Swaps;
+            bool wroteSwaps = false;
+            for (int i = 0; i < swaps.Length; i++)
+            {
+                DimensionDungeonSwap swap = swaps[i];
+                if (string.IsNullOrEmpty(swap.ReplaceId) || string.IsNullOrEmpty(swap.WithId))
+                {
+                    continue;
+                }
+
+                if (!wroteSwaps)
+                {
+                    builder.AppendLine(",");
+                    builder.AppendLine("          swaps: new DimensionDungeonSwapRule[] {");
+                    wroteSwaps = true;
+                }
+
+                string replaceName = IsModOwnedObjectName(template, swap.ReplaceId)
+                    ? DimensionObjectNamespace.Qualify(modName, swap.ReplaceId)
+                    : swap.ReplaceId;
+                string withName = IsModOwnedObjectName(template, swap.WithId)
+                    ? DimensionObjectNamespace.Qualify(modName, swap.WithId)
+                    : swap.WithId;
+
+                builder.Append("            new DimensionDungeonSwapRule { ReplaceId = ")
+                    .Append(ToCSharpString(replaceName))
+                    .Append(", WithId = ").Append(ToCSharpString(withName))
+                    .Append(", OnlyOneLook = ").Append(swap.OnlyOneLook ? "true" : "false")
+                    .Append(", TheLook = ").Append(swap.TheLook.ToString(CultureInfo.InvariantCulture))
+                    .Append(", MinReplacementLook = ")
+                    .Append(swap.ReplacementLooks.x.ToString(CultureInfo.InvariantCulture))
+                    .Append(", MaxReplacementLook = ")
+                    .Append(swap.ReplacementLooks.y.ToString(CultureInfo.InvariantCulture))
+                    .AppendLine(" },");
+            }
+
+            if (wroteSwaps)
+            {
+                builder.Append("          }");
+            }
+        }
+
+        /// <summary>
+        /// Emits the dungeon's room fillings — the procedural content layer. Ids that belong to
+        /// the mod ship qualified; vanilla names pass through, and the assembler resolves both
+        /// at runtime where the object database exists.
+        /// </summary>
+        private static void AppendDungeonFillings(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            DimensionDungeonAsset dungeon,
+            string modName)
+        {
+            DimensionRoomFillingAsset[] fillings = dungeon.RoomFillings;
+            bool wroteAny = false;
+            for (int i = 0; i < fillings.Length; i++)
+            {
+                DimensionRoomFillingAsset filling = fillings[i];
+                if (filling == null || !filling.Enabled || filling.Entries.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!wroteAny)
+                {
+                    builder.AppendLine(",");
+                    builder.AppendLine("          fillings: new DimensionDungeonFillingRule[] {");
+                    wroteAny = true;
+                }
+
+                builder.Append("            new DimensionDungeonFillingRule(")
+                    .Append(ToCSharpString(filling.FillingId))
+                    .Append(", (DimensionRoomKind)")
+                    .Append(((int)filling.FillsRooms).ToString(CultureInfo.InvariantCulture))
+                    .Append(", ").Append(filling.FillsCorridors ? "true" : "false")
+                    .Append(", ").Append(filling.OnlyIfAtLeastThisBig.ToString(CultureInfo.InvariantCulture))
+                    .AppendLine(", new DimensionDungeonFillingEntry[] {");
+
+                DimensionRoomFillingEntry[] entries = filling.Entries;
+                for (int e = 0; e < entries.Length; e++)
+                {
+                    DimensionRoomFillingEntry entry = entries[e];
+                    if (entry == null || string.IsNullOrEmpty(entry.ObjectId))
+                    {
+                        continue;
+                    }
+
+                    builder.Append("              new DimensionDungeonFillingEntry { ObjectId = ")
+                        .Append(ToCSharpString(QualifyIfOwn(template, modName, entry.ObjectId)))
+                        .Append(", Look = ").Append(entry.Look.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MinPatches = ").Append(entry.HowManyPatches.x.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MaxPatches = ").Append(entry.HowManyPatches.y.ToString(CultureInfo.InvariantCulture))
+                        .Append(", PatchShape = ").Append(((int)entry.PatchShape).ToString(CultureInfo.InvariantCulture))
+                        .Append(", PatchSize = ").Append(entry.PatchSize.ToString("R", CultureInfo.InvariantCulture))
+                        .Append("f, ChanceToAppear = ").Append(entry.ChanceToAppear.ToString("R", CultureInfo.InvariantCulture))
+                        .Append("f, Density = ").Append(entry.Density.ToString("R", CultureInfo.InvariantCulture))
+                        .Append("f, MayLandOn = ").Append(QualifiedArrayLiteral(template, modName, entry.MayLandOn))
+                        .Append(", NeverOn = ").Append(QualifiedArrayLiteral(template, modName, entry.NeverOn))
+                        .Append(", StackCount = ").Append(entry.StackCount.ToString(CultureInfo.InvariantCulture))
+                        .Append(", ChestLoot = ").Append(ToCSharpString(entry.ChestLoot))
+                        .AppendLine(" },");
+                }
+
+                builder.AppendLine("            }),");
+            }
+
+            if (wroteAny)
+            {
+                builder.Append("          }");
+            }
+        }
+
+        private static string QualifyIfOwn(
+            DimensionTemplateAsset template,
+            string modName,
+            string objectId)
+        {
+            return IsModOwnedObjectName(template, objectId)
+                ? DimensionObjectNamespace.Qualify(modName, objectId)
+                : objectId;
+        }
+
+        private static string QualifiedArrayLiteral(
+            DimensionTemplateAsset template,
+            string modName,
+            string[] ids)
+        {
+            if (ids == null || ids.Length == 0)
+            {
+                return "new string[0]";
+            }
+
+            StringBuilder literal = new StringBuilder("new string[] { ");
+            bool wrote = false;
+            for (int i = 0; i < ids.Length; i++)
+            {
+                if (string.IsNullOrEmpty(ids[i]))
+                {
+                    continue;
+                }
+
+                if (wrote)
+                {
+                    literal.Append(", ");
+                }
+
+                literal.Append(ToCSharpString(QualifyIfOwn(template, modName, ids[i])));
+                wrote = true;
+            }
+
+            literal.Append(" }");
+            return wrote ? literal.ToString() : "new string[0]";
+        }
+
+        /// <summary>
+        /// The registered name of the room the author named, or null when no room group holds it.
+        /// </summary>
+        /// <remarks>
+        /// Matching is against the room groups rather than every scene in the project on purpose:
+        /// the single room is also the dungeon's whole content, so a place that is not in a room
+        /// group would be a dungeon whose one room is not one of its rooms.
+        /// </remarks>
+        private static string NamedRoomSceneName(
+            DimensionDungeonAsset dungeon,
+            string modName,
+            string sceneId)
+        {
+            if (string.IsNullOrEmpty(sceneId))
+            {
+                return null;
+            }
+
+            DimensionDungeonRoomGroupTemplate[] groups = dungeon.RoomGroups;
+            for (int g = 0; g < groups.Length; g++)
+            {
+                if (groups[g] == null)
+                {
+                    continue;
+                }
+
+                SceneTemplateAsset[] rooms = groups[g].Rooms;
+                for (int r = 0; r < rooms.Length; r++)
+                {
+                    if (rooms[r] != null &&
+                        string.Equals(rooms[r].SceneId, sceneId, System.StringComparison.Ordinal))
+                    {
+                        return DimensionObjectNamespace.Qualify(modName, rooms[r].SceneId);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static string FirstRoomSceneName(DimensionDungeonAsset dungeon, string modName)
+        {
+            DimensionDungeonRoomGroupTemplate[] groups = dungeon.RoomGroups;
+            for (int g = 0; g < groups.Length; g++)
+            {
+                if (groups[g] == null)
+                {
+                    continue;
+                }
+
+                SceneTemplateAsset[] rooms = groups[g].Rooms;
+                for (int r = 0; r < rooms.Length; r++)
+                {
+                    if (rooms[r] != null && !string.IsNullOrEmpty(rooms[r].SceneId))
+                    {
+                        return DimensionObjectNamespace.Qualify(modName, rooms[r].SceneId);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Emits each boss's phases: the health thresholds and what happens at them.
+        /// </summary>
+        /// <remarks>
+        /// A phase whose action needs a target it does not have is dropped here rather than shipped —
+        /// a summon with nothing to summon, or a condition with no condition named, would register
+        /// fine and then do nothing at the most visible moment of a fight.
+        /// </remarks>
+        private static void AppendBossPhaseRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            DimensionBossAsset[] bosses = template == null ? null : template.GlobalBosses;
+            if (bosses == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < bosses.Length; i++)
+            {
+                DimensionBossAsset boss = bosses[i];
+                if (boss == null || !boss.Enabled)
+                {
+                    continue;
+                }
+
+                DimensionBossPhaseTemplate[] phases = boss.Phases;
+                if (phases == null || phases.Length == 0)
+                {
+                    continue;
+                }
+
+                string bossName = DimensionObjectNamespace.Qualify(modName, boss.BossId);
+
+                for (int p = 0; p < phases.Length; p++)
+                {
+                    DimensionBossPhaseTemplate phase = phases[p];
+                    if (phase == null || !phase.Enabled)
+                    {
+                        continue;
+                    }
+
+                    bool needsTarget =
+                        phase.Action == DimensionBossPhaseActionKind.SummonAdds ||
+                        phase.Action == DimensionBossPhaseActionKind.ApplyConditionToSelf ||
+                        phase.Action == DimensionBossPhaseActionKind.ApplyConditionToPlayers;
+
+                    if (needsTarget && string.IsNullOrEmpty(phase.ActionTarget))
+                    {
+                        Debug.LogWarning(
+                            "[ExpandNullforge] Boss '" + boss.BossId + "' phase '" + phase.PhaseId +
+                            "' is set to " + phase.Action + " but names nothing to act on, so it was " +
+                            "left out. The fight will reach that health and do nothing.");
+                        continue;
+                    }
+
+                    // A summoned creature is one of the mod's own; a condition is one of the game's.
+                    // Qualifying a condition name would point it at an object that does not exist.
+                    string target = phase.Action == DimensionBossPhaseActionKind.SummonAdds
+                        ? DimensionObjectNamespace.Qualify(modName, phase.ActionTarget)
+                        : phase.ActionTarget;
+
+                    builder.AppendLine("    DimensionBossPhaseRegistry.Register(");
+                    builder.Append("        ").Append(ToCSharpString(phase.PhaseId)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(bossName)).AppendLine(",");
+                    builder.Append("        ")
+                        .Append(phase.HealthThreshold.ToString("R", CultureInfo.InvariantCulture))
+                        .AppendLine("f,");
+                    builder.Append("        DimensionBossPhaseAction.")
+                        .Append(phase.Action.ToString()).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(target)).AppendLine(",");
+                    builder.Append("        ")
+                        .Append(phase.ActionAmount.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+                    builder.Append("        ")
+                        .Append(phase.ActionDuration.ToString("R", CultureInfo.InvariantCulture))
+                        .AppendLine("f,");
+                    builder.Append("        ")
+                        .Append(phase.Radius.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+                    // The tenth field, which used to be dropped here: the phase's own music.
+                    builder.Append("        ").Append(ToCSharpString(phase.MusicCueId)).AppendLine(");");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Emits every authored loot table as a real registered table.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The half that makes <c>DimensionLootTableAsset</c> more than paperwork: before this,
+        /// a table's entries only mattered where a generator copied them onto a prefab, and any
+        /// field that wanted the table BY NAME (a dungeon chest, a melody reward) found nothing.
+        /// The runtime registry builds the table under its minted id at the game's own loot
+        /// conversion seam; item names qualify here because only the editor knows which names
+        /// the mod owns.
+        /// </para>
+        /// <para>
+        /// Tables hang off several asset kinds (global list, mobs, elites, bosses, animals), so
+        /// the walk deduplicates by table id — registering twice would replace, not stack, but
+        /// the log noise would read as a bug.
+        /// </para>
+        /// </remarks>
+        private static void AppendLootTableRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            if (template == null)
+            {
+                return;
+            }
+
+            List<DimensionLootTableAsset> tables = new List<DimensionLootTableAsset>();
+            HashSet<string> seenIds = new HashSet<string>(System.StringComparer.Ordinal);
+
+            void Collect(DimensionLootTableAsset table)
+            {
+                if (table != null && table.Enabled && !string.IsNullOrEmpty(table.LootTableId) &&
+                    table.EnabledEntryCount > 0 && seenIds.Add(table.LootTableId))
+                {
+                    tables.Add(table);
+                }
+            }
+
+            DimensionLootTableAsset[] globals = template.GlobalLootTables;
+            for (int i = 0; globals != null && i < globals.Length; i++)
+            {
+                Collect(globals[i]);
+            }
+
+            DimensionMobAsset[] mobs = template.GlobalMobs;
+            for (int i = 0; mobs != null && i < mobs.Length; i++)
+            {
+                if (mobs[i] == null)
+                {
+                    continue;
+                }
+
+                Collect(mobs[i].LootTable);
+                Collect(mobs[i].EliteVariant == null ? null : mobs[i].EliteVariant.LootTable);
+            }
+
+            DimensionBossAsset[] bosses = template.GlobalBosses;
+            for (int i = 0; bosses != null && i < bosses.Length; i++)
+            {
+                Collect(bosses[i] == null ? null : bosses[i].LootTable);
+            }
+
+            DimensionAnimalAsset[] animals = template.GlobalAnimals;
+            for (int i = 0; animals != null && i < animals.Length; i++)
+            {
+                Collect(animals[i] == null ? null : animals[i].LootTable);
+            }
+
+            for (int i = 0; i < tables.Count; i++)
+            {
+                DimensionLootTableAsset table = tables[i];
+
+                // A vanilla name would resolve to the vanilla table everywhere the resolver
+                // runs, so registering a custom table under it could never be reached — say so
+                // instead of emitting a dead registration.
+                LootTableID vanilla;
+                if (System.Enum.TryParse(table.LootTableId, false, out vanilla))
+                {
+                    Debug.LogWarning(
+                        "[Dimensions API] Loot table '" + table.LootTableId + "' shares its " +
+                        "name with one of the game's own tables, so the game's is the one " +
+                        "everything will roll. Rename yours to make it reachable.");
+                    continue;
+                }
+
+                builder.Append("    DimensionLootTableRegistry.Register(")
+                    .Append(ToCSharpString(table.LootTableId))
+                    .Append(", ")
+                    .Append(table.AllowEmptyRoll ? "true" : "false")
+                    .AppendLine(", new DimensionLootTableRegistry.Entry[] {");
+
+                DimensionLootEntryTemplate[] entries = table.Entries;
+                bool wroteEntry = false;
+                for (int e = 0; e < entries.Length; e++)
+                {
+                    DimensionLootEntryTemplate entry = entries[e];
+                    if (entry == null || !entry.Enabled || string.IsNullOrEmpty(entry.ItemId))
+                    {
+                        continue;
+                    }
+
+                    string itemName = IsModOwnedObjectName(template, entry.ItemId)
+                        ? DimensionObjectNamespace.Qualify(modName, entry.ItemId)
+                        : entry.ItemId;
+
+                    // The share used to decide the odds and the chance was thrown away. It is the
+                    // other way round now — the chance is made true when the table is built — which
+                    // leaves the share nothing to divide, so it is no longer drawn. A table
+                    // authored before that still carries whatever was typed into it, and a number
+                    // that no longer reaches anything is exactly the thing this framework refuses
+                    // to leave unsaid.
+                    if (entry.Weight != 1)
+                    {
+                        Debug.LogWarning(
+                            "[Dimensions API] Loot table '" + table.LootTableId + "' gives '" +
+                            entry.ItemId + "' a share of " + entry.Weight + ". Shares are no " +
+                            "longer how the odds are decided — the drop chance is, and it now " +
+                            "means exactly what it says. This row drops " +
+                            (entry.DropChance * 100f).ToString("0.##", CultureInfo.InvariantCulture) +
+                            "% of the time. Set its drop chance if that is not what you wanted.");
+                    }
+
+                    if (wroteEntry)
+                    {
+                        builder.AppendLine(",");
+                    }
+
+                    builder.Append("        new DimensionLootTableRegistry.Entry { ItemObjectName = ")
+                        .Append(ToCSharpString(itemName))
+                        .Append(", Weight = ")
+                        .Append(((float)entry.Weight).ToString("R", CultureInfo.InvariantCulture))
+                        .Append("f, DropChance = ")
+                        .Append(entry.DropChance.ToString("R", CultureInfo.InvariantCulture))
+                        .Append("f, MinAmount = ")
+                        .Append(entry.MinAmount.ToString(CultureInfo.InvariantCulture))
+                        .Append(", MaxAmount = ")
+                        .Append(entry.MaxAmount.ToString(CultureInfo.InvariantCulture))
+                        .Append(" }");
+                    wroteEntry = true;
+                }
+
+                builder.AppendLine();
+                builder.AppendLine("    });");
+            }
+        }
+
+        /// <summary>
+        /// Emits each mob's keeps-coming-back rule into the game's own periodic respawn table.
+        /// </summary>
+        /// <remarks>
+        /// The tileset resolves at emission because only the editor knows whether a name is one
+        /// of this template's tilesets (minted id, computed at runtime from the same name) or a
+        /// vanilla tileset (enum literal). A name that is neither is refused here, loudly,
+        /// rather than emitted as a rule that can never match a tile.
+        /// </remarks>
+        private static void AppendRespawnRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            DimensionMobAsset[] mobs = template == null ? null : template.GlobalMobs;
+            if (mobs == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < mobs.Length; i++)
+            {
+                DimensionMobAsset mob = mobs[i];
+                if (mob == null || !mob.Enabled || mob.Respawn == null ||
+                    !mob.Respawn.KeepsComingBack || string.IsNullOrEmpty(mob.MobId))
+                {
+                    continue;
+                }
+
+                DimensionRespawnTemplate respawn = mob.Respawn;
+                string creatureName = DimensionObjectNamespace.Qualify(modName, mob.MobId);
+
+                string tilesetExpression = null;
+                string tilesetName = respawn.OnTileset;
+                if (string.IsNullOrEmpty(tilesetName))
+                {
+                    tilesetExpression = string.Empty;
+                }
+                else if (FindTileset(template, tilesetName) != null)
+                {
+                    tilesetExpression =
+                        "DimensionTilesetRegistry.ComputeTilesetId(" +
+                        ToCSharpString(tilesetName) + ")";
+                }
+                else if (System.Enum.TryParse(tilesetName, false, out PugTilemap.Tileset vanillaTileset))
+                {
+                    tilesetExpression = "(int)PugTilemap.Tileset." + vanillaTileset;
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        "[Dimensions API] '" + mob.DisplayName + "' keeps coming back on " +
+                        "tileset '" + tilesetName + "', which is neither one of this mod's " +
+                        "tilesets nor a vanilla one. The rule was left out — fix the name.");
+                    continue;
+                }
+
+                // The four surfaces vanilla's own respawn files key on; the value map lives
+                // here, the one place allowed to know the game's numbers.
+                string tileType;
+                switch (respawn.Surface)
+                {
+                    case DimensionRespawnSurface.Nest:
+                        tileType = "PugTilemap.TileType.chrysalis";
+                        break;
+                    case DimensionRespawnSurface.SlimeCoat:
+                        tileType = "PugTilemap.TileType.groundSlime";
+                        break;
+                    case DimensionRespawnSurface.Water:
+                        tileType = "PugTilemap.TileType.water";
+                        break;
+                    default:
+                        tileType = "PugTilemap.TileType.ground";
+                        break;
+                }
+
+                builder.AppendLine("    DimensionRespawnRegistry.Register(new DimensionRespawnRegistry.RespawnRule");
+                builder.AppendLine("    {");
+                builder.Append("        RuleName = ")
+                    .Append(ToCSharpString(creatureName + ":respawn")).AppendLine(",");
+                builder.Append("        CreatureObjectName = ")
+                    .Append(ToCSharpString(creatureName)).AppendLine(",");
+                builder.Append("        TileType = ").Append(tileType).AppendLine(",");
+                builder.Append("        Tilesets = ")
+                    .Append(string.IsNullOrEmpty(tilesetExpression)
+                        ? "new int[0]"
+                        : "new int[] { " + tilesetExpression + " }")
+                    .AppendLine(",");
+                builder.Append("        Chance = ")
+                    .Append(respawn.Chance.ToString("R", CultureInfo.InvariantCulture))
+                    .AppendLine("f,");
+                builder.Append("        ChanceDecayPerExisting = ")
+                    .Append(respawn.CrowdSlowdown.ToString("R", CultureInfo.InvariantCulture))
+                    .AppendLine("f,");
+                builder.Append("        MaxPerTile = ")
+                    .Append(respawn.MostPerTile.ToString("R", CultureInfo.InvariantCulture))
+                    .AppendLine("f,");
+                builder.Append("        MaxPerSweep = ")
+                    .Append(respawn.MostPerSweep.ToString(CultureInfo.InvariantCulture))
+                    .AppendLine(",");
+                builder.Append("        MinTilesRequired = ")
+                    .Append(respawn.FewestTilesNeeded.ToString("R", CultureInfo.InvariantCulture))
+                    .AppendLine("f,");
+                builder.AppendLine("        OnlyInBiome = \"\"");
+                builder.AppendLine("    });");
+            }
+        }
+
+        private static DimensionTilesetAsset FindTileset(
+            DimensionTemplateAsset template,
+            string tilesetName)
+        {
+            DimensionTilesetAsset[] tilesets = template == null ? null : template.Tilesets;
+            for (int i = 0; tilesets != null && i < tilesets.Length; i++)
+            {
+                if (tilesets[i] != null &&
+                    string.Equals(tilesets[i].TilesetName, tilesetName, System.StringComparison.Ordinal))
+                {
+                    return tilesets[i];
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Emits each boss's presentation row (pin, floating name) and respawn cooldown.
+        /// </summary>
+        /// <remarks>
+        /// The literals half of the two-half registry: names and terms bake here; the sprites
+        /// attach at runtime when the manifest loads, because a Sprite only exists once the
+        /// bundle does. The respawn row only exists for a positive cooldown — zero means
+        /// vanilla's own "gone means summonable", which needs no machinery.
+        /// </remarks>
+        private static void AppendBossPresentationRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            DimensionBossAsset[] bosses = template == null ? null : template.GlobalBosses;
+            if (bosses == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < bosses.Length; i++)
+            {
+                DimensionBossAsset boss = bosses[i];
+                if (boss == null || !boss.Enabled || string.IsNullOrEmpty(boss.BossId))
+                {
+                    continue;
+                }
+
+                string bossName = DimensionObjectNamespace.Qualify(modName, boss.BossId);
+                string nameTerm = "Names/" + DimensionLocalizationCsv.ToLookupKeyName(bossName);
+                string hoverTerm = string.IsNullOrEmpty(boss.MapPin.HoverName)
+                    ? nameTerm
+                    : "Names/" + DimensionLocalizationCsv.ToLookupKeyName(bossName + "-pin");
+
+                builder.AppendLine("    DimensionBossPresentationRegistry.Register(");
+                builder.AppendLine("        new DimensionBossPresentationDefinition(");
+                builder.Append("            ").Append(ToCSharpString(bossName)).AppendLine(",");
+                builder.Append("            ").Append(ToCSharpString(boss.BossId)).AppendLine(",");
+                builder.Append("            ").Append(ToCSharpString(nameTerm)).AppendLine(",");
+                builder.Append("            ")
+                    .Append(boss.MapPin.ShowsOnTheMap ? "true" : "false").AppendLine(",");
+                builder.Append("            ").Append(ToCSharpString(hoverTerm)).AppendLine("));");
+
+                if (boss.RespawnCooldownMinutes > 0f)
+                {
+                    builder.Append("    DimensionBossRespawnRegistry.Register(")
+                        .Append(ToCSharpString(bossName))
+                        .Append(", ")
+                        .Append(boss.RespawnCooldownMinutes.ToString("R", CultureInfo.InvariantCulture))
+                        .AppendLine("f);");
+                }
+
+                // A fight-music name that is not a vanilla roster and carries its own tracks is
+                // the mod's own cue; the runtime registry gives it a roster the game can pick.
+                MusicRosterType vanillaRoster;
+                string[] trackKeys = boss.FightMusic.CustomTrackKeys;
+                if (trackKeys.Length > 0 &&
+                    !string.IsNullOrEmpty(boss.FightMusic.MusicId) &&
+                    !System.Enum.TryParse(boss.FightMusic.MusicId, false, out vanillaRoster))
+                {
+                    builder.Append("    DimensionMusicRosterRegistry.RegisterCue(")
+                        .Append(ToCSharpString(boss.FightMusic.MusicId))
+                        .Append(", new string[] { ");
+                    bool wroteTrack = false;
+                    for (int t = 0; t < trackKeys.Length; t++)
+                    {
+                        if (string.IsNullOrEmpty(trackKeys[t]))
+                        {
+                            continue;
+                        }
+
+                        if (wroteTrack)
+                        {
+                            builder.Append(", ");
+                        }
+
+                        builder.Append(ToCSharpString(trackKeys[t]));
+                        wroteTrack = true;
+                    }
+
+                    builder.AppendLine(" });");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Emits each creature's claim on where in the world it appears.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A creature with no biome listed is emitted once, unrestricted — Core Keeper reads an empty
+        /// biome as "anywhere", which is what an author means by leaving it blank. A creature listing
+        /// several biomes is emitted once per biome, because that is how the game's table is shaped:
+        /// each row answers one "where", and a bat common in caves and rare outside is genuinely two
+        /// rows rather than one with a condition.
+        /// </para>
+        /// <para>
+        /// The tilesets come from the biome's own blocks, the same derivation the title cards use, so
+        /// "in this biome" means the same thing to spawning as it does to everything else.
+        /// </para>
+        /// </remarks>
+        private static void AppendCreatureSpawnRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            DimensionMobAsset[] mobs = template == null ? null : template.GlobalMobs;
+            DimensionAnimalAsset[] animals = template == null ? null : template.GlobalAnimals;
+            DimensionTilesetAsset[] tilesets = template == null ? null : template.Tilesets;
+            if (tilesets == null)
+            {
+                return;
+            }
+
+            if (mobs != null)
+            {
+                for (int i = 0; i < mobs.Length; i++)
+                {
+                    DimensionMobAsset mob = mobs[i];
+                    if (mob == null || !mob.Enabled || !mob.SpawnsInWorld)
+                    {
+                        continue;
+                    }
+
+                    AppendSpawnRowsFor(
+                        builder,
+                        template,
+                        tilesets,
+                        DimensionObjectNamespace.Qualify(modName, mob.MobId),
+                        mob.AllowedBiomeIds,
+                        mob.SpawnChance,
+                        mob.SpawnAmount,
+                        mob.SpawnsInGroups,
+                        mob.CanSpawnInBlockedArea);
+
+                    // The elite spawns wherever its parent does, just far less often — which is the
+                    // whole of what makes it feel like a rare encounter rather than a second enemy.
+                    DimensionEliteVariantTemplate elite = mob.EliteVariant;
+                    if (elite.Enabled)
+                    {
+                        AppendSpawnRowsFor(
+                            builder,
+                            template,
+                            tilesets,
+                            DimensionObjectNamespace.Qualify(
+                                modName, DimensionEliteVariantTemplate.IdFor(mob.MobId)),
+                            mob.AllowedBiomeIds,
+                            mob.SpawnChance / elite.RarityFactor,
+                            1,
+                            false,
+                            mob.CanSpawnInBlockedArea);
+                    }
+                }
+            }
+
+            if (animals != null)
+            {
+                for (int i = 0; i < animals.Length; i++)
+                {
+                    DimensionAnimalAsset animal = animals[i];
+                    if (animal == null || !animal.Enabled || !animal.SpawnsInWorld)
+                    {
+                        continue;
+                    }
+
+                    AppendSpawnRowsFor(
+                        builder,
+                        template,
+                        tilesets,
+                        DimensionObjectNamespace.Qualify(modName, animal.AnimalId),
+                        animal.AllowedBiomeIds,
+                        animal.SpawnChance,
+                        animal.SpawnAmount,
+                        animal.SpawnsInGroups,
+                        animal.CanSpawnInBlockedArea);
+                }
+            }
+        }
+
+        private static void AppendSpawnRowsFor(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            DimensionTilesetAsset[] tilesets,
+            string objectName,
+            string[] biomeIds,
+            float spawnChance,
+            int amount,
+            bool clustered,
+            bool canSpawnInBlockedArea)
+        {
+            if (biomeIds == null || biomeIds.Length == 0)
+            {
+                AppendSpawnRow(
+                    builder, objectName, string.Empty, new List<int>(),
+                    spawnChance, amount, clustered, canSpawnInBlockedArea);
+                return;
+            }
+
+            for (int i = 0; i < biomeIds.Length; i++)
+            {
+                BiomeTemplateAsset biome = FindBiome(template, biomeIds[i]);
+                List<int> tilesetIds = biome == null
+                    ? new List<int>()
+                    : CollectBiomeTilesetIds(biome, tilesets);
+
+                AppendSpawnRow(
+                    builder, objectName, biomeIds[i], tilesetIds,
+                    spawnChance, amount, clustered, canSpawnInBlockedArea);
+            }
+        }
+
+        private static void AppendSpawnRow(
+            StringBuilder builder,
+            string objectName,
+            string biomeId,
+            List<int> tilesetIds,
+            float spawnChance,
+            int amount,
+            bool clustered,
+            bool canSpawnInBlockedArea)
+        {
+            builder.AppendLine("    DimensionCreatureSpawnRegistry.Register(");
+            builder.Append("        ").Append(ToCSharpString(objectName)).AppendLine(",");
+            builder.Append("        ").Append(ToCSharpString(biomeId)).AppendLine(",");
+
+            builder.Append("        new int[] { ");
+            for (int t = 0; t < tilesetIds.Count; t++)
+            {
+                if (t > 0)
+                {
+                    builder.Append(", ");
+                }
+
+                builder.Append(tilesetIds[t].ToString(CultureInfo.InvariantCulture));
+            }
+
+            builder.AppendLine(" },");
+
+            // Ground: the surface almost everything walks on. A creature that belongs in water or on
+            // a wall is a different shape of authoring and is not offered yet rather than guessed at.
+            builder.AppendLine("        PugTilemap.TileType.ground,");
+            builder.Append("        ")
+                .Append(spawnChance.ToString("R", CultureInfo.InvariantCulture)).AppendLine("f,");
+            builder.AppendLine("        1,");
+            builder.Append("        ").Append(amount.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.AppendLine("        " + (clustered ? "true" : "false") + ",");
+            builder.AppendLine("        " + (canSpawnInBlockedArea ? "true" : "false") + ");");
+        }
+
+        private static BiomeTemplateAsset FindBiome(DimensionTemplateAsset template, string biomeId)
+        {
+            BiomeTemplateAsset[] biomes = template == null ? null : template.Biomes;
+            if (biomes == null || string.IsNullOrEmpty(biomeId))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < biomes.Length; i++)
+            {
+                if (biomes[i] != null &&
+                    string.Equals(biomes[i].BiomeId, biomeId, StringComparison.Ordinal))
+                {
+                    return biomes[i];
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Emits what a biome sounds like: its ambience loop and which music playlist it plays.
+        /// </summary>
+        /// <remarks>
+        /// Emitted even when a biome has neither, because the registration is also what claims the
+        /// biome's tilesets — and a biome with no sound of its own still needs the game to know the
+        /// player is standing in it.
+        /// </remarks>
+        private static void AppendBiomeAtmosphereRegistration(
+            StringBuilder builder,
+            BiomeTemplateAsset biome,
+            List<int> tilesetIds)
+        {
+            builder.AppendLine("    DimensionBiomeAtmosphereRegistry.Register(");
+            builder.Append("        ").Append(ToCSharpString(biome.BiomeId)).AppendLine(",");
+            builder.Append("        ").Append(ToCSharpString(biome.AmbienceSoundKey)).AppendLine(",");
+            builder.Append("        ")
+                .Append(biome.AmbienceVolume.ToString("R", CultureInfo.InvariantCulture))
+                .AppendLine("f,");
+            builder.Append("        ").Append(ToCSharpString(biome.MusicRosterName)).AppendLine(",");
+
+            builder.Append("        new int[] { ");
+            for (int t = 0; t < tilesetIds.Count; t++)
+            {
+                if (t > 0)
+                {
+                    builder.Append(", ");
+                }
+
+                builder.Append(tilesetIds[t].ToString(CultureInfo.InvariantCulture));
+            }
+
+            builder.AppendLine(" });");
+        }
+
+        /// <summary>
+        /// The custom tilesets a biome's own floor and wall blocks belong to.
+        /// </summary>
+        /// <remarks>
+        /// Matched on the generated block item ids rather than on the tileset name, because that is
+        /// what a biome actually references — the author picks blocks, and the tileset is what those
+        /// blocks are made of.
+        /// </remarks>
+        private static List<int> CollectBiomeTilesetIds(
+            BiomeTemplateAsset biome,
+            DimensionTilesetAsset[] tilesets)
+        {
+            List<int> ids = new List<int>();
+            string[] floors = biome.FloorObjectIds;
+            string[] walls = biome.WallObjectIds;
+
+            for (int i = 0; i < tilesets.Length; i++)
+            {
+                DimensionTilesetAsset tileset = tilesets[i];
+                if (tileset == null || !tileset.Enabled)
+                {
+                    continue;
+                }
+
+                if (!ContainsOrdinal(floors, tileset.GroundBlockItemId) &&
+                    !ContainsOrdinal(floors, tileset.WallBlockItemId) &&
+                    !ContainsOrdinal(walls, tileset.WallBlockItemId) &&
+                    !ContainsOrdinal(walls, tileset.GroundBlockItemId))
+                {
+                    continue;
+                }
+
+                int id = tileset.TilesetId;
+                if (!ids.Contains(id))
+                {
+                    ids.Add(id);
+                }
+            }
+
+            return ids;
+        }
+
+        private static bool ContainsOrdinal(string[] values, string candidate)
+        {
+            if (values == null || string.IsNullOrEmpty(candidate))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (string.Equals(values[i], candidate, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Emits the drops that could not be written onto a prefab as custom loot.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The far end of the drop-location inversion. An item saying "2 to 5 of me drop off slimes,
+        /// but only in the desert" cannot become per-object custom loot — <c>LootDrop</c> has a single
+        /// <c>amount</c> and no biome field — so it has to be registered against the source loot table
+        /// at load instead.
+        /// </para>
+        /// <para>
+        /// The plan is rebuilt here rather than carried over from prefab generation, because the two
+        /// run as separate passes and a value threaded between them is a value that can go stale.
+        /// Rebuilding is cheap and cannot disagree with itself.
+        /// </para>
+        /// <para>
+        /// Chance is expressed as a percentage because that is what the registry takes; a drop the
+        /// author marked as always-dropping is sent as 100, which is what the registry reads as
+        /// guaranteed.
+        /// </para>
+        /// <para>
+        /// Internal rather than private so a test can drive the one capability this whole wave
+        /// exists for — a mod's creature dropping a mod's item — instead of grepping for the call.
+        /// </para>
+        /// </remarks>
+        internal static void AppendAuthoredDropRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            if (template == null)
+            {
+                return;
+            }
+
+            DimensionDropPlan plan = DimensionDropPlan.Build(
+                template.GlobalItems,
+                template.GlobalWorldObjects);
+            if (plan.IsEmpty)
+            {
+                return;
+            }
+
+            System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+
+            for (int s = 0; s < plan.Sources.Count; s++)
+            {
+                DimensionDropsForSource source = plan.Sources[s];
+                for (int d = 0; d < source.Drops.Count; d++)
+                {
+                    DimensionResolvedDrop drop = source.Drops[d];
+                    DimensionDropSource settings = drop.Source;
+
+                    // Anything written onto the prefab is skipped here; writing it twice would give
+                    // the player two of everything. The question is asked through the one shared
+                    // answer, because a drop the prefab writer declined and this one skipped is a
+                    // drop that happens nowhere.
+                    if (DimensionDropEmitter.GoesOnTheObjectItself(source, drop) ||
+                        settings.DropsNothing)
+                    {
+                        continue;
+                    }
+
+                    float chancePercent = settings.AlwaysDrops ? 100f : settings.Chance * 100f;
+
+                    // Mod-own names must ship QUALIFIED, like every other emission — this was
+                    // the one emitter that never qualified, so colon-less ids resolved to nothing
+                    // at load and the drop silently vanished.
+                    string sourceName = IsModOwnedObjectName(template, source.SourceId)
+                        ? DimensionObjectNamespace.Qualify(modName, source.SourceId)
+                        : source.SourceId;
+                    string itemName = IsModOwnedObjectName(template, drop.ItemId)
+                        ? DimensionObjectNamespace.Qualify(modName, drop.ItemId)
+                        : drop.ItemId;
+
+                    // THE TABLE TRAVELS WITH THE ROW. At load the registry cannot read a source's
+                    // loot table off its prefab — it runs inside database conversion, where no
+                    // entity world can answer — so a source of this mod's own ships the name of
+                    // the table the generator stamped it with. Empty for one of the game's, which
+                    // the registry reads off the game's own authoring prefab instead.
+                    string sourceTable = SourceLootTableNameOf(template, modName, source.SourceId);
+
+                    builder.AppendLine("    DimensionPortalDropRegistry.Register(");
+                    builder.Append("        ").Append(ToCSharpString(sourceName)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(itemName)).AppendLine(",");
+                    builder.Append("        ").Append(((float)settings.Weight).ToString(inv)).AppendLine("f,");
+                    builder.Append("        ").Append(chancePercent.ToString(inv)).AppendLine("f,");
+                    builder.Append("        ").Append(settings.MinAmount.ToString(inv)).AppendLine(",");
+                    builder.Append("        ").Append(settings.MaxAmount.ToString(inv)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(settings.OnlyInBiomeId)).AppendLine(",");
+                    builder.Append("        ").Append(ToCSharpString(sourceTable)).AppendLine(");");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Emits a scene registration for every authored scene that stamps terrain.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Emitted into the mod's own bootstrap rather than discovered at runtime because the scene
+        /// table can only be rebuilt in one narrow window during world start — by then, nothing is
+        /// going to go looking through asset files. Registration has to have already happened.
+        /// </para>
+        /// <para>
+        /// Only scenes with tiles are emitted. A scene of pure props and spawns is placed by this
+        /// framework's own systems and has no business occupying one of the world's scene slots.
+        /// </para>
+        /// <para>
+        /// The name is mod-qualified and then checked here, at generation time, against the limit a
+        /// spawn request can carry. Left to runtime it would register, never spawn, and log nothing.
+        /// </para>
+        /// </remarks>
+        /// <summary>
+        /// Grows the placed portal in the game's own world, for a rule that asks to be found rather
+        /// than crafted.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// There is no separate "put this object in the Overworld" road in Core Keeper: the only
+        /// thing world generation grows on its own is a custom scene. So this builds the smallest
+        /// honest one — a single cleared tile with the portal standing on it — and hands it the
+        /// same natural-growth arguments an authored scene uses. Everything after that is the
+        /// game's: it picks a spot with enough clearance, clears the cell, lays the ground, and
+        /// instantiates the prefab.
+        /// </para>
+        /// <para>
+        /// The one tile is not decoration. Placement clears a scene's own cells before writing
+        /// them, so the tile is what guarantees the portal is never found buried inside a wall or
+        /// standing in water. It is laid as plain dirt, which reads as a small pad in biomes that
+        /// are not dirt already.
+        /// </para>
+        /// <para>
+        /// A rule that names no biome the Overworld actually samples registers nothing at all —
+        /// <see cref="BuildOverworldSpawnArguments"/> says so out loud — because a scene with no
+        /// biomes is invisible to the placer and would be dead weight in the table.
+        /// </para>
+        /// </remarks>
+        private static void AppendPortalWorldSceneRegistration(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            DimensionRuntimePortalOutput portalOutput,
+            string modName)
+        {
+            DimensionPortalAccessRuleAsset rule = FindPortalRule(
+                template,
+                DimensionPortalAccessKind.PlacedPortal,
+                portalOutput.DimensionId,
+                false);
+            if (rule == null || !rule.GeneratedInWorld)
+            {
+                return;
+            }
+
+            string sceneName = DimensionObjectNamespace.Qualify(
+                modName,
+                portalOutput.DimensionId + ".portal");
+            string nameError;
+            if (!DimensionCustomSceneNames.IsValid(sceneName, out nameError))
+            {
+                Debug.LogWarning(
+                    "[ExpandNullforge] The portal for '" + portalOutput.DimensionId + "' cannot be " +
+                    "found in the world. " + nameError + " Shorten the dimension's id, or turn off " +
+                    "\"Found in the world\" and let players craft the portal instead.");
+                return;
+            }
+
+            string spawnArguments = BuildOverworldSpawnArguments(
+                "The portal for '" + portalOutput.DimensionId + "'",
+                rule.WorldBiomeNames,
+                rule.WorldMaxOccurrences,
+                rule.WorldMinDistanceFromCore);
+            if (spawnArguments.Length == 0)
+            {
+                return;
+            }
+
+            builder.AppendLine("    {");
+            builder.AppendLine("      var portalSpotTiles = new System.Collections.Generic.List<DimensionSceneTileRequest>();");
+            builder.AppendLine("      portalSpotTiles.Add(new DimensionSceneTileRequest(new int2(0, 0), \"0\", DimensionTileRole.Ground));");
+            builder.AppendLine("      var portalSpotObjects = new System.Collections.Generic.List<DimensionSceneObject>();");
+            builder.AppendLine(
+                "      portalSpotObjects.Add(new DimensionSceneObject(new int2(0, 0), PortalObjectName, " +
+                "DimensionSceneFacing.Down, DimensionScenePaintChoice.Unpainted, \"\", null));");
+            builder.Append("      var portalSpotResult = DimensionSceneTileCompiler.Compile(")
+                .Append(ToCSharpString(sceneName))
+                .AppendLine(", portalSpotTiles);");
+            builder.AppendLine("      if (portalSpotResult.Tiles.Count > 0)");
+            builder.AppendLine("      {");
+            builder.Append("        DimensionCustomSceneRegistry.Register(new DimensionCustomSceneDefinition(")
+                .Append(ToCSharpString(sceneName))
+                .Append(", portalSpotResult.Tiles, centerPosition: new int2(0, 0)")
+                .Append(", objects: portalSpotObjects")
+                .Append(spawnArguments)
+                .AppendLine("));");
+            builder.AppendLine("      }");
+            builder.AppendLine("    }");
+        }
+
+        private static void AppendSceneRegistrations(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            string modName)
+        {
+            List<SceneTemplateAsset> scenes = CollectSceneTemplates(template);
+            Dictionary<SceneTemplateAsset, List<string>> owningBiomes = CollectSceneOwners(template);
+            for (int i = 0; i < scenes.Count; i++)
+            {
+                SceneTemplateAsset scene = scenes[i];
+                if (scene == null || !scene.Enabled || !scene.HasTiles)
+                {
+                    continue;
+                }
+
+                string sceneName = DimensionObjectNamespace.Qualify(modName, scene.SceneId);
+                string nameError;
+                if (!DimensionCustomSceneNames.IsValid(sceneName, out nameError))
+                {
+                    Debug.LogWarning("[ExpandNullforge] Scene '" + scene.SceneId + "' cannot be registered. " + nameError);
+                    continue;
+                }
+
+                // Build the tile lines first and only open the block if there are any: a scene whose
+                // tiles are all disabled or blank would otherwise emit a block that registers nothing.
+                List<string> tileLines = new List<string>();
+                DimensionSceneTileTemplate[] tiles = scene.Tiles;
+                for (int t = 0; t < tiles.Length; t++)
+                {
+                    DimensionSceneTileTemplate tile = tiles[t];
+                    if (tile == null || !tile.Enabled || string.IsNullOrEmpty(tile.BlockId))
+                    {
+                        continue;
+                    }
+
+                    WarnIfTilesetHasNoBlockObject(template, scene, tile);
+
+                    tileLines.Add(
+                        "      sceneTiles.Add(new DimensionSceneTileRequest(new int2(" +
+                        tile.LocalPosition.x.ToString(CultureInfo.InvariantCulture) + ", " +
+                        tile.LocalPosition.y.ToString(CultureInfo.InvariantCulture) + "), " +
+                        ToCSharpString(DimensionObjectNamespace.Qualify(modName, tile.BlockId)) +
+                        ", DimensionTileRole." + tile.Role + "));");
+                }
+
+                if (tileLines.Count == 0)
+                {
+                    continue;
+                }
+
+                // Objects are gathered the same way and for the same reason: a scene whose objects
+                // are all disabled should emit no object list rather than an empty one.
+                List<string> objectLines = new List<string>();
+                DimensionSceneObjectTemplate[] sceneObjects = scene.SceneObjects;
+                for (int o = 0; o < sceneObjects.Length; o++)
+                {
+                    DimensionSceneObjectTemplate placed = sceneObjects[o];
+                    if (placed == null || !placed.Enabled || string.IsNullOrEmpty(placed.ObjectId))
+                    {
+                        continue;
+                    }
+
+                    // One of the mod's own objects is namespaced like everything else it generates;
+                    // a vanilla one keeps the name the game already knows it by.
+                    string objectName = IsModOwnedObjectName(template, placed.ObjectId)
+                        ? DimensionObjectNamespace.Qualify(modName, placed.ObjectId)
+                        : placed.ObjectId;
+
+                    // Contents are built inline so each container carries its own list; a shared one
+                    // would let two chests in a scene end up holding the same objects.
+                    string contentsExpression = "null";
+                    DimensionSceneContainerItem[] contents = placed.Contents;
+                    if (contents.Length > 0)
+                    {
+                        StringBuilder contentsBuilder = new StringBuilder();
+                        contentsBuilder.Append("new DimensionSceneContent[] { ");
+                        bool wroteAny = false;
+
+                        for (int c = 0; c < contents.Length; c++)
+                        {
+                            DimensionSceneContainerItem item = contents[c];
+                            if (item == null || string.IsNullOrEmpty(item.ItemId))
+                            {
+                                continue;
+                            }
+
+                            if (wroteAny)
+                            {
+                                contentsBuilder.Append(", ");
+                            }
+
+                            string itemName = IsModOwnedObjectName(template, item.ItemId)
+                                ? DimensionObjectNamespace.Qualify(modName, item.ItemId)
+                                : item.ItemId;
+
+                            contentsBuilder
+                                .Append("new DimensionSceneContent(")
+                                .Append(ToCSharpString(itemName)).Append(", ")
+                                .Append(item.Amount.ToString(CultureInfo.InvariantCulture)).Append(")");
+                            wroteAny = true;
+                        }
+
+                        contentsBuilder.Append(" }");
+                        if (wroteAny)
+                        {
+                            contentsExpression = contentsBuilder.ToString();
+                        }
+                    }
+
+                    objectLines.Add(
+                        "      sceneObjects.Add(new DimensionSceneObject(new int2(" +
+                        placed.LocalPosition.x.ToString(CultureInfo.InvariantCulture) + ", " +
+                        placed.LocalPosition.y.ToString(CultureInfo.InvariantCulture) + "), " +
+                        ToCSharpString(objectName) +
+                        ", DimensionSceneFacing." + placed.Facing +
+                        ", DimensionScenePaintChoice." + placed.Paint +
+                        ", " + ToCSharpString(placed.LootTableId) +
+                        ", " + contentsExpression + "));");
+                }
+
+                AppendArenaBosses(objectLines, template, scene, modName);
+
+                // Triggers travel with the scene the same way objects do: scene-local here, turned
+                // into world-anchored registrations by the placement pass at stamp time — the first
+                // moment anything knows where the scene landed.
+                List<string> triggerLines = new List<string>();
+                DimensionSceneTriggerTemplate[] triggers = scene.Triggers;
+                for (int g = 0; g < triggers.Length; g++)
+                {
+                    DimensionSceneTriggerTemplate trigger = triggers[g];
+                    if (trigger == null || !trigger.Enabled || string.IsNullOrEmpty(trigger.TriggerId))
+                    {
+                        continue;
+                    }
+
+                    string carriedItemName = IsModOwnedObjectName(template, trigger.CarriedItemId)
+                        ? DimensionObjectNamespace.Qualify(modName, trigger.CarriedItemId)
+                        : trigger.CarriedItemId;
+
+                    // Only a summoned creature is one of the mod's own objects; a condition target
+                    // is a name in the game's own vocabulary and must reach the runtime untouched.
+                    string actionTarget = trigger.Action == ExpandNullforge.Zones.DimensionTileAction.SummonCreatures &&
+                        IsModOwnedObjectName(template, trigger.Target)
+                        ? DimensionObjectNamespace.Qualify(modName, trigger.Target)
+                        : trigger.Target;
+
+                    triggerLines.Add(
+                        "      sceneTriggers.Add(new DimensionSceneTrigger(" +
+                        ToCSharpString(trigger.TriggerId) +
+                        ", new int2(" +
+                        trigger.LocalMin.x.ToString(CultureInfo.InvariantCulture) + ", " +
+                        trigger.LocalMin.y.ToString(CultureInfo.InvariantCulture) + ")" +
+                        ", new int2(" +
+                        trigger.LocalMaxExclusive.x.ToString(CultureInfo.InvariantCulture) + ", " +
+                        trigger.LocalMaxExclusive.y.ToString(CultureInfo.InvariantCulture) + ")" +
+                        ", DimensionTileTrigger." + trigger.Kind +
+                        ", " + ToCSharpString(carriedItemName) +
+                        ", DimensionTileAction." + trigger.Action +
+                        ", " + ToCSharpString(actionTarget) +
+                        ", " + trigger.Amount.ToString(CultureInfo.InvariantCulture) +
+                        ", " + trigger.ConditionSeconds.ToString(CultureInfo.InvariantCulture) + "f" +
+                        ", " + trigger.CooldownSeconds.ToString(CultureInfo.InvariantCulture) + "f" +
+                        ", " + (trigger.OnceOnly ? "true" : "false") + "));");
+                }
+
+                builder.AppendLine("    {");
+                builder.AppendLine("      var sceneTiles = new System.Collections.Generic.List<DimensionSceneTileRequest>();");
+                for (int t = 0; t < tileLines.Count; t++)
+                {
+                    builder.AppendLine(tileLines[t]);
+                }
+
+                builder.AppendLine("      var sceneObjects = new System.Collections.Generic.List<DimensionSceneObject>();");
+                for (int o = 0; o < objectLines.Count; o++)
+                {
+                    builder.AppendLine(objectLines[o]);
+                }
+
+                builder.AppendLine("      var sceneTriggers = new System.Collections.Generic.List<DimensionSceneTrigger>();");
+                for (int g = 0; g < triggerLines.Count; g++)
+                {
+                    builder.AppendLine(triggerLines[g]);
+                }
+
+                builder.Append("      var sceneResult = DimensionSceneTileCompiler.Compile(")
+                    .Append(ToCSharpString(sceneName))
+                    .AppendLine(", sceneTiles);");
+                builder.AppendLine("      for (int i = 0; i < sceneResult.Skipped.Count; i++)");
+                builder.AppendLine("      {");
+                builder.AppendLine("        DimensionConsumerLog.Problem(DimensionId, sceneResult.Skipped[i]);");
+                builder.AppendLine("      }");
+                builder.AppendLine("      if (sceneResult.Tiles.Count > 0)");
+                builder.AppendLine("      {");
+                // The explicit pivot is the whole alignment story: the game stamps a scene as
+                // anchor + (tile − centre), corridors aim at room CENTRES, and their band is
+                // always odd and centred on that line. Without this argument the pivot defaults
+                // to (0,0) — the scene's corner — and every dungeon room built from the scene
+                // reads as shoved half its size off its corridors.
+                builder.Append("        DimensionCustomSceneRegistry.Register(new DimensionCustomSceneDefinition(")
+                    .Append(ToCSharpString(sceneName))
+                    .Append(", sceneResult.Tiles, centerPosition: DimensionSceneGeometry.CentreOf(sceneResult.Tiles)")
+                    .Append(", objects: sceneObjects")
+                    .Append(", triggers: sceneTriggers")
+                    .Append(BuildOverworldSpawnArguments(scene))
+                    .AppendLine("));");
+
+                // The placement policy rides beside the tile data. Without this line the Studio's
+                // placement page — mode, radial band, weight, unique, required — was authored and
+                // then thrown away: nothing at runtime ever read it.
+                AppendScenePoolRegistration(builder, template, scene, sceneName, owningBiomes);
+
+                builder.AppendLine("      }");
+                builder.AppendLine("    }");
+            }
+        }
+
+        /// <summary>
+        /// Warns when a scene tile uses a block whose tileset generates no object for that role.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This catches a bug that is invisible everywhere except inside a dungeon. A directly-placed
+        /// scene writes its tiles straight into the map, so any tileset works. A scene embedded in a
+        /// generated dungeon room does NOT: <c>DungeonGenerateRoomsSystem</c> resolves each
+        /// (tileset, tileType) to an ObjectID through the object database and <b>drops the tile</b>
+        /// when nothing matches.
+        /// </para>
+        /// <para>
+        /// The only thing that registers a (tileset, tileType) pair is an object that IS that tile —
+        /// the generated block. So a tileset used purely as scene decoration, with both block toggles
+        /// off, has no entry, and every tile of it silently vanishes from dungeon rooms while looking
+        /// perfectly fine in the open world. Someone hitting that would reasonably conclude their
+        /// dungeon was broken, not their block.
+        /// </para>
+        /// <para>
+        /// Warned at generation rather than blocked: the scene is still valid outside dungeons, and
+        /// refusing to generate would be worse than telling the author what they will see.
+        /// </para>
+        /// </remarks>
+        private static void WarnIfTilesetHasNoBlockObject(
+            DimensionTemplateAsset template,
+            SceneTemplateAsset scene,
+            DimensionSceneTileTemplate tile)
+        {
+            DimensionTilesetAsset[] tilesets = template == null ? null : template.Tilesets;
+            if (tilesets == null)
+            {
+                return;
+            }
+
+            DimensionTilesetAsset match = null;
+            for (int i = 0; i < tilesets.Length; i++)
+            {
+                if (tilesets[i] != null &&
+                    string.Equals(tilesets[i].TilesetName, tile.BlockId, System.StringComparison.Ordinal))
+                {
+                    match = tilesets[i];
+                    break;
+                }
+            }
+
+            if (match == null)
+            {
+                // A vanilla tileset, or a block from another mod. Vanilla always has its block
+                // objects, and another mod's content is not ours to vet.
+                return;
+            }
+
+            bool needsGround = tile.Role == DimensionTileRole.Ground;
+            bool needsWall = tile.Role == DimensionTileRole.Wall;
+            if ((needsGround && match.GenerateGroundBlock) || (needsWall && match.GenerateWallBlock) ||
+                (!needsGround && !needsWall))
+            {
+                return;
+            }
+
+            Debug.LogWarning(
+                "[ExpandNullforge] Scene '" + scene.SceneId + "' places '" + tile.BlockId + "' as " +
+                tile.Role + " at " + tile.LocalPosition + ", but that block does not generate a " +
+                (needsGround ? "ground" : "wall") + " object. The tile will appear in the open world " +
+                "and be silently dropped from any dungeon room this scene is embedded in. Turn on the " +
+                "matching block in the Tileset Studio, or accept that this scene is not dungeon-safe.");
+        }
+
+        /// <summary>Every scene a template can reach, global and per-biome, without duplicates.</summary>
+        /// <summary>
+        /// Whether an object a scene places is one this mod defines, rather than one of the game's.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Scenes are the one place both kinds of name meet. A scene's tiles are always the mod's own
+        /// blocks, so those are namespaced unconditionally; its objects are mostly vanilla — a chest,
+        /// a torch, a statue — with the occasional item the mod itself defines. Namespacing everything
+        /// would rename <c>Chest</c> into something the game has never heard of; namespacing nothing
+        /// would let a mod's own item collide with another mod's item of the same name.
+        /// </para>
+        /// <para>
+        /// So the mod's own declared content is the authority: if the name is something this template
+        /// generates, it is qualified; otherwise it is passed through untouched for the database to
+        /// resolve at injection time. An unknown name is a warning there, not a silent nothing.
+        /// </para>
+        /// </remarks>
+        /// <summary>
+        /// Whether a name is one of the mod's own objects, asked of the one walk both sides share.
+        /// </summary>
+        /// <remarks>
+        /// This used to be its own hand-written list of the asset kinds it happened to think of —
+        /// items, workbenches, tileset blocks and creatures — which left containers, world objects,
+        /// vehicles, projectiles, plants and explosions out. A drop from one of the mod's own chests
+        /// therefore shipped its source name unqualified, resolved to nothing at load, and the item
+        /// dropped from nowhere. <c>DimensionGeneratedObjectIds.Collect</c> is the walk the binder
+        /// and the link emitter already agree on, so asking it here means one list rather than two.
+        /// </remarks>
+        /// <summary>
+        /// Says so when one of the mod's own things is called the same as one of the game's.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE WARNING THAT WAS PROMISED AND NEVER WRITTEN. <c>DimensionNamingContext.Owns</c>'s
+        /// own remark says "an id that shadows a game object is reported at generate time", and
+        /// nothing anywhere reported it. It matters because the two halves of the framework answer
+        /// differently for such a name: the generators stamp the object as the mod's own, while
+        /// every reference to it — a drop's source, a recipe ingredient, a summoning item's boss —
+        /// asks <c>Owns</c>, which puts the game's names first and answers no.
+        /// </para>
+        /// <para>
+        /// What that does to somebody: they call their boss <c>Larva</c> and tick an item as
+        /// dropping from it. Generation is clean. In the game, every wild larva in the world drops
+        /// their item and their own boss drops nothing. The same split reaches recipe ingredients
+        /// and the list of bosses a summoning item can call.
+        /// </para>
+        /// <para>
+        /// It is said rather than fixed by renaming, because the name is the author's to choose and
+        /// silently changing it would break every reference they have already written by hand.
+        /// </para>
+        /// </remarks>
+        private static void SayWhenOneOfOursSharesAGameObjectsName(DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return;
+            }
+
+            List<string> ours = DimensionGeneratedObjectIds.Collect(template);
+            for (int i = 0; i < ours.Count; i++)
+            {
+                string id = ours[i];
+                if (string.IsNullOrEmpty(id) || DimensionObjectBinder.Vanilla(id) == ObjectID.None)
+                {
+                    continue;
+                }
+
+                Debug.LogWarning(
+                    "[Dimensions API] One of your own things is called '" + id + "', which is also " +
+                    "the name of something the game already has. Anything that points at that " +
+                    "name — a drop, a recipe ingredient, a summoning item's boss — will reach the " +
+                    "game's one and not yours, and yours will never be reached at all. Rename it.");
+            }
+        }
+
+        private static bool IsModOwnedObjectName(DimensionTemplateAsset template, string objectId)
+        {
+            if (template == null || string.IsNullOrEmpty(objectId))
+            {
+                return false;
+            }
+
+            // ONE OWNERSHIP ANSWER, THE SAME ONE THE GENERATORS BAKE FROM. This used to be the walk
+            // above plus five hand-written ones underneath it, and neither half asked the ObjectID
+            // enum first. So a mod item called Torch was baked by every generator as the GAME's
+            // torch (DimensionObjectBinder.Vanilla wins there) while this said "ours" and shipped
+            // "MyMod:Torch" in the drop row and the recipe output — the two halves of the same
+            // authored thing pointing at different objects. DimensionNamingContext.Owns is the
+            // predicate the generators use, vanilla-first and all; asking it here is what makes
+            // "both sides call this" true rather than aspirational.
+            //
+            // The hand-written walks also counted switched-off assets as ours. A switched-off asset
+            // generates no object, so a name qualified against it resolves to nothing at load —
+            // which is the silent loss Collect's own remark says it exists to prevent.
+            return new DimensionNamingContext(
+                    string.Empty,
+                    DimensionGeneratedObjectIds.Collect(template))
+                .Owns(objectId);
+        }
+
+        /// <summary>
+        /// The loot table a drop registered against this source will land in, or empty when the
+        /// source is one of the game's own and the game has to be asked.
+        /// </summary>
+        /// <remarks>
+        /// The load-time injection cannot read a source's loot table off its prefab entity — it
+        /// runs inside database conversion, when no entity world can answer. So the answer travels
+        /// with the row instead, computed by the same
+        /// <see cref="DimensionDropEmitter.LootTableNameFor"/> the generator stamps the prefab from.
+        /// </remarks>
+        private static string SourceLootTableNameOf(
+            DimensionTemplateAsset template,
+            string modName,
+            string sourceId)
+        {
+            if (!IsModOwnedObjectName(template, sourceId))
+            {
+                return string.Empty;
+            }
+
+            return DimensionDropEmitter.LootTableNameFor(
+                AuthoredLootTableOf(template, sourceId),
+                DimensionObjectNamespace.Qualify(modName, sourceId));
+        }
+
+        /// <summary>
+        /// The loot table asset a creature of this mod's own was pointed at, or null for anything
+        /// with no such field (a container, a world object, a critter).
+        /// </summary>
+        private static DimensionLootTableAsset AuthoredLootTableOf(
+            DimensionTemplateAsset template,
+            string sourceId)
+        {
+            if (template == null || string.IsNullOrEmpty(sourceId))
+            {
+                return null;
+            }
+
+            string local = DimensionObjectNamespace.LocalIdOf(sourceId);
+
+            DimensionMobAsset[] mobs = template.GlobalMobs;
+            for (int i = 0; mobs != null && i < mobs.Length; i++)
+            {
+                if (mobs[i] == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(mobs[i].MobId, local, StringComparison.Ordinal))
+                {
+                    return mobs[i].LootTable;
+                }
+
+                // An elite is generated as a second creature under "<mobId>.elite", sharing the
+                // base mob's loot unless it was given its own.
+                if (string.Equals(mobs[i].MobId + ".elite", local, StringComparison.Ordinal))
+                {
+                    DimensionEliteVariantTemplate elite = mobs[i].EliteVariant;
+                    return elite != null && elite.LootTable != null
+                        ? elite.LootTable
+                        : mobs[i].LootTable;
+                }
+            }
+
+            DimensionBossAsset[] bosses = template.GlobalBosses;
+            for (int i = 0; bosses != null && i < bosses.Length; i++)
+            {
+                if (bosses[i] != null &&
+                    string.Equals(bosses[i].BossId, local, StringComparison.Ordinal))
+                {
+                    return bosses[i].LootTable;
+                }
+            }
+
+            DimensionAnimalAsset[] animals = template.GlobalAnimals;
+            for (int i = 0; animals != null && i < animals.Length; i++)
+            {
+                if (animals[i] != null &&
+                    string.Equals(animals[i].AnimalId, local, StringComparison.Ordinal))
+                {
+                    return animals[i].LootTable;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Puts a boss into the handmade place it waits in.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A boss names its arena scene, and until now that name was only checked — the author
+        /// still had to place the boss into the scene by hand, or walk into an empty arena. This
+        /// closes it: the boss becomes an ordinary placed object at the middle of its scene,
+        /// riding the same path every other scene object rides.
+        /// </para>
+        /// <para>
+        /// An author who placed the boss themselves keeps their placement; only a scene that
+        /// does not already contain it gets one, so this can never double a boss.
+        /// </para>
+        /// </remarks>
+        private static void AppendArenaBosses(
+            List<string> objectLines,
+            DimensionTemplateAsset template,
+            SceneTemplateAsset scene,
+            string modName)
+        {
+            DimensionBossAsset[] bosses = template == null ? null : template.GlobalBosses;
+            if (bosses == null || scene == null || string.IsNullOrEmpty(scene.SceneId))
+            {
+                return;
+            }
+
+            for (int i = 0; i < bosses.Length; i++)
+            {
+                DimensionBossAsset boss = bosses[i];
+                if (boss == null || !boss.Enabled || string.IsNullOrEmpty(boss.BossId) ||
+                    !string.Equals(boss.ArenaSceneId, scene.SceneId, System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (SceneAlreadyPlaces(scene, boss.BossId))
+                {
+                    continue;
+                }
+
+                Vector2Int centre = ResolveSceneCentre(scene);
+                string bossName = DimensionObjectNamespace.Qualify(modName, boss.BossId);
+                objectLines.Add(
+                    "      sceneObjects.Add(new DimensionSceneObject(new int2(" +
+                    centre.x.ToString(CultureInfo.InvariantCulture) + ", " +
+                    centre.y.ToString(CultureInfo.InvariantCulture) + "), " +
+                    ToCSharpString(bossName) +
+                    ", DimensionSceneFacing.Down, DimensionScenePaintChoice.Unpainted, \"\", null));");
+            }
+        }
+
+        private static bool SceneAlreadyPlaces(SceneTemplateAsset scene, string objectId)
+        {
+            DimensionSceneObjectTemplate[] placed = scene.SceneObjects;
+            for (int i = 0; i < placed.Length; i++)
+            {
+                if (placed[i] != null && placed[i].Enabled &&
+                    string.Equals(placed[i].ObjectId, objectId, System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The middle of a scene's painted ground — the same floor((min+max)/2) the scene's own
+        /// pivot uses, so a boss lands exactly where the room centres itself.
+        /// </summary>
+        private static Vector2Int ResolveSceneCentre(SceneTemplateAsset scene)
+        {
+            DimensionSceneTileTemplate[] tiles = scene.Tiles;
+            bool any = false;
+            int minX = 0;
+            int minY = 0;
+            int maxX = 0;
+            int maxY = 0;
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                if (tiles[i] == null || !tiles[i].Enabled)
+                {
+                    continue;
+                }
+
+                Vector2Int p = tiles[i].LocalPosition;
+                if (!any)
+                {
+                    minX = maxX = p.x;
+                    minY = maxY = p.y;
+                    any = true;
+                    continue;
+                }
+
+                if (p.x < minX) { minX = p.x; }
+                if (p.x > maxX) { maxX = p.x; }
+                if (p.y < minY) { minY = p.y; }
+                if (p.y > maxY) { maxY = p.y; }
+            }
+
+            if (!any)
+            {
+                return Vector2Int.zero;
+            }
+
+            return new Vector2Int((minX + maxX) >> 1, (minY + maxY) >> 1);
+        }
+
+        /// <summary>
+        /// The extra ctor arguments that let vanilla Overworld generation grow this scene, or an
+        /// empty string when the scene has not opted in.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Biome names resolve against the game's own <c>Biome</c> enum here, at build time,
+        /// because the game's availability filter is an exact-match scan with no wildcard: a name
+        /// that is not a vanilla biome would compile fine and then never match anything. That is
+        /// also why custom biome ids are refused — the Overworld's sampler only ever produces
+        /// vanilla values, so a custom id here would be dead weight dressed as configuration.
+        /// </para>
+        /// <para>
+        /// A scene that opts in but resolves zero biomes keeps <c>maxOccurrences</c> 0, which is
+        /// the game's own "invisible to natural spawn" — the safe state, loudly explained.
+        /// </para>
+        /// </remarks>
+        private static string BuildOverworldSpawnArguments(SceneTemplateAsset scene)
+        {
+            if (!scene.SpawnInOverworld)
+            {
+                return string.Empty;
+            }
+
+            return BuildOverworldSpawnArguments(
+                "Scene '" + scene.SceneId + "'",
+                scene.OverworldBiomeNames,
+                scene.OverworldMaxOccurrences,
+                scene.MinDistanceFromCore);
+        }
+
+        /// <summary>
+        /// The shared body of the above, so a portal that grows in the world takes exactly the same
+        /// road a scene does — including the same refusal of biome names the Overworld never samples.
+        /// </summary>
+        private static string BuildOverworldSpawnArguments(
+            string subject,
+            string[] names,
+            int maxOccurrences,
+            int minDistanceFromCore)
+        {
+            List<string> resolved = new List<string>();
+            for (int i = 0; names != null && i < names.Length; i++)
+            {
+                if (string.IsNullOrEmpty(names[i]))
+                {
+                    continue;
+                }
+
+                Biome biome;
+                if (!System.Enum.TryParse(names[i], false, out biome) || biome == Biome.None)
+                {
+                    Debug.LogWarning(
+                        "[ExpandNullforge] " + subject + " wants to grow in " +
+                        "Overworld biome '" + names[i] + "', which is not a vanilla biome name. " +
+                        "The entry is dropped — the Overworld only ever samples vanilla biomes, " +
+                        "so it could never match.");
+                    continue;
+                }
+
+                string literal = "Biome." + biome;
+                if (!resolved.Contains(literal))
+                {
+                    resolved.Add(literal);
+                }
+            }
+
+            if (resolved.Count == 0)
+            {
+                Debug.LogWarning(
+                    "[ExpandNullforge] " + subject + " opted into Overworld " +
+                    "spawning but names no valid vanilla biome, so it will not grow naturally.");
+                return string.Empty;
+            }
+
+            StringBuilder args = new StringBuilder();
+            args.Append(", maxOccurrences: ")
+                .Append((maxOccurrences < 1 ? 1 : maxOccurrences).ToString(CultureInfo.InvariantCulture));
+            args.Append(", overworldBiomes: new Biome[] { ");
+            for (int i = 0; i < resolved.Count; i++)
+            {
+                if (i > 0)
+                {
+                    args.Append(", ");
+                }
+
+                args.Append(resolved[i]);
+            }
+
+            args.Append(" }");
+            args.Append(", minDistanceFromCoreInClassicWorlds: ")
+                .Append((minDistanceFromCore < 0 ? 0 : minDistanceFromCore)
+                    .ToString(CultureInfo.InvariantCulture));
+            return args.ToString();
+        }
+
+        /// <summary>
+        /// Emits the scene's placement policy into the runtime pool, so the placement pass can
+        /// honor what the Studio authored: mode, radial band, biome filters, weight, unique,
+        /// required. Uses the raw scene id so the entry lines up with the compiled scene record.
+        /// </summary>
+        private static void AppendScenePoolRegistration(
+            StringBuilder builder,
+            DimensionTemplateAsset template,
+            SceneTemplateAsset scene,
+            string sceneName,
+            Dictionary<SceneTemplateAsset, List<string>> owningBiomes)
+        {
+            List<string> owners;
+            owningBiomes.TryGetValue(scene, out owners);
+            string owningBiome = owners != null && owners.Count > 0 ? owners[0] : string.Empty;
+
+            // Extra owners plus the authored filter merge into one allow list; the pass treats
+            // any match as permission.
+            List<string> allowed = new List<string>();
+            if (owners != null)
+            {
+                for (int i = 1; i < owners.Count; i++)
+                {
+                    if (!allowed.Contains(owners[i]))
+                    {
+                        allowed.Add(owners[i]);
+                    }
+                }
+            }
+
+            string[] authoredAllowed = scene.AllowedBiomeIds;
+            for (int i = 0; i < authoredAllowed.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(authoredAllowed[i]) && !allowed.Contains(authoredAllowed[i]))
+                {
+                    allowed.Add(authoredAllowed[i]);
+                }
+            }
+
+            StringBuilder allowedList = new StringBuilder("new string[] { ");
+            for (int i = 0; i < allowed.Count; i++)
+            {
+                if (i > 0)
+                {
+                    allowedList.Append(", ");
+                }
+
+                allowedList.Append(ToCSharpString(allowed[i]));
+            }
+
+            allowedList.Append(" }");
+
+            DimensionBounds preferred = scene.PreferredLocalBounds;
+            bool hasPreferred = scene.PlacementMode == DimensionScenePlacementMode.PreferredBounds;
+
+            builder.Append("        DimensionScenePoolRegistry.Register(")
+                .Append(ToCSharpString(template.DimensionId))
+                .AppendLine(", new DimensionScenePoolEntry(");
+            builder.Append("            ").Append(ToCSharpString(sceneName)).AppendLine(",");
+            builder.Append("            ").Append(ToCSharpString(scene.SceneId)).AppendLine(",");
+            builder.Append("            ").Append(ToCSharpString(owningBiome)).AppendLine(",");
+            builder.Append("            ").Append(allowedList.ToString()).AppendLine(",");
+            builder.Append("            DimensionScenePlacementMode.")
+                .Append(scene.PlacementMode.ToString()).AppendLine(",");
+            builder.Append("            new int2(")
+                .Append(scene.ExactLocalPosition.x.ToString(CultureInfo.InvariantCulture)).Append(", ")
+                .Append(scene.ExactLocalPosition.y.ToString(CultureInfo.InvariantCulture)).AppendLine("),");
+            builder.Append("            new DimensionBounds(new int2(")
+                .Append(preferred.Min.x.ToString(CultureInfo.InvariantCulture)).Append(", ")
+                .Append(preferred.Min.y.ToString(CultureInfo.InvariantCulture)).Append("), new int2(")
+                .Append(preferred.MaxExclusive.x.ToString(CultureInfo.InvariantCulture)).Append(", ")
+                .Append(preferred.MaxExclusive.y.ToString(CultureInfo.InvariantCulture)).AppendLine(")),");
+            builder.Append("            ").Append(hasPreferred ? "true" : "false").AppendLine(",");
+            builder.Append("            ")
+                .Append(scene.MinRadiusTiles.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.Append("            ")
+                .Append(scene.MaxRadiusTiles.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.Append("            ").Append(ToCSharpString(scene.RadialBiomeId)).AppendLine(",");
+            builder.Append("            new int2(")
+                .Append(scene.FootprintSize.x.ToString(CultureInfo.InvariantCulture)).Append(", ")
+                .Append(scene.FootprintSize.y.ToString(CultureInfo.InvariantCulture)).AppendLine("),");
+            builder.Append("            ")
+                .Append(scene.Weight.ToString(CultureInfo.InvariantCulture)).AppendLine(",");
+            builder.Append("            ").Append(scene.Unique ? "true" : "false").AppendLine(",");
+            builder.Append("            ").Append(scene.Required ? "true" : "false").AppendLine(",");
+            builder.Append("            ")
+                .Append(scene.Priority.ToString(CultureInfo.InvariantCulture)).AppendLine("));");
+        }
+
+        /// <summary>
+        /// Which biomes carry each scene in their pool. The flattening in
+        /// <see cref="CollectSceneTemplates"/> deliberately loses this — registration wants each
+        /// scene once — but the placement policy needs to remember whose pool it came from.
+        /// </summary>
+        private static Dictionary<SceneTemplateAsset, List<string>> CollectSceneOwners(
+            DimensionTemplateAsset template)
+        {
+            Dictionary<SceneTemplateAsset, List<string>> owners =
+                new Dictionary<SceneTemplateAsset, List<string>>();
+            if (template == null)
+            {
+                return owners;
+            }
+
+            BiomeTemplateAsset[] biomes = template.Biomes;
+            if (biomes == null)
+            {
+                return owners;
+            }
+
+            for (int i = 0; i < biomes.Length; i++)
+            {
+                BiomeTemplateAsset biome = biomes[i];
+                if (biome == null || string.IsNullOrEmpty(biome.BiomeId))
+                {
+                    continue;
+                }
+
+                SceneTemplateAsset[] pool = biome.ScenePool;
+                if (pool == null)
+                {
+                    continue;
+                }
+
+                for (int s = 0; s < pool.Length; s++)
+                {
+                    if (pool[s] == null)
+                    {
+                        continue;
+                    }
+
+                    List<string> list;
+                    if (!owners.TryGetValue(pool[s], out list))
+                    {
+                        list = new List<string>();
+                        owners[pool[s]] = list;
+                    }
+
+                    if (!list.Contains(biome.BiomeId))
+                    {
+                        list.Add(biome.BiomeId);
+                    }
+                }
+            }
+
+            return owners;
+        }
+
+        private static List<SceneTemplateAsset> CollectSceneTemplates(DimensionTemplateAsset template)
+        {
+            List<SceneTemplateAsset> scenes = new List<SceneTemplateAsset>();
+            if (template == null)
+            {
+                return scenes;
+            }
+
+            AddScenes(template.GlobalScenes, scenes);
+
+            BiomeTemplateAsset[] biomes = template.Biomes;
+            if (biomes != null)
+            {
+                for (int i = 0; i < biomes.Length; i++)
+                {
+                    if (biomes[i] != null)
+                    {
+                        AddScenes(biomes[i].ScenePool, scenes);
+                    }
+                }
+            }
+
+            return scenes;
+        }
+
+        private static void AddScenes(SceneTemplateAsset[] source, List<SceneTemplateAsset> destination)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < source.Length; i++)
+            {
+                // A scene shared between biomes must still be registered exactly once: the registry
+                // refuses a duplicate name, so emitting it twice would log a warning about the mod's
+                // own content.
+                if (source[i] != null && !destination.Contains(source[i]))
+                {
+                    destination.Add(source[i]);
+                }
             }
         }
 
@@ -7005,6 +9818,96 @@ namespace ExpandNullforge.EditorTools
             }
 
             return !anyPlacedRule;
+        }
+
+        /// <summary>
+        /// The rule whose settings decide how the placed portal is crafted, or null when the
+        /// dimension has no placed rule at all and keeps the legacy always-craftable default.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately the same walk as <see cref="IsPlacedPortalCraftable"/>: the rule that made
+        /// the portal craftable is the rule that gets to name its bench. Reading the toggle from
+        /// one rule and the bench from another would put the recipe somewhere nobody asked for.
+        /// </remarks>
+        private static DimensionPortalAccessRuleAsset FindCraftablePlacedRule(
+            DimensionTemplateAsset template)
+        {
+            DimensionPortalAccessRuleAsset[] rules = template == null
+                ? null
+                : template.PortalAccessRules;
+            if (rules == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < rules.Length; i++)
+            {
+                DimensionPortalAccessRuleAsset rule = rules[i];
+                if (rule == null || !DimensionPortalVersions.IsUserAccessible(rule.AccessKind))
+                {
+                    continue;
+                }
+
+                if (rule.Enabled && rule.Craftable)
+                {
+                    return rule;
+                }
+            }
+
+            return null;
+        }
+
+        private static string ResolveCraftingStationArgument(
+            DimensionPortalAccessRuleAsset rule,
+            string what)
+        {
+            return ResolveCraftingStationArgument(
+                rule == null ? string.Empty : rule.CraftingStationObjectId,
+                what);
+        }
+
+        /// <summary>
+        /// The crafting-station argument for a generated recipe: a number when the framework can
+        /// prove one, otherwise the station's name for the runtime to resolve.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Three cases, and they exist because a station is not always one of the game's. A blank
+        /// setting means the Wooden Workbench, which is what the field has always promised. A name
+        /// the game's own object list knows becomes that number here, at build time, where it can
+        /// be proven. Anything else is taken to be another mod's bench and is emitted as a NAME:
+        /// another mod's objects have no number until the game hands them one during world
+        /// conversion, so resolving it here would produce nothing and silently fall back.
+        /// </para>
+        /// <para>
+        /// A name that never resolves leaves the recipe parked instead of dropping it onto the
+        /// Wooden Workbench, which is why the warning below names the typo case out loud: a recipe
+        /// that quietly appeared at the wrong bench is far harder to notice than one that has not
+        /// appeared at all.
+        /// </para>
+        /// </remarks>
+        private static string ResolveCraftingStationArgument(string stationObjectId, string what)
+        {
+            string station = (stationObjectId ?? string.Empty).Trim();
+            if (station.Length == 0)
+            {
+                return "ObjectID.WoodenWorkBench";
+            }
+
+            ObjectID vanillaStation;
+            if (System.Enum.TryParse(station, false, out vanillaStation) &&
+                vanillaStation != ObjectID.None)
+            {
+                return "ObjectID." + vanillaStation;
+            }
+
+            Debug.LogWarning(
+                "[ExpandNullforge] The crafting station for " + what + " is '" + station +
+                "', which is not one of the game's own objects. It is taken to be a workbench from " +
+                "another mod and looked up by that name while the world loads. If that mod is not " +
+                "installed, or the name is misspelled, the recipe never appears — clear the field " +
+                "to use the Wooden Workbench, or type the station's exact object name.");
+            return ToCSharpString(station);
         }
 
         private static DimensionRuntimePortalOutput ResolvePortalOutput(
@@ -7272,6 +10175,9 @@ namespace ExpandNullforge.EditorTools
             public string ToDimension;
             public float Duration;
             public bool Craftable;
+
+            /// <summary>The bench this item is made at, exactly as the rule spells it. Blank means the Wooden Workbench.</summary>
+            public string Station;
             public string DisplayName;
         }
 
@@ -7356,6 +10262,7 @@ namespace ExpandNullforge.EditorTools
                         ToDimension = rule.ToDimensionId,
                         Duration = rule.ItemPortalDurationSeconds,
                         Craftable = rule.Craftable,
+                        Station = rule.CraftingStationObjectId,
                         DisplayName = rule.DisplayName
                     });
                 }
@@ -7364,39 +10271,26 @@ namespace ExpandNullforge.EditorTools
             pendingItemPortals[dimensionId ?? string.Empty] = itemPortals;
         }
 
+        /// <summary>
+        /// The first enabled rule of a kind, which is the only one this generator ever uses.
+        /// </summary>
+        /// <remarks>
+        /// The loop itself lives in <see cref="DimensionPortalRuleOwnership"/> because the Portal
+        /// Studio has to name the same owner and warn about the same ignored rules. Two copies of
+        /// a first-match rule is exactly the kind of thing that drifts apart and leaves the studio
+        /// editing a rule the game never reads.
+        /// </remarks>
         private static DimensionPortalAccessRuleAsset FindPortalRule(
             DimensionTemplateAsset template,
             DimensionPortalAccessKind accessKind,
             string dimensionId,
             bool matchFromDimension)
         {
-            DimensionPortalAccessRuleAsset[] rules = template == null
-                ? null
-                : template.PortalAccessRules;
-            if (rules == null)
-            {
-                return null;
-            }
-
-            for (int i = 0; i < rules.Length; i++)
-            {
-                DimensionPortalAccessRuleAsset rule = rules[i];
-                if (rule == null || !rule.Enabled || rule.AccessKind != accessKind)
-                {
-                    continue;
-                }
-
-                string matchedDimensionId = matchFromDimension
-                    ? rule.FromDimensionId
-                    : rule.ToDimensionId;
-                if (string.IsNullOrEmpty(dimensionId) ||
-                    string.Equals(matchedDimensionId, dimensionId, System.StringComparison.Ordinal))
-                {
-                    return rule;
-                }
-            }
-
-            return null;
+            return DimensionPortalRuleOwnership.Find(
+                template == null ? null : template.PortalAccessRules,
+                accessKind,
+                dimensionId,
+                matchFromDimension);
         }
 
         private static DimensionPortalDefinition EnsurePortalDefinition(
@@ -7573,7 +10467,7 @@ namespace ExpandNullforge.EditorTools
                     new int2(10000, 10000),
                     new DimensionBounds(new int2(-640, -640), new int2(640, 640)),
                     1,
-                    DimensionSpaceKind.PocketWorld,
+                    DimensionType.World,
                     DimensionTemplateStarterFactory.DefaultCapabilities,
                     DimensionLifecycleState.Registered)
                 : template.ToDimensionDefinition();
@@ -7604,7 +10498,7 @@ namespace ExpandNullforge.EditorTools
                 dimension.AbsoluteOrigin,
                 dimension.LocalBounds,
                 dimension.GenerationVersion <= 0 ? 1 : dimension.GenerationVersion,
-                dimension.SpaceKind,
+                dimension.Type,
                 capabilities,
                 dimension.LifecycleState == DimensionLifecycleState.Unknown
                     ? DimensionLifecycleState.Registered
@@ -8101,33 +10995,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             return normalized;
-        }
-
-        private static void EnsureFolder(string folder)
-        {
-            string normalized = NormalizeAssetPath(folder);
-            if (AssetDatabase.IsValidFolder(normalized))
-            {
-                return;
-            }
-
-            string[] parts = normalized.Split('/');
-            string current = "Assets";
-            for (int i = 1; i < parts.Length; i++)
-            {
-                if (string.IsNullOrEmpty(parts[i]))
-                {
-                    continue;
-                }
-
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    AssetDatabase.CreateFolder(current, parts[i]);
-                }
-
-                current = next;
-            }
         }
 
         private static string AssetPathToAbsolutePath(string assetPath)

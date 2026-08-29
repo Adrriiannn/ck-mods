@@ -1,5 +1,12 @@
 namespace ExpandNullforge.Api
 {
+    /// <summary>What a travel message would say on screen, and which buttons it would offer.</summary>
+    /// <remarks>
+    /// HELD, NOT LIVE, for the same reason as <see cref="DimensionTravelFeedbackSeverity"/>: the
+    /// snapshots are published and nothing subscribes. Deleting this pair on its own leaves the
+    /// other six files of the set standing and settles the open question in one direction without
+    /// anybody taking it. Docs/travel-feedback-spec.md carries the design.
+    /// </remarks>
     public readonly struct DimensionTravelFeedbackDisplay
     {
         public readonly bool Visible;

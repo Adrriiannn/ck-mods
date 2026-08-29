@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using ExpandNullforge.Authoring;
 using ExpandNullforge.Tilesets;
+using ExpandNullforge.EditorTools.Generation;
 using UnityEditor;
 using UnityEngine;
 
@@ -64,6 +65,14 @@ namespace ExpandNullforge.EditorTools
         private int pendingSelectIndex = -1;
         private DrawResult result;
 
+        // ---- rename guard state ----
+        // The name being typed, and which block it belongs to. Held here rather than written
+        // straight onto the asset because a block's identity is derived from its name: committing
+        // on every keystroke would re-mint the identity letter by letter, and by the time the guard
+        // could ask anything the old identity would already be gone.
+        private DimensionTilesetAsset renameTarget;
+        private string renameDraft = string.Empty;
+
         // ---- wizard state ----
         private bool wizardActive;
         private int wizardStep;
@@ -115,7 +124,7 @@ namespace ExpandNullforge.EditorTools
 
             if (wizardActive)
             {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
                 DrawWizard();
                 EditorGUILayout.EndVertical();
                 return result;
@@ -133,7 +142,7 @@ namespace ExpandNullforge.EditorTools
             SerializedObject so = new SerializedObject(asset);
             so.UpdateIfRequiredOrScript();
 
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
             DrawHeaderBar(tilesets, selectedIndex, asset);
             GUILayout.Space(2f);
             DrawBlockPage(so, template, asset);
@@ -269,7 +278,7 @@ namespace ExpandNullforge.EditorTools
         private void DrawWizardTypeStep()
         {
             GUILayout.Label("1 · What kind of block is this?", stageTitle);
-            GUILayout.Label("The type decides which parts of the game's tile system your sheet feeds — and everything the Studio asks of you afterwards.", sub);
+            GUILayout.Label("The type decides which parts of the game your art feeds. It also decides everything the Studio asks you afterwards.", sub);
             GUILayout.Space(6f);
 
             DrawTypeGroup("THE STANDARD BLOCK", DimensionBlockRole.Terrain);
@@ -287,7 +296,7 @@ namespace ExpandNullforge.EditorTools
                 bool farm = wizardStates.Contains("tilled");
                 bool now = EditorGUILayout.ToggleLeft(
                     new GUIContent("Can be farmed",
-                        "Hoe → tilled soil, watering can → watered soil, using this block's own art."),
+                        "A hoe turns it into tilled soil and a watering can waters it, both drawn with this block's own art."),
                     farm);
                 if (now != farm)
                 {
@@ -324,7 +333,7 @@ namespace ExpandNullforge.EditorTools
                 if (!any)
                 {
                     GUILayout.Space(4f);
-                    GUILayout.Label(heading, EditorStyles.miniBoldLabel);
+                    GUILayout.Label(heading, DimensionsApiImguiTheme.SectionLabel);
                     any = true;
                 }
 
@@ -396,7 +405,7 @@ namespace ExpandNullforge.EditorTools
             {
                 bool createOn = wizardItemMode == DimensionTilesetItemMode.CreateItem;
                 if (EditorGUILayout.ToggleLeft(
-                        new GUIContent("Create its item", "A fully customizable \"{name} Block\" inventory item — placed like any vanilla block, mined back into itself."),
+                        new GUIContent("Create its item", "One item, exactly like a block the game ships with. Placed the same way, and mined back into itself."),
                         createOn) && !createOn)
                 {
                     wizardItemMode = DimensionTilesetItemMode.CreateItem;
@@ -405,12 +414,12 @@ namespace ExpandNullforge.EditorTools
 
             if (!canCreateItem && type != null && !typeIsOverlay)
             {
-                GUILayout.Label("Item generation for this type is coming later — the tileset itself works today.", sub);
+                GUILayout.Label("An item for this kind of block is coming later. The block itself works today.", sub);
             }
 
             bool reskinOn = wizardItemMode == DimensionTilesetItemMode.ReskinVanilla;
             if (EditorGUILayout.ToggleLeft(
-                    new GUIContent("Reskin a vanilla block", "Your textures replace a vanilla tileset's everywhere, while this block is enabled. Render-only and save-safe."),
+                    new GUIContent("Reskin one of the game's blocks", "Your art replaces that block's art everywhere, while this one is included. It only changes the look, so old saves stay valid."),
                     reskinOn) && !reskinOn)
             {
                 wizardItemMode = DimensionTilesetItemMode.ReskinVanilla;
@@ -420,12 +429,12 @@ namespace ExpandNullforge.EditorTools
             {
                 GUILayout.Space(2f);
                 DrawReskinPicker(wizardReskinIndex, idx => wizardReskinIndex = idx);
-                GUILayout.Label("Reskins every tile of that vanilla tileset, in every world, while enabled. A biome's ground and wall share one tileset, so both are covered.", sub);
+                GUILayout.Label("Every tile of that block wears your art, in every world, while this one is included. A biome's ground and wall share one block, so both are covered.", sub);
             }
 
             bool noneOn = wizardItemMode == DimensionTilesetItemMode.None;
             if (EditorGUILayout.ToggleLeft(
-                    new GUIContent("No item", "The tileset exists for worldgen/scene use only."),
+                    new GUIContent("No item", "Nobody can hold this block. It exists for the world to generate and for your scenes to place."),
                     noneOn) && !noneOn)
             {
                 wizardItemMode = DimensionTilesetItemMode.None;
@@ -435,7 +444,7 @@ namespace ExpandNullforge.EditorTools
             {
                 GUILayout.Space(10f);
                 DrawSectionLabel("The item");
-                GUILayout.Label("Icons are yours to draw (16×16 inventory + 10×10 in-hand) — drop them on the item afterwards. Everything else is set here.", sub);
+                GUILayout.Label("Icons are yours to draw (16×16 in the inventory, 10×10 in the hand). Drop them on the item afterwards. Everything else is set here.", sub);
                 GUILayout.Space(2f);
                 FieldLabel("Description");
                 wizardDescription = EditorGUILayout.TextField(wizardDescription, GUILayout.Width(FieldW * 1.6f));
@@ -501,9 +510,7 @@ namespace ExpandNullforge.EditorTools
             // -- fields, two columns --
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.BeginVertical(GUILayout.Width(FieldW + 8f));
-            SerializedProperty nameProp = so.FindProperty("blockName");
-            FieldLabel("Block name");
-            nameProp.stringValue = EditorGUILayout.TextField(nameProp.stringValue, GUILayout.Width(FieldW));
+            DrawNameField(so, asset);
             GUILayout.Space(8f);
             FieldLabel("Tileset sheet");
             DrawInlineTextureNoLabel(so, "tilesetTexture");
@@ -528,12 +535,39 @@ namespace ExpandNullforge.EditorTools
                 GUILayout.Space(4f);
                 FieldLabel("Emissive sheet");
                 DrawInlineTextureNoLabel(so, "emissiveTexture");
+
+                // The sheet has to match the block's own pixel for pixel, so offer to make it rather
+                // than leaving someone to size and lay out a PNG by hand and find out at generation.
+                SerializedProperty emissiveTex = so.FindProperty("emissiveTexture");
+                if (emissiveTex != null && emissiveTex.objectReferenceValue == null)
+                {
+                    GUILayout.Space(4f);
+                    if (GUILayout.Button(
+                            new GUIContent(
+                                "Create emissive sheet",
+                                "Writes a glow map beside this block's sheet, starting from its brightest " +
+                                "pixels. Paint out what should stay dark and paint in whatever it missed."),
+                            GUILayout.Width(FieldW)))
+                    {
+                        Texture2D emissiveSheet;
+                        string emissiveError;
+                        if (DimensionTilesetEmissiveSheet.TryCreate(
+                                so.targetObject as DimensionTilesetAsset, out emissiveSheet, out emissiveError))
+                        {
+                            emissiveTex.objectReferenceValue = emissiveSheet;
+                        }
+                        else
+                        {
+                            Debug.LogWarning("[ExpandNullforge] " + emissiveError);
+                        }
+                    }
+                }
             }
 
             EditorGUILayout.EndVertical();
             GUILayout.Space(28f);
             EditorGUILayout.BeginVertical();
-            if (type.Role == DimensionBlockRole.Terrain)
+            if (type.Role == DimensionBlockRole.Terrain && !IsReskin(asset))
             {
                 DrawSectionLabel("World map colors");
                 GUILayout.Space(2f);
@@ -592,22 +626,203 @@ namespace ExpandNullforge.EditorTools
 
         /// <summary>
         /// The block's master control panel: every capability it has (or can gain), editable in one
-        /// place. Master switches wire real behavior — not just visuals; capabilities that still need
-        /// their backend wave (ores, growables) are shown honestly as "coming" rather than lying.
+        /// place. Master switches wire real behavior — not just visuals. A capability still waiting on
+        /// its backend wave says so where it is authored rather than implying it works: the ore panel
+        /// carries an explicit "not wired yet" notice, because its list currently reaches the runtime
+        /// only to have its length logged.
         /// </summary>
+        /// <summary>
+        /// The block's name, with the guard that stands between a rename and every world it would
+        /// break.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE DAMAGE A RENAME DOES IS INVISIBLE AND PERMANENT. A block's identity is its name, the
+        /// numeric tileset id is a hash of that identity, and that number is what a saved world
+        /// writes into every tile of the block. Rename the block and the number changes: every tile
+        /// already placed in somebody's world stops matching any registered block and renders as
+        /// the unknown-tileset placeholder, which is exactly what a player sees when a mod has been
+        /// uninstalled. Nothing in the editor would have said a word.
+        /// </para>
+        /// <para>
+        /// So the name is edited into a draft and the guard asks before it lands, with the two
+        /// answers that are actually different: keep the identity (the usual answer — the block is
+        /// the same block, it is only called something else now) or start fresh (a genuinely new
+        /// block reusing an old asset, where orphaning the old tiles is the point). A rename whose
+        /// identity would not change at all — punctuation, spacing, capitalisation — needs no
+        /// question and says so.
+        /// </para>
+        /// </remarks>
+        private void DrawNameField(SerializedObject so, DimensionTilesetAsset asset)
+        {
+            SerializedProperty nameProp = so.FindProperty("blockName");
+            if (renameTarget != asset)
+            {
+                renameTarget = asset;
+                renameDraft = nameProp.stringValue;
+            }
+
+            FieldLabel("Block name");
+            renameDraft = EditorGUILayout.TextField(renameDraft, GUILayout.Width(FieldW));
+
+            if (string.Equals(renameDraft, nameProp.stringValue, System.StringComparison.Ordinal))
+            {
+                if (asset.IdentityIsFrozen)
+                {
+                    GUILayout.Label(
+                        "Known to saved worlds as \"" + asset.IdentityToken + "\".",
+                        sub);
+                }
+
+                return;
+            }
+
+            bool identityChanges =
+                !asset.IdentityIsFrozen &&
+                !string.Equals(
+                    DimensionTilesetAsset.IdentityTokenFor(renameDraft),
+                    asset.IdentityToken,
+                    System.StringComparison.Ordinal);
+
+            GUILayout.Space(4f);
+            if (!identityChanges)
+            {
+                EditorGUILayout.HelpBox(
+                    "This block keeps the same identity, so tiles already placed in a world are " +
+                    "unaffected.",
+                    MessageType.None);
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button("Rename", GUILayout.Width(100f)))
+                {
+                    nameProp.stringValue = renameDraft;
+                    GUI.FocusControl(null);
+                }
+
+                if (GUILayout.Button("Cancel", GUILayout.Width(80f)))
+                {
+                    renameDraft = nameProp.stringValue;
+                    GUI.FocusControl(null);
+                }
+
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+                return;
+            }
+
+            EditorGUILayout.HelpBox(
+                "Renaming this block changes what it IS, not only what it is called. Its identity " +
+                "is \"" + asset.IdentityToken + "\" and would become \"" +
+                DimensionTilesetAsset.IdentityTokenFor(renameDraft) + "\".\n\n" +
+                "Every tile of this block already placed in a saved world remembers the old " +
+                "identity. After the change those tiles match nothing and show as the missing " +
+                "block, exactly as they would if this mod had been uninstalled. The block items " +
+                "in players' chests change id with it.\n\n" +
+                "Choose which you mean:",
+                MessageType.Warning);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button(
+                    new GUIContent(
+                        "Rename, keep the identity",
+                        "The same block under a new name. Tiles already placed stay this block, " +
+                        "and its id is pinned to \"" + asset.IdentityToken + "\" from now on."),
+                    GUILayout.Width(200f)))
+            {
+                // Pinned BEFORE the name lands, because the token is derived from the name it is
+                // replacing. Written through the same serialized object so one undo covers both.
+                so.FindProperty("identityToken").stringValue = asset.IdentityToken;
+                nameProp.stringValue = renameDraft;
+                GUI.FocusControl(null);
+            }
+
+            if (GUILayout.Button(
+                    new GUIContent(
+                        "Rename and start fresh",
+                        "A different block that happens to reuse this asset. Anything already " +
+                        "placed of the old one is orphaned."),
+                    GUILayout.Width(190f)))
+            {
+                so.FindProperty("identityToken").stringValue = string.Empty;
+                nameProp.stringValue = renameDraft;
+                GUI.FocusControl(null);
+            }
+
+            if (GUILayout.Button("Cancel", GUILayout.Width(80f)))
+            {
+                renameDraft = nameProp.stringValue;
+                GUI.FocusControl(null);
+            }
+
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        /// <summary>Whether this block dresses one of the game's tilesets instead of being its own.</summary>
+        private static bool IsReskin(DimensionTilesetAsset asset)
+        {
+            return asset != null && asset.ItemMode == DimensionTilesetItemMode.ReskinVanilla;
+        }
+
+        /// <summary>
+        /// Says, once, why a reskin offers fewer switches than a block of its own.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE REASON IS THE TILE'S NUMBER, and it is worth stating plainly because nothing else in
+        /// the Studio hints at it. A reskin registers art against one of the game's tileset indexes
+        /// (<c>DimensionTilesetRuntime.RegisterReskin</c>), and the tiles it dresses keep carrying
+        /// that vanilla number in the world and in the save. Every capability below the art —
+        /// fog, ground cover, ore veins, what walking on it does, its colour on the map — is looked
+        /// up by the block's OWN id, which no tile in the world is stamped with. They would
+        /// register, log cheerfully, and never once be consulted.
+        /// </para>
+        /// <para>
+        /// So they are not shown rather than shown and quietly ignored. A creator who needs them
+        /// needs a block of its own, which is one choice away and is what this says.
+        /// </para>
+        /// </remarks>
+        private void DrawReskinLimits()
+        {
+            EditorGUILayout.HelpBox(
+                "This block dresses one of the game's own blocks, so the tiles it paints are still " +
+                "the game's tiles underneath — they carry the game's number in the world and in " +
+                "the save.\n\n" +
+                "That means everything except the art belongs to the block it dresses: its fog, " +
+                "the grass and pebbles that grow on it, the ore in its walls, what walking on it " +
+                "does, and its colour on the map. Those switches are hidden here because they " +
+                "could not take effect.\n\n" +
+                "To set them, make this a block of its own instead: the wizard's item step is " +
+                "where the choice lives.",
+                MessageType.Info);
+            GUILayout.Space(8f);
+        }
+
         private void DrawControlPanel(SerializedObject so, DimensionTilesetAsset asset, DimensionTilesetType type)
         {
             DrawSectionLabel("Block capabilities");
             GUILayout.Label("Everything this block can do. Switches here wire the real behavior, not just the look.", sub);
             GUILayout.Space(6f);
 
+            bool reskin = IsReskin(asset);
+            if (reskin)
+            {
+                DrawReskinLimits();
+            }
+
             if (type.HasStates)
             {
-                // -- FARMING: the first live master switch.
+                // -- FARMING: the first live master switch. On a reskin this is the ART of tilled
+                // and watered soil and nothing more — whether the block CAN be farmed is decided
+                // by the game's own block underneath, and the hidden tilled-ground object is not
+                // generated (GenerateGroundBlock is false for a reskin).
                 bool farm = asset.IsStateEnabled("tilled");
                 bool now = EditorGUILayout.ToggleLeft(
-                    new GUIContent("Can be farmed",
-                        "Hoe → tilled soil, watering can → watered soil, using this block's own art."),
+                    new GUIContent(
+                        reskin ? "Draw its farmed states" : "Can be farmed",
+                        reskin
+                            ? "Your art for tilled and watered soil, used wherever the block this " +
+                              "dresses is farmed. Whether it can be farmed at all stays the game's own answer."
+                            : "A hoe turns it into tilled soil and a watering can waters it, both drawn with this block's own art."),
                     farm, EditorStyles.boldLabel);
                 if (now != farm)
                 {
@@ -617,10 +832,13 @@ namespace ExpandNullforge.EditorTools
                     }
                 }
 
-                if (now)
+                if (now && !reskin)
                 {
-                    DrawCapability("Can be tilled (hoe)", true, "The tilled-soil art bakes from your sheet.");
-                    DrawCapability("Can be watered (watering can, sprinkler)", true, "Watered soil inherits this block's tileset.");
+                    DrawCapability("Can be tilled (hoe)", true,
+                        "Hoeing keeps this block's own soil instead of turning it into dirt. Generation " +
+                        "writes the hidden object the game looks for before it decides.");
+                    DrawCapability("Can be watered (watering can, sprinkler)", true,
+                        "Watered soil inherits whatever tileset it was tilled from, so it follows the line above.");
                 }
 
                 GUILayout.Space(8f);
@@ -635,10 +853,11 @@ namespace ExpandNullforge.EditorTools
                 if (rigid != null)
                 {
                     rigid.boolValue = EditorGUILayout.ToggleLeft(
-                        new GUIContent("Rigid surface (no wobble)",
-                            "Tiles sit perfectly straight instead of taking the game's hand-drawn " +
-                            "vertex wobble. Right for metal plating, glass panels and circuitry, where " +
-                            "a crooked edge reads as a bug. Walls are already rigid in vanilla."),
+                        new GUIContent("Stands rigid, with no wobble",
+                            "Tiles sit perfectly straight instead of taking the gentle wobble the game " +
+                            "gives hand drawn terrain. Right for metal plating, glass panels and " +
+                            "circuitry, where a crooked edge reads as a mistake. Walls are already " +
+                            "straight in the game."),
                         rigid.boolValue, EditorStyles.boldLabel);
                     if (rigid.boolValue)
                     {
@@ -647,17 +866,68 @@ namespace ExpandNullforge.EditorTools
                             true,
                             "Motifs that sit on a tile edge or corner stay symmetric instead of being " +
                             "stretched by each tile's own vertex displacement.");
+
+                        // Rigidity is a marker component the game looks for on the tile's own PREFAB.
+                        // No block object means no prefab, so nothing carries the marker and the
+                        // setting quietly does nothing at all. Read through the asset rather than by
+                        // serialized name: GenerateBlock is derived from the type and item mode, and
+                        // has no backing field to look up.
+                        if (!asset.GenerateBlock)
+                        {
+                            EditorGUILayout.HelpBox(
+                                "This block generates no block object, so there is no prefab for the " +
+                                "rigid marker to live on and the setting will have no effect in game. " +
+                                "Turn on its ground or wall block.",
+                                MessageType.Warning);
+                        }
                     }
 
                     GUILayout.Space(6f);
                 }
 
-                SerializedProperty circuit = so.FindProperty("circuitFloor");
-                bool circuitOn = EditorGUILayout.ToggleLeft(
-                    new GUIContent("Circuit floor (under-glass glow)",
-                        "Ground renders its regular art (dark glass + dormant traces); the emissive circuit art glows — rare ambient pulses sweep it, and real powered electricity lights it up."),
+                // Fog is a data block the game builds its lookup from, keyed by the block's own
+                // tileset id. A reskinned tile carries the game's id, so the block would be written
+                // and never matched.
+                SerializedProperty fog = reskin ? null : so.FindProperty("hasGroundFog");
+                if (fog != null)
+                {
+                    fog.boolValue = EditorGUILayout.ToggleLeft(
+                        new GUIContent("Ground fog",
+                            "Low fog lying on this block's ground, the way it does in the mold " +
+                            "biome. Only the ground carries it. Walls never do."),
+                        fog.boolValue, EditorStyles.boldLabel);
+
+                    if (fog.boolValue)
+                    {
+                        SerializedProperty tint = so.FindProperty("groundFogTint");
+                        if (tint != null)
+                        {
+                            tint.colorValue = EditorGUILayout.ColorField(
+                                new GUIContent("Fog colour",
+                                    "Alpha is the fog's DENSITY, not its transparency. Full alpha is " +
+                                    "much heavier than the swatch suggests. The mold biome sits near a third."),
+                                tint.colorValue);
+                        }
+
+                        DrawCapability(
+                            "Written as a data block the game reads at startup",
+                            true,
+                            "Nothing is patched. Core Keeper builds its fog lookup from these blocks, " +
+                            "so custom fog renders through the game's own pass.");
+                    }
+
+                    GUILayout.Space(6f);
+                }
+
+                // The circuit surface is served through the material override, and
+                // GetOverrideMaterial passes vanilla indexes straight through — a reskinned tile
+                // could never be handed it.
+                SerializedProperty circuit = reskin ? null : so.FindProperty("circuitFloor");
+                bool circuitOn = circuit != null && EditorGUILayout.ToggleLeft(
+                    new GUIContent("Circuit floor, glowing under glass",
+                        "Ground renders its regular art (dark glass + dormant traces); the emissive circuit art glows. Rare ambient pulses sweep it, and real powered electricity lights it up."),
                     circuit.boolValue, EditorStyles.boldLabel);
-                if (circuitOn != circuit.boolValue)
+                if (circuit != null && circuitOn != circuit.boolValue)
                 {
                     circuit.boolValue = circuitOn;
                 }
@@ -676,16 +946,39 @@ namespace ExpandNullforge.EditorTools
                     if (circuitMaterial == null || circuitMaterial.objectReferenceValue == null)
                     {
                         EditorGUILayout.HelpBox(
-                            "Circuit-floor material not found at " + CircuitFloorMaterialPath + ".",
+                            "The framework's circuit surface is missing from " + CircuitFloorMaterialPath +
+                            ", so this will not glow.",
                             MessageType.Warning);
                     }
                     else
                     {
                         DrawCapability("Ambient dreams (rare traveling pulses)", true,
-                            "Deterministic per-cell pulses sweep the circuit emissive art — never permanently lit.");
+                            "Pulses travel across the glow art on their own, one cell at a time. Never permanently lit.");
                         DrawCapability("Stability glow (real electricity)", true,
                             "Powered entities nearby light the circuits through the game's live electricity texture.");
                     }
+                }
+
+                // Ground cover, both behaviours and ore veins are all registered against this
+                // block's own tileset id: the scatter rules, DimensionTilesetBehaviourRegistry and
+                // ApplyOreVeinRules all key on it. A reskin's tiles carry the game's id, so all
+                // three would be registered and never consulted.
+                if (!reskin)
+                {
+                    GUILayout.Space(8f);
+                    DrawGroundCoverSection(so);
+
+                    // Only meaningful once the block actually has slime to walk on.
+                    if (asset.IsStateEnabled("slime"))
+                    {
+                        GUILayout.Space(8f);
+                        DrawSlimeBehaviourSection(so);
+                    }
+
+                    // Unconditional, unlike the slime section: this is about the ground the block
+                    // always has, so it applies whether or not the block grows slime.
+                    GUILayout.Space(8f);
+                    DrawSurfaceBehaviourSection(so);
                 }
 
                 GUILayout.Space(8f);
@@ -694,16 +987,181 @@ namespace ExpandNullforge.EditorTools
                 DrawSectionLabel("Always included");
                 DrawCapability("Mining & digging cracks (3 stages)", true, "Damage cracks render from this block's own crack art.");
                 DrawCapability("Pebbles when a wall is mined", true, "Mined walls scatter this block's own pebbles.");
-                DrawCapability("Slime, grass, roots, debris & rubble", true, "Applied by creatures, scenes and worldgen; drawn with your art when placed with this tileset.");
-                DrawCapability("Ore veins & ancient crystal (art)", true, "The vein art is ready; linking real ore drops is the next capability below.");
-                DrawCapability("Vines & roof holes", true, "World-driven overlays; your sheet carries their look.");
+                DrawCapability("Slime, grass, roots & debris from the world", true, "Creatures and scenes apply these too; they draw with your art wherever they land on this block.");
+                DrawCapability(
+                    "Ore veins & ancient crystal (art)",
+                    true,
+                    reskin
+                        ? "The vein art is ready. Which ore is in there belongs to the block this dresses."
+                        : "The vein art is ready; linking real ore drops is the next capability below.");
+                DrawCapability("Vines & roof holes", true, "The world places these; your sheet carries their look.");
 
-                GUILayout.Space(8f);
-                DrawOreSection(so);
+                if (!reskin)
+                {
+                    GUILayout.Space(8f);
+                    DrawOreSection(so);
+                }
             }
             else
             {
-                GUILayout.Label("This block type has no optional capabilities — its single surface is the whole story.", sub);
+                GUILayout.Label("This block type has no optional capabilities. Its single surface is the whole story.", sub);
+            }
+        }
+
+        /// <summary>
+        /// The overlays this block grows on its own ground when a dimension generates it, and how
+        /// thickly.
+        /// </summary>
+        /// <remarks>
+        /// These four are the only scatterable states. The rest are not things that "grow": tilled and
+        /// watered soil are made by the player's tools, cracks come from damage, ore is placed by vein
+        /// generation. Offering a density for those would produce terrain that looks farmed or mined
+        /// before anyone touched it.
+        /// </remarks>
+        private static readonly (string Key, string Label, string Blurb)[] GroundCoverStates =
+        {
+            ("grass", "Grass tufts", "Sparse blades scattered over the surface."),
+            ("pebbles", "Pebbles", "Loose stones lying on the ground."),
+            ("roots", "Big roots", "Thick roots breaking through, blocking movement."),
+            ("slime", "Slime", "A wet coating over the surface."),
+        };
+
+        private void DrawGroundCoverSection(SerializedObject so)
+        {
+            DrawSectionLabel("Ground cover");
+            GUILayout.Label(
+                "What grows on this block when a dimension generates it. Same world, same places, every time.",
+                sub);
+            GUILayout.Space(4f);
+
+            for (int i = 0; i < GroundCoverStates.Length; i++)
+            {
+                (string key, string label, string blurb) = GroundCoverStates[i];
+                SerializedProperty layer = GetLayerProp(so, key, true);
+                SerializedProperty enabled = layer.FindPropertyRelative("enabled");
+                SerializedProperty density = layer.FindPropertyRelative("density");
+
+                EditorGUILayout.BeginHorizontal();
+                enabled.boolValue = EditorGUILayout.ToggleLeft(
+                    new GUIContent(label, blurb), enabled.boolValue, GUILayout.Width(150f));
+
+                // The slider is meaningless while the overlay is off, and leaving it live would
+                // suggest a number that changes nothing.
+                using (new EditorGUI.DisabledScope(!enabled.boolValue))
+                {
+                    density.floatValue = EditorGUILayout.Slider(
+                        density.floatValue, 0f, 1f, GUILayout.Width(220f));
+                    GUILayout.Label(
+                        Mathf.RoundToInt(density.floatValue * 100f) + "% of the ground", sub,
+                        GUILayout.Width(130f));
+                }
+
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+            }
+        }
+
+        /// <summary>
+        /// The twin of the slime section, for ground that is itself the hazard.
+        /// </summary>
+        /// <remarks>
+        /// Drawn as its own section rather than folded into the slime one because they are genuinely
+        /// independent: mold ground hurts with nothing on it, while most hazardous blocks are safe
+        /// stone under a dangerous puddle. One dropdown could not say both.
+        /// </remarks>
+        private void DrawSurfaceBehaviourSection(SerializedObject so)
+        {
+            SerializedProperty behaviour = so.FindProperty("surfaceBehaviour");
+            if (behaviour == null)
+            {
+                return;
+            }
+
+            DrawSectionLabel("What the ground itself does");
+
+            GUILayout.Label(
+                "For ground that is the hazard, like mold. No slime needed. Leave as None for an " +
+                "ordinary floor.", sub);
+            GUILayout.Space(4f);
+
+            EditorGUILayout.BeginHorizontal();
+            behaviour.enumValueIndex = (int)(DimensionTilesetGroundBehaviour)EditorGUILayout.EnumPopup(
+                (DimensionTilesetGroundBehaviour)behaviour.enumValueIndex, GUILayout.Width(FieldW));
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            if ((DimensionTilesetGroundBehaviour)behaviour.enumValueIndex !=
+                DimensionTilesetGroundBehaviour.None)
+            {
+                GUILayout.Space(4f);
+                EditorGUILayout.HelpBox(
+                    "Every step on this block's plain ground applies the effect. That is a strong " +
+                    "thing to do to a floor players walk across. The game reserves it for places " +
+                    "they are meant to hurry through.",
+                    MessageType.Info);
+            }
+
+            GUILayout.Space(6f);
+        }
+
+        /// <summary>
+        /// What this block's slime does underfoot, borrowed from Core Keeper's own set.
+        /// </summary>
+        /// <remarks>
+        /// Worded as "behaves like" rather than naming the vanilla tileset it comes from, because the
+        /// author is choosing an experience, not a donor. The honesty note about conditions matters:
+        /// the look and sound land immediately, the damage does not, and someone testing an acid
+        /// block would otherwise reasonably conclude it was broken.
+        /// </remarks>
+        private void DrawSlimeBehaviourSection(SerializedObject so)
+        {
+            DrawSectionLabel("What the slime does");
+
+            SerializedProperty behaviour = so.FindProperty("slimeBehaviour");
+            if (behaviour == null)
+            {
+                return;
+            }
+
+            GUILayout.Label(
+                "Borrow one of the game's own slimes. Your art stays; its behaviour comes along.", sub);
+            GUILayout.Space(4f);
+
+            EditorGUILayout.BeginHorizontal();
+            behaviour.enumValueIndex = (int)(DimensionTilesetGroundBehaviour)EditorGUILayout.EnumPopup(
+                (DimensionTilesetGroundBehaviour)behaviour.enumValueIndex, GUILayout.Width(FieldW));
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            GUILayout.Space(4f);
+            switch ((DimensionTilesetGroundBehaviour)behaviour.enumValueIndex)
+            {
+                case DimensionTilesetGroundBehaviour.None:
+                    GUILayout.Label("Decoration only. Walking through it does nothing.", sub);
+                    break;
+                case DimensionTilesetGroundBehaviour.Slime:
+                    GUILayout.Label("Ordinary slime. Muffles the dust kicked up when running.", sub);
+                    break;
+                case DimensionTilesetGroundBehaviour.Acid:
+                    GUILayout.Label("Burns, and hisses while you stand in it.", sub);
+                    break;
+                case DimensionTilesetGroundBehaviour.PoisonSlime:
+                    GUILayout.Label("Poisons whoever walks through.", sub);
+                    break;
+                case DimensionTilesetGroundBehaviour.SlipperySlime:
+                    GUILayout.Label("Slippery. You carry further than you meant to.", sub);
+                    break;
+                case DimensionTilesetGroundBehaviour.Oil:
+                    GUILayout.Label("Drenches whatever walks through. Relevant near fire.", sub);
+                    break;
+            }
+
+            if ((DimensionTilesetGroundBehaviour)behaviour.enumValueIndex == DimensionTilesetGroundBehaviour.Slime)
+            {
+                EditorGUILayout.HelpBox(
+                    "Plain slime is presentation only. Footsteps, splashes and the muffled run dust. " +
+                    "That is all vanilla's own orange slime really does underfoot.",
+                    MessageType.Info);
             }
         }
 
@@ -723,7 +1181,21 @@ namespace ExpandNullforge.EditorTools
         private void DrawOreSection(SerializedObject so)
         {
             DrawSectionLabel("Can contain ores");
-            GUILayout.Label("Veins this block's walls can hold — each drops its linked item when mined. Vein art comes from your sheet's ore region.", sub);
+            GUILayout.Label("Veins this block's walls can hold. Vein art comes from your sheet's ore region.", sub);
+
+            // Both paths generate now. The one-ore rule is stated because it is a vanilla limit the
+            // modder cannot discover any other way except by mining a wall for an hour: the drop
+            // resolves a vein by FIRST MATCH on the tileset, so a second entry is unreachable no
+            // matter how it is authored.
+            EditorGUILayout.HelpBox(
+                "Generating wires this up: your own ore items are stamped so the item IS the vein, and " +
+                "a vanilla ore gets its own vein object pointing at the real Copper/Tin/… item.\n\n" +
+                "One ore per block. The game finds a vein by taking the first match on this tileset, so " +
+                "anything after the first could never be reached. Vanilla has the same limit (Solarite " +
+                "and Pandorium collide on Crystal). Extra entries are reported when you generate.\n\n" +
+                "Veins also grow on their own in this block's generated walls. Set the slider to zero " +
+                "to place them only by painting.",
+                MessageType.Info);
             GUILayout.Space(2f);
 
             SerializedProperty ores = so.FindProperty("ores");
@@ -764,6 +1236,36 @@ namespace ExpandNullforge.EditorTools
 
                 GUILayout.FlexibleSpace();
                 EditorGUILayout.EndHorizontal();
+
+                // How the vein appears on its own, in player words: how often, and how big.
+                SerializedProperty abundance = element.FindPropertyRelative("abundance");
+                SerializedProperty sizeMin = element.FindPropertyRelative("veinSizeMin");
+                SerializedProperty sizeMax = element.FindPropertyRelative("veinSizeMax");
+
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Found in walls", sub, GUILayout.Width(90f));
+                abundance.floatValue = GUILayout.HorizontalSlider(
+                    abundance.floatValue, 0f, 10f, GUILayout.Width(140f));
+                abundance.floatValue = UnityEngine.Mathf.Round(abundance.floatValue * 10f) / 10f;
+                GUILayout.Label(
+                    abundance.floatValue <= 0f
+                        ? "paint only"
+                        : "about " + abundance.floatValue.ToString("0.#") + " veins per 100 wall tiles",
+                    sub);
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Vein size", sub, GUILayout.Width(90f));
+                float veinMin = sizeMin.intValue;
+                float veinMax = sizeMax.intValue < sizeMin.intValue ? sizeMin.intValue : sizeMax.intValue;
+                EditorGUILayout.MinMaxSlider(ref veinMin, ref veinMax, 1f, 12f, GUILayout.Width(140f));
+                sizeMin.intValue = UnityEngine.Mathf.RoundToInt(veinMin);
+                sizeMax.intValue = UnityEngine.Mathf.RoundToInt(veinMax);
+                GUILayout.Label(sizeMin.intValue + " to " + sizeMax.intValue + " blocks", sub);
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+                GUILayout.Space(4f);
             }
 
             Rect addRect = GUILayoutUtility.GetRect(120f, 20f, GUILayout.Width(120f));
@@ -797,13 +1299,13 @@ namespace ExpandNullforge.EditorTools
                 case DimensionTilesetItemMode.CreateItem:
                     GUILayout.Label("One item, exactly like a vanilla block: ground on open terrain, wall where ground exists, and it drops itself. Icons, description and rarity live on the item.", sub);
                     GUILayout.Space(4f);
-                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                    EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
                     DrawItemRow(asset.BlockName + " Block", asset.GenerateBlock, template, asset);
                     EditorGUILayout.EndVertical();
                     break;
 
                 case DimensionTilesetItemMode.ReskinVanilla:
-                    GUILayout.Label("This block reskins a vanilla tileset — no item of its own. While enabled, every tile of that tileset wears your textures (render-only, save-safe).", sub);
+                    GUILayout.Label("This block reskins one of the game's own. No item of its own. While it is included, every tile of that block wears your art, and because only the look changes, old saves stay valid.", sub);
                     GUILayout.Space(4f);
                     EditorGUILayout.BeginHorizontal();
                     GUILayout.Label("Reskins:", EditorStyles.boldLabel, GUILayout.Width(60f));
@@ -814,7 +1316,7 @@ namespace ExpandNullforge.EditorTools
                     break;
 
                 default:
-                    GUILayout.Label("No item — this tileset exists for worldgen/scene use only.", sub);
+                    GUILayout.Label("No item. This tileset exists for worldgen/scene use only.", sub);
                     break;
             }
         }
@@ -838,7 +1340,7 @@ namespace ExpandNullforge.EditorTools
                     if (item != null)
                     {
                         result.FocusItem = item;
-                        result.Message = "Editing \"" + item.DisplayName + "\" in Resources — icons, description, rarity.";
+                        result.Message = "Editing \"" + item.DisplayName + "\" in Resources. Icons, description, rarity.";
                         result.MessageType = MessageType.Info;
                     }
                 }
@@ -853,7 +1355,7 @@ namespace ExpandNullforge.EditorTools
         {
             DrawSectionLabel("Tileset data");
             GUILayout.Label(
-                "Bake this block's adaptive sheets — the \"mint\" files the game samples so every enabled layer renders natively. Run it after changing the sheet or states.",
+                "Bakes the adaptive sheets the game samples, so every enabled layer draws from your art. Run it after changing the sheet or states.",
                 sub);
             GUILayout.Space(5f);
 
@@ -879,11 +1381,15 @@ namespace ExpandNullforge.EditorTools
             }
             else if (!atlasReady)
             {
-                GUILayout.Label("Run the mod in-game once so the layout is captured. " + DimensionTilesetAtlas.Status, sub);
+                // The atlas has a status line of its own, written for whoever built the atlas. What
+                // matters to someone making a block is the one thing that fixes it.
+                GUILayout.Label(
+                    "Play the mod once so the framework can learn how the game lays a block out. " +
+                    "Baking needs that layout, and it only has to happen the one time.", sub);
             }
             else if (asset.HasGeneratedGen)
             {
-                GUILayout.Label("Generated ✓ — " + asset.GeneratedGen.Count + " layer sheet(s) stored.", sub);
+                GUILayout.Label("Generated ✓. " + asset.GeneratedGen.Count + " layer sheet(s) stored.", sub);
             }
         }
 
@@ -898,6 +1404,162 @@ namespace ExpandNullforge.EditorTools
             blockPreview.Cleanup();
         }
 
+        // ---- what the rebuilt Blocks page drives ----
+        //
+        // The page owns the chrome and this owns the canvas, so everything below is a seam rather
+        // than a second implementation: the same preview instance, the same wizard, the same
+        // serialized edits the panel has always made.
+
+        /// <summary>The live canvas, so a page can read what is selected in it and toggle its states.</summary>
+        internal DimensionTilesetBlockPreview Preview
+        {
+            get { return blockPreview; }
+        }
+
+        /// <summary>
+        /// Draws only the block canvas, without the controls it usually paints along its top edge,
+        /// for a page that carries those controls in its own design.
+        /// </summary>
+        internal void DrawPreviewIsland(DimensionTilesetAsset asset, float width, float height)
+        {
+            if (asset == null)
+            {
+                return;
+            }
+
+            EnsureStyles();
+            blockPreview.SetActiveOverlay(null, false);
+
+            float w = Mathf.Max(160f, width);
+            float h = Mathf.Max(160f, height);
+            Rect rect = GUILayoutUtility.GetRect(w, h, GUILayout.Width(w), GUILayout.Height(h));
+
+            // Only for the length of this draw: the panel that draws its own controls is untouched.
+            blockPreview.DrawsOwnToolbar = false;
+            try
+            {
+                blockPreview.Draw(rect, asset.TilesetTexture, asset);
+            }
+            finally
+            {
+                blockPreview.DrawsOwnToolbar = true;
+            }
+        }
+
+        /// <summary>Whether the canvas adds walls (else ground) when someone paints in it.</summary>
+        internal bool PreviewPaintsWall
+        {
+            get { return blockPreview.PaintKind == DimensionTilesetBlockPreview.BlockKind.Wall; }
+            set
+            {
+                blockPreview.PaintKind = value
+                    ? DimensionTilesetBlockPreview.BlockKind.Wall
+                    : DimensionTilesetBlockPreview.BlockKind.Ground;
+            }
+        }
+
+        /// <summary>True while clicks paint blocks; false while they pick one to look at.</summary>
+        internal bool PreviewPainting
+        {
+            get { return blockPreview.Painting; }
+            set { blockPreview.Painting = value; }
+        }
+
+        /// <summary>Shifts the pattern to another arrangement of the same tiles.</summary>
+        internal void ShufflePreview()
+        {
+            blockPreview.ShufflePattern();
+        }
+
+        /// <summary>Puts the camera, the zoom and the pattern back where they started.</summary>
+        internal void ResetPreviewView()
+        {
+            blockPreview.ResetView();
+        }
+
+        /// <summary>
+        /// Draws the Add-block wizard on its own, so a page can host the one creation path that
+        /// exists rather than growing a second one. The returned request is the finished block.
+        /// </summary>
+        internal DrawResult DrawWizardIsland()
+        {
+            result = default;
+            result.SelectIndex = -1;
+            if (!wizardActive)
+            {
+                return result;
+            }
+
+            EnsureStyles();
+            EditorGUILayout.BeginVertical(DimensionsApiImguiTheme.CardBox);
+            DrawWizard();
+            EditorGUILayout.EndVertical();
+            return result;
+        }
+
+        /// <summary>The serialized entry for one state key, created off if it was never touched.</summary>
+        internal SerializedProperty LayerProperty(SerializedObject so, string key, bool create)
+        {
+            return GetLayerProp(so, key, create);
+        }
+
+        /// <summary>
+        /// The farming answer, written the way the panel writes it: tilled, watered and flooded move
+        /// together, because a block that can be hoed can be watered and flooded as well.
+        /// </summary>
+        internal void SetFarmable(SerializedObject so, bool on)
+        {
+            foreach (string key in new[] { "tilled", "watered", "flooded" })
+            {
+                GetLayerProp(so, key, true).FindPropertyRelative("enabled").boolValue = on;
+            }
+        }
+
+        /// <summary>Fixes a freshly assigned sheet's import so pixel art stays pixel art.</summary>
+        internal static void ApplySheetImport(Texture2D texture)
+        {
+            ApplySheetImportSettings(texture);
+        }
+
+        /// <summary>
+        /// Fills in the framework's circuit-floor material when that capability is switched on. The
+        /// serialized reference is what carries the material and its shader into the mod bundle.
+        /// </summary>
+        internal static void EnsureCircuitFloorMaterial(SerializedObject so)
+        {
+            if (so == null)
+            {
+                return;
+            }
+
+            SerializedProperty material = so.FindProperty("circuitFloorMaterial");
+            if (material == null || material.objectReferenceValue != null)
+            {
+                return;
+            }
+
+            material.objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<Material>(CircuitFloorMaterialPath);
+        }
+
+        /// <summary>Where the framework's circuit-floor material lives, for reporting it missing.</summary>
+        internal static string CircuitFloorMaterialAssetPath
+        {
+            get { return CircuitFloorMaterialPath; }
+        }
+
+        /// <summary>The game's own ores a vein can drop.</summary>
+        internal static IReadOnlyList<string> VanillaOres
+        {
+            get { return VanillaOreItems; }
+        }
+
+        /// <summary>The overlays a block grows on its own ground, and what each one is.</summary>
+        internal static IReadOnlyList<(string Key, string Label, string Blurb)> GroundCover
+        {
+            get { return GroundCoverStates; }
+        }
+
         // When a block is selected in the preview (View mode, left-click), a panel of its applicable
         // states appears; toggling a chip flips that state on just that block, rendered live.
         private void DrawBlockInspector()
@@ -908,7 +1570,7 @@ namespace ExpandNullforge.EditorTools
             EditorGUILayout.BeginVertical(GUILayout.Width(PreviewW));
             if (!blockPreview.HasSelection)
             {
-                GUILayout.Label("Tip: in View mode, left-click a block to toggle its states.", sub);
+                GUILayout.Label("With painting off, click a block to see the states it can wear.", sub);
             }
             else
             {
@@ -1044,9 +1706,10 @@ namespace ExpandNullforge.EditorTools
                 return null;
             }
 
-            return "This sheet is " + sheet.width + "×" + sheet.height + ", but the vanilla layout is " +
-                   w + "×" + h + ". Every tile is read at a fixed spot on that layout, so a differently " +
-                   "sized sheet bakes garbage. Resize the canvas (don't scale the art) and re-assign it.";
+            return "This art is " + sheet.width + " by " + sheet.height + " pixels and the game's " +
+                   "layout is " + w + " by " + h + ". Every tile is read from a fixed spot on that " +
+                   "layout, so art of another size bakes into nonsense. Resize the canvas without " +
+                   "scaling what you drew, then drop it in again.";
         }
 
         /// <summary>A narrow colour swatch with its label above it (keeps the field off the window edge).</summary>
@@ -1063,7 +1726,7 @@ namespace ExpandNullforge.EditorTools
 
         private void DrawSectionLabel(string text)
         {
-            GUILayout.Label(text.ToUpperInvariant(), EditorStyles.miniBoldLabel);
+            GUILayout.Label(text.ToUpperInvariant(), DimensionsApiImguiTheme.SectionLabel);
         }
 
         private static void DrawBorder(Rect r, Color c, float t)
@@ -1081,39 +1744,61 @@ namespace ExpandNullforge.EditorTools
                 return;
             }
 
-            stageTitle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14 };
-            sub = new GUIStyle(EditorStyles.wordWrappedMiniLabel);
-            sub.normal.textColor = new Color(1f, 1f, 1f, 0.55f);
-            panelTitle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 12 };
+            // Same palette and typefaces as the rebuilt pages. The Studio's controls stay
+            // exactly where they are; only how they read changes.
+            stageTitle = DimensionsApiImguiTheme.Text(
+                EditorStyles.boldLabel,
+                DimensionsApiImguiTheme.Display,
+                15,
+                DimensionsApiImguiTheme.Lavender);
+            // Prose, not data: the body face at a readable weight. Monospace here made every
+            // explanation look like a machine field rather than a sentence.
+            sub = DimensionsApiImguiTheme.Text(
+                EditorStyles.wordWrappedMiniLabel,
+                DimensionsApiImguiTheme.Body,
+                11,
+                DimensionsApiImguiTheme.Periwinkle);
+            sub.wordWrap = true;
+            panelTitle = DimensionsApiImguiTheme.Text(
+                EditorStyles.boldLabel,
+                DimensionsApiImguiTheme.BodyStrong,
+                13,
+                DimensionsApiImguiTheme.Lavender);
 
-            headerTitle = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = 14,
-                alignment = TextAnchor.MiddleLeft
-            };
+            headerTitle = DimensionsApiImguiTheme.Text(
+                EditorStyles.boldLabel,
+                DimensionsApiImguiTheme.Display,
+                15,
+                DimensionsApiImguiTheme.Lavender);
+            headerTitle.alignment = TextAnchor.MiddleLeft;
 
-            addBlockStyle = new GUIStyle(EditorStyles.label)
-            {
-                fontSize = 13,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleRight
-            };
-            addBlockStyle.normal.textColor = Amber;
-            addBlockStyle.hover.textColor = new Color(1f, 0.72f, 0.4f);
+            addBlockStyle = DimensionsApiImguiTheme.Text(
+                EditorStyles.label,
+                DimensionsApiImguiTheme.BodyStrong,
+                13,
+                DimensionsApiImguiTheme.CoreBlue);
+            addBlockStyle.alignment = TextAnchor.MiddleRight;
+            addBlockStyle.hover.textColor = DimensionsApiImguiTheme.CoreBluePale;
 
-            orangeDropStyle = new GUIStyle(EditorStyles.label)
-            {
-                fontSize = 12,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleRight
-            };
-            orangeDropStyle.normal.textColor = Amber;
-            orangeDropStyle.hover.textColor = new Color(1f, 0.72f, 0.4f);
+            orangeDropStyle = DimensionsApiImguiTheme.Text(
+                EditorStyles.label,
+                DimensionsApiImguiTheme.BodyStrong,
+                12,
+                DimensionsApiImguiTheme.CoreBlue);
+            orangeDropStyle.alignment = TextAnchor.MiddleRight;
+            orangeDropStyle.hover.textColor = DimensionsApiImguiTheme.CoreBluePale;
 
-            fieldLabel = new GUIStyle(EditorStyles.miniLabel);
-            fieldLabel.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
+            fieldLabel = DimensionsApiImguiTheme.Text(
+                DimensionsApiImguiTheme.Caption,
+                DimensionsApiImguiTheme.Body,
+                12,
+                DimensionsApiImguiTheme.Periwinkle);
 
-            stateCell = new GUIStyle(EditorStyles.label) { fontSize = 10, fontStyle = FontStyle.Bold };
+            stateCell = DimensionsApiImguiTheme.Text(
+                EditorStyles.label,
+                DimensionsApiImguiTheme.Mono,
+                10,
+                DimensionsApiImguiTheme.Periwinkle);
             stateCell.clipping = TextClipping.Clip;
 
             wizardOption = new GUIStyle(GUI.skin.button)

@@ -156,7 +156,7 @@ namespace ExpandNullforge.Foundation
               playableLocalBounds,
               coordinateLocalBounds,
               padding,
-              definition.SpaceKind);
+              definition.Type);
       return true;
     }
 
@@ -203,30 +203,6 @@ namespace ExpandNullforge.Foundation
         }
 
         AccumulateCoordinateBounds(scene.LocalBounds, ref hasBounds, ref min, ref max);
-      }
-
-      foreach (DimensionResourceNodeDefinition node in resourceNodes.Values)
-      {
-        if (!node.Enabled ||
-            !node.HasLocalBounds ||
-            !string.Equals(node.DimensionId, definition.Id, StringComparison.Ordinal))
-        {
-          continue;
-        }
-
-        AccumulateCoordinateBounds(node.LocalBounds, ref hasBounds, ref min, ref max);
-      }
-
-      foreach (DimensionSpawnRule rule in spawnRules.Values)
-      {
-        if (!rule.Enabled ||
-            !rule.HasLocalBounds ||
-            !string.Equals(rule.DimensionId, definition.Id, StringComparison.Ordinal))
-        {
-          continue;
-        }
-
-        AccumulateCoordinateBounds(rule.LocalBounds, ref hasBounds, ref min, ref max);
       }
 
       foreach (DimensionWorldEventDefinition worldEvent in worldEvents.Values)

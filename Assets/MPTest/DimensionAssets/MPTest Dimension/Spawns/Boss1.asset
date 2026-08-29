@@ -1,0 +1,563 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e774274e095cf32578a9186eae549eaa, type: 3}
+  m_Name: Boss1
+  m_EditorClassIdentifier: 
+  bossId: MPTest:Boss1
+  displayName: Boss 1
+  objectId: MPTest:Boss1Object
+  arenaSceneId: 
+  summoningItemId: 
+  stats:
+    maxHealth: 1
+    contactDamage: 0
+    defense: 0
+    moveSpeed: 1
+    detectionRadius: 8
+  creatureStats:
+    statSource: 0
+    maxHealth: 100
+    startHealthFraction: 1
+    damageReduction: 0
+    maxDamagePerHit: 0
+    minDamagePerHit: 0
+    damage: 10
+    damageMultiplier: 1
+    moveSpeed: 8
+    detectionRadius: 0
+    chaseAtDistance: 0
+    chaseSpeedMultiplier: 0
+    overrideDeathTiming: 0
+    timeBeforeDestroy: 1
+    timeBeforeLootDrop: 0.5
+    skipDeathAnimation: 0
+  borrowedKit:
+    fightsLikeAHydra: 0
+    hydraKind: 0
+    weakPointPrefab: {fileID: 0}
+    buryingSeconds: 1
+    surfacingSeconds: 1
+    minSecondsUnderground: 3
+    maxSecondsUnderground: 6
+    surfacingSlamDamage: 0
+    surfacingSlamMultiplier: 1
+    beamDamage: 0
+    beamMultiplier: 1
+    stalactiteDamage: 0
+    stalactiteMultiplier: 1
+    shockwaveDamage: 0
+    shockwaveMultiplier: 1
+    iceShardDamage: 0
+    iceShardMultiplier: 1
+    lavaDamage: 0
+    lavaMultiplier: 1
+    nilipedeDamage: 0
+    nilipedeMultiplier: 1
+    cyclesItsShotsLikeTheSlimeKing: 0
+    slamsLikeTheSlime: 0
+    slamWindUp: 0.5
+    slamAirTime: 1
+    slamLandTime: 0.5
+    slamSpeed: 5
+    enragedSlamWindUp: 0.3
+    enragedSlamAirTime: 0.7
+    enragedSlamSpeed: 8
+    slamLeavesTilesetId: 
+    slamDamage: 0
+    slamMultiplier: 1
+  moreBorrowedKits:
+    fightsLikeTheCore: 0
+    orbCount: 4
+    orbSpeed: 6
+    orbMinDistance: 6
+    orbMaxDistance: 9
+    phaseChangesAtHealth: 0.5
+    phaseChangeSeconds: 1
+    untouchableForSeconds: 1
+    whirlwindDamage: 0
+    whirlwindMultiplier: 1
+    homingDamage: 0
+    homingMultiplier: 1
+    summonsVoid: 1
+    voidSummonSeconds: 1
+    voidSummonWindUp: 0
+    voidSummonRecovery: 0
+    voidSummonMinCooldown: 5
+    voidSummonMaxCooldown: 10
+    summonsBeams: 1
+    beamSummonWindUp: 0
+    beamSummonRecovery: 0
+    beamSummonMinCooldown: 5
+    beamSummonMaxCooldown: 10
+    isOneOfTheCoresOrbs: 0
+    isTheCoreItself: 0
+    isTheAttentionMarker: 0
+    fightsLikeTheWall: 0
+    distanceFromTheCore: 875
+    segments: 16
+    segmentRadius: 2.5
+    totalWidth: 50
+    wallAttackSeconds: 1
+    wallAttackCooldown: 1
+    slitherSpeed: 1
+    slitherWavelength: 1
+    slitherHeight: 1
+    pauseBeforeBulbs: 0
+    pauseBeforeHead: 0
+    wallVulnerableSeconds: 15
+    wallVulnerableCutShort: 5
+    headOffset: -1
+    movementByPlayersAlive: []
+    bulbOffset: -1
+    isTheWallsHead: 0
+    fightsLikeTheScarab: 0
+    scarabAppearSeconds: 1
+    scarabBurySeconds: 1
+    scarabSurfaceSeconds: 1
+    scarabMinChargeCooldown: 3
+    scarabMaxChargeCooldown: 6
+    scarabChargeDamage: 0
+    scarabChargeMultiplier: 1
+    bombScarabWindUp: 0
+    bombScarabSeconds: 1
+    bombScarabRecovery: 0
+    bombScarabMinCooldown: 8
+    bombScarabMaxCooldown: 14
+  theRestOfTheKits:
+    fightsLikeTheBird: 0
+    birdLandSeconds: 2
+    birdSecondsBeforeStones: 0
+    birdSecondsBeforeStopping: 3
+    birdBeamWindUp: 0
+    birdBeamRecovery: 0
+    birdBeamMinCooldown: 5
+    birdBeamMaxCooldown: 9
+    birdStoneWindUp: 0
+    birdStoneRecovery: 0
+    birdStoneMinCooldown: 4
+    birdStoneMaxCooldown: 8
+    fightsLikeTheRobot: 0
+    brokenLegSeconds: 20
+    legSideOffset: 4
+    legDepthOffset: 4
+    stepHeight: 0.5
+    stepHeightCurve: 1
+    distanceBeforeALegMoves: 1.5
+    legSpeed: 1
+    stepLength: 0.8
+    legStartDistance: 0.5
+    legStepCooldown: 0.5
+    attacksInAChain: 6
+    delayBetweenChainedAttacks: 1
+    fightsLikeTheOctopus: 0
+    octopusAppearSeconds: 1
+    octopusSecondsBeforeTentacles: 0
+    octopusSecondsBeforeStopping: 3
+    tentacleWindUp: 0
+    tentacleRecovery: 0
+    tentacleMinCooldown: 3
+    tentacleMaxCooldown: 6
+    isAnOctopusSurfacingSpot: 0
+    fightsLikeTheLarva: 0
+    larvaRoamDistance: 30
+    larvaRoamVariation: 10
+    larvaDamage: 0
+    larvaMultiplier: 1
+    larvaSmallSegment: {fileID: 0}
+    larvaMediumSegment: {fileID: 0}
+    larvaLargeSegment: {fileID: 0}
+    arrivesLikeTheBossLarva: 0
+    fightsLikeTheShaman: 0
+    shamanPhaseAtHealth: 0.5
+    shamanPhaseSeconds: 1
+    shamanUntouchableSeconds: 1
+    fightsLikeTheSnake: 0
+    snakeDefeatSoundDelay: 2
+  bossChest:
+    chestObjectId: 
+    chestVariation: 0
+    chestAmount: 1
+    chestOffset: {x: 0, y: 0, z: 0}
+    isAMainStoryBoss: 0
+    leavesASecondChest: 0
+    secondChestObjectId: 
+    secondChestVariation: 0
+  combat:
+    oilMortarMultiplier: 1
+    oilMortarTerrainMultiplier: 1
+    oilMortarFlatDamage: 0
+    oilMortarFlatTerrainDamage: 0
+    fireMortarMultiplier: 1
+    fireMortarTerrainMultiplier: 1
+    fireMortarFlatDamage: 0
+    fireMortarFlatTerrainDamage: 0
+    noticesThingsOnLayers: 0
+    checksForThingsEveryFrame: 0
+    detectionRadius: 12
+    combatRadius: 0.5
+    factionId: OnlyAttacksPlayer
+    wantsToAttackTags: []
+    cantAttackTags: []
+    idleMovement: 1
+    minWanderDistance: 0.5
+    maxWanderDistance: 2
+    minWanderPause: 0.5
+    maxWanderPause: 1
+    walkPattern: {fileID: 0}
+    maxWanderDuration: 3
+    ownNumbersBeatTheWalkPattern: 0
+    wanderSpeedMultiplier: 1
+    attackKind: 1
+    meleeDamage: 0
+    meleeReach: 1
+    meleeSwingLandsAhead: 0
+    meleeHitRadius: 0.75
+    meleeWindUp: 0.35
+    meleeSwingDuration: 0.3
+    meleeMinCooldown: 0.5
+    meleeMaxCooldown: 1
+    meleeHits: 1
+    meleePushForce: 0
+    meleeBreaksTiles: 0
+    meleeTileDamage: 0
+    projectileItemId: 
+    rangedDamage: 0
+    rangedMinDistance: 2
+    rangedMaxDistance: 10
+    rangedWindUp: 0.4
+    rangedMinCooldown: 1
+    rangedMaxCooldown: 2
+    projectilesPerShot: 1
+    spreadAngle: 0
+    timeBetweenShots: 0
+    immuneToPushBack: 0
+    immuneToRangedDamage: 0
+    leavesBehind:
+      objectId: 
+      variation: 0
+      chance: 1
+      minimumAmount: 1
+      maximumAmount: 1
+      offset: {x: 0, y: 0, z: 0}
+      crowdLimit: 0
+      crowdRadius: 8
+      onlyWhenActuallyKilled: 1
+    gravityWellChance: 0
+    gravityWellStrength: 1
+    gravityWellRange: 10
+    gravityWellAttractsLayers: 0
+    gravityWellMaxTurn: 45
+    moreCombat:
+      sweepsARay: 0
+      rayLength: 8
+      rayThickness: 1
+      raySpinSpeed: 45
+      rayStartsAtARandomAngle: 1
+      rayDoesNotTurn: 0
+      rayStartsOutAt: 0
+      rayGrowSeconds: 0.5
+      rayShrinkSeconds: 0.5
+      rayWindUpSeconds: 1
+      raySweepSeconds: 3
+      rayRecoverySeconds: 1
+      rayTotalSeconds: 5
+      rayDamage: 0
+      rayMultiplier: 1
+      rayIsRanged: 1
+      rayIsMagic: 0
+      hurtsOnTouch: 0
+      touchRadius: 0.5
+      touchShove: 0
+      touchCooldown: 1
+      touchIgnoresArmour: 0
+      touchAnimation: attack
+      holdsAShield: 0
+      shieldWidthDegrees: 90
+      shieldStartsUp: 0
+      placesObjects: 0
+      placesObjectId: 
+      placeSeconds: 1
+      minPlaceCooldown: 3
+      maxPlaceCooldown: 6
+      atMostPlaced: 0
+      placesOnlyInCombat: 1
+      placesOnAnyGround: 1
+      placesOnTilesetId: 
+      placesOnTileKind: 46
+      orbitsItsOwner: 0
+      orbitRadius: 2
+      orbitSpeed: 2
+    smashesObjects:
+      smashesWhatIsInItsWay: 0
+      givesUpAfterSwings: 5
+      windUp: 0.4
+      swingSeconds: 0.3
+      reach: 1
+      radius: 1
+      flatObjectDamage: 0
+      hitsObjectsThisHardForItsTier: 1
+      flatCreatureDamage: 0
+      hitsCreaturesThisHardForItsTier: 1
+      smashesEvenWhileChasing: 0
+    segmented:
+      isSegmented: 0
+      startingLength: 5
+      tailObjectId: 
+      spacing: 1
+      extraSidewaysSpacing: 1.6
+      segmentsAreHitSeparately: 0
+      turnSeconds: 3
+      weaveWidth: 0
+      weaveSeconds: 0
+      movesChaotically: 0
+      slowsNearWalls: 1
+      goesIntoPits: 0
+      playsItsMoveAnimation: 0
+      movedByPhysics: 1
+      bunchesLikeACaterpillar: 0
+      stretchOutStrength: 0.8
+      pullBackStrength: 0.8
+      bunchSpeed: 10
+      bunchSpread: 2.5
+      picksTarget: 0
+      noticesPlayersWithin: 15
+      switchesTargetWithin: 5
+      minTargetCooldown: 0
+      maxTargetCooldown: 0
+      straysFromTheFightBy: 30
+      dealsNoDamage: 0
+      flatDamage: 0
+      hitsThisHardForItsTier: 1
+      hitRadius: 1
+      hitOffset: {x: 0, y: 0, z: 0}
+      shoveForce: 10
+      tooCloseToAttack: 1
+      neverHits: 
+      whatItSmashesDropsNothing: 0
+      leavesBehind: 0
+      trailWidthMultiplier: 1
+    patrol:
+      walksARoute: 0
+      shape: 0
+      reachesOut: 50
+      turningPoints: 10
+      smoothness: 10
+      gapBetweenPoints: {x: 0, y: 0}
+      routeLengthMultiplier: 1
+      weave: 0
+      distanceVariation: 0
+      cornerRoundness: 0.5
+      turnVariation: 50
+      pointsBetweenTurns: 5
+      staysInBiome: 
+      minAngleToBiomeCentre: -10
+      maxAngleToBiomeCentre: 10
+      followsThePlayerInSubBiomes: 0
+      subBiomeTilesetId: 
+      showTheRouteWhileBuilding: 0
+    habits:
+      noticesAPlayerWithin: 0
+      pausesInCombatBeyond: 0
+      measuresFromItsNest: 0
+      tauntsDuringAFight: 0
+      tauntsImmediatelyChance: 0
+      minBetweenTaunts: 4
+      maxBetweenTaunts: 6
+      taunts: []
+      staysAngryFor: 0
+      guardsItsNest: 0
+      guardsWithin: 10
+      draggingWhatItHurtsIntoTheFight: 0
+      keepsANest: 0
+      flies: 0
+      canClaimABed: 0
+      isLivestock: 0
+      getsFullAt: 0
+      remembersItsMeals: 0
+      takesMoveOrders: 0
+      unlocksAchievement: 
+    lifecycle:
+      facesOnEntrance: {x: 0, y: 0}
+      clearsTilesOffsetBy: {x: 0, y: 0}
+      deathTakesEvenTheUnkillable: 0
+      makesAnEntrance: 0
+      entranceSeconds: 1
+      entranceAnimation: 
+      clearsTheGroundAsItArrives: 0
+      clearedRadius: 2
+      idleEmotes: []
+      minimumIdleGap: 1
+      maximumIdleGap: 3
+      healthScalesWithPlayers: 0
+      followsALure: 0
+      somethingElseCanControlIt: 0
+      despawnsWhenNobodyIsWithin: 0
+      despawnDelaySeconds: 5
+      deathClearsThingsNearby: 0
+      deathClearRadius: 10
+      itsSummonsGoWithIt: 1
+    basics:
+      areaTier: 0
+      facing: 0
+      scalesWithItsTier: 0
+    conditions:
+      startsWith: []
+      aurasDoNotReachIt: 0
+      theEnvironmentDoesNotAffectIt: 0
+      healingDoesNotTouchIt: 0
+      hideStatsOnTheTooltip: 0
+    arrivesWith: []
+    companyFollows: 1
+    companyAppearsAt: {x: 0, y: 0, z: 0}
+    attackSounds:
+      attackSound: 
+      impactSound: 
+      windUpSound: 
+      windUpCancelledSound: 
+      strongAttackSound: 
+    pursuit:
+      keepsAtLeastThisFarAway: 0
+      andAtMostThisFarAway: 0
+      startsSideSteppingWithin: 0
+      neverGivesUp: 0
+      chasesWhatItCannotSee: 0
+      lowObstaclesDoNotStopIt: 0
+      needsAPathToChase: 0
+      prefersPathfinding: 0
+      looksAheadToAvoidObstacles: 0
+      startsSwitchedOff: 0
+      pauseBeforeChasing: 0
+      keepsGoingAfterLosingIt: 0
+      idlesMidChaseFor: 0
+      betweenMidChaseIdles: 0
+      keepsQuietAboutItsDistance: 0
+    rangedShape:
+      howLongItKeepsShooting: 0
+      shootsAtWhatItCannotSee: 0
+      onlyShootsThingsItWantsToAttack: 0
+      startsSwitchedOff: 0
+      spreadStartsAtDegrees: 0
+      speedChangesWithDistance: 0
+      speedFromNearToFar: {x: 1, y: 1}
+      nearAndFarDistance: {x: 0, y: 0}
+      animationName: 
+      animationPerShot: 
+      shotsHitThisHardForItsTier: 1
+      projectileSpeedMultiplier: 1
+      muzzleDistance: 0
+      muzzleDistanceVariation: 0
+      muzzleOffset: {x: 0, y: 0, z: 0}
+      firesAtAnyAngle: 0
+      aimConeDegrees: 0
+      keepsAimingWhileShooting: 0
+      locksAimDuringTheWindUp: 0
+      startsLeadingTargetsAt: 0
+      stopsLeadingTargetsAt: 0
+      shotPattern: 0
+      widestSpreadDegrees: 0
+      eachShotPicksItsOwnTarget: 0
+      projectileVariation: 0
+      shotsFollowTheirTarget: 0
+      firesAtItself: 0
+      healsItsOwnSideBy: 0
+      alsoHurtsThingsTouchingIt: 0
+      onlyShootsWhenInCombat: 0
+      takingAHitInterruptsIt: 0
+      recoveryAfterShooting: 0
+    meleeShape:
+      hitsThisHardForItsTier: 1
+      breaksTerrainThisHardForItsTier: 1
+      damageLandsAfter: 0.05
+      lungeForce: 0
+      alwaysLungesAtFullForce: 0
+      cannotTurnDuringTheHit: 1
+      cannotTurnDuringTheWindUp: 0
+      onlySwingsInFourDirections: 0
+      swingsAtWhatItCannotSee: 0
+      onlyHitsEnemiesAndPlayers: 0
+      givesUpOnAPlayerAfter: 0
+      hitsLowObstacles: 0
+      ignoresTheDamageCap: 0
+      hitboxHalfLength: 0
+      hitboxHalfWidth: 0
+      hitboxOffset: {x: 0, y: 0, z: 0}
+      spawnsOnBrokenTilesId: 
+    abilities: []
+  visual:
+    prefabId: 
+    spriteId: 
+    iconId: 
+    materialId: 
+    animationSetId: 
+    variantId: 
+    notes: 
+  audio:
+    spawnSoundId: 
+    idleSoundId: 
+    aggroSoundId: 
+    hitSoundId: 
+    deathSoundId: 
+    musicCueId: 
+    notes: 
+  simpleTraits:
+    canBeHitWithAWeaponNotJustATool: 0
+    hittingItDoesNotCountAsAHit: 0
+    immuneGroundDoesNotProtectIt: 0
+    itsMapMarkerGoesWhenItDies: 0
+    doesNotBlockDigging: 0
+    hasNoPhysics: 0
+    movesSmoothly: 0
+    hasNoPositionOfItsOwn: 0
+    disappearsIfItsSpotStopsBeingValid: 0
+    aTriggerFlipsItsLook: 0
+    droppedCopiesMergeTogether: 0
+    isPartOfAHandmadeRoom: 0
+    isATrashCan: 0
+    isASprinkler: 0
+    isBaitOnAPole: 0
+    isACherryTree: 0
+    isAShoalOfFish: 0
+    canLiveInATank: 0
+    isAGrowingPlant: 0
+    isATrailSomethingLeftBehind: 0
+    canBeBred: 0
+    followsPheromoneTrails: 0
+    isAPetsHome: 0
+    carriesAPetsLook: 0
+    isAMinion: 0
+    keepsSouls: 0
+    canPlayInstruments: 0
+    wearsEquipment: 0
+    remembersWhoItFights: 0
+    countsTowardsAchievements: 0
+    canCarryAffixes: 0
+    legendariesIgnoreSlotRulesHere: 0
+    theTriggersPushBackWhenUsed: 0
+    eachPlayerGetsItsOwnBiomeSamples: 0
+    eachPlayerGetsItsOwnSliceOfTheMap: 0
+    smoothsItselfOnceItHasSpawned: 0
+    getsACharacterIdOfItsOwn: 0
+    getsAPlayerIdOfItsOwn: 0
+    isAFloatingDamageNumber: 0
+    showItOnTheDebugMap: 0
+    drawnAsACircle: 1
+    debugMapColour: {r: 1, g: 0, b: 0, a: 1}
+    debugMapRadius: 2
+    debugMapShowsItsName: 0
+    debugMapShowsItWhileSwitchedOff: 0
+    debugMapSwitchedOffColour: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  lootTable: {fileID: 0}
+  activation: 1
+  phases: []
+  respawnCooldownMinutes: 0
+  enabled: 1
+  notes: 

@@ -7,6 +7,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.NetCode;
 using UnityEngine;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Networking
 {
@@ -148,12 +149,12 @@ namespace ExpandNullforge.Networking
       entityManager.SetComponentData(entity, new DimensionTravelRequestRpc
       {
         RequestId = requestId,
-        TargetDimensionId = ToFixed64(targetDimensionId),
+        TargetDimensionId = DimensionFixedStrings.ToFixed64(targetDimensionId),
         TargetLocalX = targetLocalPosition.x,
         TargetLocalY = targetLocalPosition.y,
         RequireGeneratedArea = requireGeneratedArea ? (byte)1 : (byte)0,
         AllowFallbackPosition = allowFallbackPosition ? (byte)1 : (byte)0,
-        Reason = ToFixed128(reason)
+        Reason = DimensionFixedStrings.ToFixed128(reason)
       });
 
       RememberPending(
@@ -190,8 +191,8 @@ namespace ExpandNullforge.Networking
       entityManager.SetComponentData(entity, new DimensionTravelCancelRequestRpc
       {
         RequestId = requestId,
-        TravelId = ToFixed64(travelId),
-        Reason = ToFixed128(reason)
+        TravelId = DimensionFixedStrings.ToFixed64(travelId),
+        Reason = DimensionFixedStrings.ToFixed128(reason)
       });
 
       Action<uint> startedHandler = TravelCancelRequestStarted;
@@ -234,7 +235,7 @@ namespace ExpandNullforge.Networking
     {
       if (string.IsNullOrEmpty(portalId))
       {
-        Debug.LogWarning("[ExpandNullforge] Ignored portal travel request with an empty portal id.");
+        DimensionLog.Problem(DimensionLogChannels.Travel, null, "Ignored portal travel request with an empty portal id.");
         return 0;
       }
 
@@ -242,10 +243,10 @@ namespace ExpandNullforge.Networking
       DimensionPortalTravelRequestRpc rpc = new DimensionPortalTravelRequestRpc
       {
         RequestId = requestId,
-        PortalId = ToFixed64(portalId),
+        PortalId = DimensionFixedStrings.ToFixed64(portalId),
         RequireGeneratedArea = requireGeneratedArea ? (byte)1 : (byte)0,
         AllowFallbackPosition = allowFallbackPosition ? (byte)1 : (byte)0,
-        Reason = ToFixed128(reason)
+        Reason = DimensionFixedStrings.ToFixed128(reason)
       };
 
       DimensionTravelNetworkPendingRequest pending =
@@ -299,7 +300,7 @@ namespace ExpandNullforge.Networking
         if (DimensionFrameworkLog.VerboseRuntimeLogging)
         {
           DimensionFrameworkLog.Verbose(
-              "[ExpandNullforge] Dimension travel request acknowledged. requestId=" +
+              "Dimension travel request acknowledged. requestId=" +
               result.RequestId +
               " travelId=" +
               result.TravelId +
@@ -334,7 +335,7 @@ namespace ExpandNullforge.Networking
       if (DimensionFrameworkLog.VerboseRuntimeLogging)
       {
         DimensionFrameworkLog.Verbose(
-            "[ExpandNullforge] Dimension travel request completed. requestId=" +
+            "Dimension travel request completed. requestId=" +
             result.RequestId +
             " accepted=" +
             result.Accepted +
@@ -511,8 +512,8 @@ namespace ExpandNullforge.Networking
                 default(float2)));
       }
 
-      Debug.LogWarning(
-          "[ExpandNullforge] Dimension portal travel request could not be sent. requestId=" +
+      DimensionLog.Problem(DimensionLogChannels.Travel, null, 
+          "Dimension portal travel request could not be sent. requestId=" +
           requestId +
           " code=" +
           code +
@@ -545,46 +546,6 @@ namespace ExpandNullforge.Networking
       }
 
       return nextRequestId;
-    }
-
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = Math.Min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
-
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = Math.Min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
     }
 
     private static bool TryGetClientEntityManager(out EntityManager entityManager)

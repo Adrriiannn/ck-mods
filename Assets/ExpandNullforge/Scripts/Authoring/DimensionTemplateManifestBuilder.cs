@@ -34,22 +34,13 @@ namespace ExpandNullforge.Authoring
             List<DimensionZoneDefinition> zones = new List<DimensionZoneDefinition>();
             List<DimensionSceneTemplateDefinition> sceneTemplates = new List<DimensionSceneTemplateDefinition>();
             List<DimensionSceneDefinition> scenes = new List<DimensionSceneDefinition>();
-            List<DimensionSpawnRule> spawnRules = new List<DimensionSpawnRule>(compiledPlan.SpawnRules);
             List<DimensionGenerationPassDefinition> generationPasses =
                 new List<DimensionGenerationPassDefinition>(compiledPlan.GenerationPasses);
-            List<DimensionGenerationTableDefinition> generationTables =
-                new List<DimensionGenerationTableDefinition>();
-            List<DimensionGenerationTableEntryDefinition> generationTableEntries =
-                new List<DimensionGenerationTableEntryDefinition>();
-            List<DimensionResourceNodeDefinition> resourceNodes =
-                new List<DimensionResourceNodeDefinition>(compiledPlan.ResourceNodes);
             List<DimensionBiomeDefinition> biomes = new List<DimensionBiomeDefinition>();
             List<DimensionAssetReferenceDefinition> assetReferences =
                 new List<DimensionAssetReferenceDefinition>();
             List<DimensionContentOwnershipBinding> ownershipBindings =
                 new List<DimensionContentOwnershipBinding>();
-            List<DimensionEnvironmentProfile> environmentProfiles =
-                new List<DimensionEnvironmentProfile>();
             List<DimensionPortalDefinition> portals = new List<DimensionPortalDefinition>();
             List<DimensionPortalPresentationDefinition> portalPresentations =
                 new List<DimensionPortalPresentationDefinition>();
@@ -86,44 +77,12 @@ namespace ExpandNullforge.Authoring
                 ownershipBindings,
                 ownershipKeys);
 
-            AddEnvironmentProfiles(
-                template,
-                contentPackId,
-                hasContentPack,
-                environmentProfiles,
-                ownershipBindings,
-                ownershipKeys);
             AddBiomeDefinitions(template, contentPackId, hasContentPack, biomes, ownershipBindings, ownershipKeys);
             AddZoneDefinitions(compiledPlan, contentPackId, hasContentPack, zones, ownershipBindings, ownershipKeys);
             AddSceneTemplates(template, dimensionId, contentPackId, hasContentPack, sceneTemplates, ownershipBindings, ownershipKeys);
             AddSceneDefinitions(compiledPlan, contentPackId, hasContentPack, scenes, ownershipBindings, ownershipKeys);
-            AddResourceOwnership(contentPackId, hasContentPack, resourceNodes, ownershipBindings, ownershipKeys);
             AddAuthoredContentOwnership(template, contentPackId, hasContentPack, ownershipBindings, ownershipKeys);
-            AddSpawnOwnership(contentPackId, hasContentPack, spawnRules, ownershipBindings, ownershipKeys);
             AddGenerationPassOwnership(contentPackId, hasContentPack, generationPasses, ownershipBindings, ownershipKeys);
-            AddGenerationTables(
-                template,
-                contentPackId,
-                hasContentPack,
-                generationTables,
-                generationTableEntries,
-                ownershipBindings,
-                ownershipKeys);
-            AddBiomeSemanticObjectTables(
-                template,
-                contentPackId,
-                hasContentPack,
-                generationTables,
-                generationTableEntries,
-                ownershipBindings,
-                ownershipKeys);
-            AddBiomePaletteAssetReferences(
-                template,
-                contentPackId,
-                hasContentPack,
-                assetReferences,
-                ownershipBindings,
-                ownershipKeys);
             AddAuthoredContentAssetReferences(
                 template,
                 contentPackId,
@@ -162,18 +121,13 @@ namespace ExpandNullforge.Authoring
                 travelRequirements,
                 sceneTemplates,
                 scenes,
-                spawnRules,
                 new List<DimensionEncounterDefinition>(),
                 generationPasses,
-                resourceNodes,
                 new List<DimensionProgressFlag>(),
                 new List<DimensionWorldEventDefinition>(),
                 ownershipBindings,
                 assetReferences,
-                environmentProfiles,
-                biomes,
-                generationTables,
-                generationTableEntries);
+                biomes);
             manifest = new DimensionContentManifest(baseManifest, starters);
 
             result = DimensionOperationResult.Ok();
@@ -269,107 +223,6 @@ namespace ExpandNullforge.Authoring
             }
         }
 
-        private static void AddEnvironmentProfiles(
-            DimensionTemplateAsset template,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionEnvironmentProfile> environmentProfiles,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            Dictionary<string, bool> profileIds = new Dictionary<string, bool>();
-            AddEnvironmentProfileAssets(
-                template.EnvironmentProfiles,
-                template.DimensionId,
-                contentPackId,
-                hasContentPack,
-                environmentProfiles,
-                profileIds,
-                ownershipBindings,
-                ownershipKeys);
-
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                AddEnvironmentProfileAssets(
-                    biome.GetEnvironmentProfileTemplatesWithPresets(),
-                    template.DimensionId,
-                    contentPackId,
-                    hasContentPack,
-                    environmentProfiles,
-                    profileIds,
-                    ownershipBindings,
-                    ownershipKeys);
-            }
-        }
-
-        private static void AddEnvironmentProfileAssets(
-            EnvironmentProfileTemplateAsset[] assets,
-            string dimensionId,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionEnvironmentProfile> environmentProfiles,
-            Dictionary<string, bool> profileIds,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            if (assets == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < assets.Length; i++)
-            {
-                AddEnvironmentProfileAsset(
-                    assets[i],
-                    dimensionId,
-                    contentPackId,
-                    hasContentPack,
-                    environmentProfiles,
-                    profileIds,
-                    ownershipBindings,
-                    ownershipKeys);
-            }
-        }
-
-        private static void AddEnvironmentProfileAsset(
-            EnvironmentProfileTemplateAsset asset,
-            string dimensionId,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionEnvironmentProfile> environmentProfiles,
-            Dictionary<string, bool> profileIds,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            if (asset == null || string.IsNullOrEmpty(asset.ProfileId))
-            {
-                return;
-            }
-
-            DimensionEnvironmentProfile profile = asset.ToEnvironmentProfile(dimensionId);
-            if (!AddUnique(profileIds, profile.ProfileId))
-            {
-                return;
-            }
-
-            environmentProfiles.Add(profile);
-            AddOwnership(
-                hasContentPack,
-                contentPackId,
-                DimensionContentRecordKind.EnvironmentProfile,
-                profile.ProfileId,
-                profile.DisplayName,
-                ownershipBindings,
-                ownershipKeys);
-        }
-
         private static void AddZoneDefinitions(
             DimensionCompiledGenerationPlan plan,
             string contentPackId,
@@ -384,7 +237,7 @@ namespace ExpandNullforge.Authoring
             for (int i = 0; i < plan.BiomeRegions.Count; i++)
             {
                 DimensionCompiledBiomeRegion region = plan.BiomeRegions[i];
-                string zoneId = ResolveCompiledZoneId(region);
+                string zoneId = DimensionTemplateCompiler.ResolveCompiledZoneId(region);
                 if (string.IsNullOrEmpty(zoneId))
                 {
                     continue;
@@ -632,7 +485,7 @@ namespace ExpandNullforge.Authoring
                 }
 
                 AddSceneTemplateAssets(
-                    biome.GetScenePoolWithPresets(),
+                    biome.ScenePool,
                     dimensionId,
                     biome.BiomeId,
                     contentPackId,
@@ -720,48 +573,6 @@ namespace ExpandNullforge.Authoring
                     DimensionContentRecordKind.Scene,
                     scene.SceneId,
                     scene.DisplayName,
-                    ownershipBindings,
-                    ownershipKeys);
-            }
-        }
-
-        private static void AddResourceOwnership(
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionResourceNodeDefinition> resourceNodes,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            for (int i = 0; i < resourceNodes.Count; i++)
-            {
-                DimensionResourceNodeDefinition node = resourceNodes[i];
-                AddOwnership(
-                    hasContentPack,
-                    contentPackId,
-                    DimensionContentRecordKind.ResourceNode,
-                    node.NodeId,
-                    node.DisplayName,
-                    ownershipBindings,
-                    ownershipKeys);
-            }
-        }
-
-        private static void AddSpawnOwnership(
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionSpawnRule> spawnRules,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            for (int i = 0; i < spawnRules.Count; i++)
-            {
-                DimensionSpawnRule rule = spawnRules[i];
-                AddOwnership(
-                    hasContentPack,
-                    contentPackId,
-                    DimensionContentRecordKind.SpawnRule,
-                    rule.RuleId,
-                    rule.DisplayName,
                     ownershipBindings,
                     ownershipKeys);
             }
@@ -996,64 +807,7 @@ namespace ExpandNullforge.Authoring
                     continue;
                 }
 
-                AddScenePropOwnership(scene, contentPackId, hasContentPack, ownershipBindings, ownershipKeys);
-                AddSceneLootContainerOwnership(scene, contentPackId, hasContentPack, ownershipBindings, ownershipKeys);
-                AddSceneSpawnPointOwnership(scene, contentPackId, hasContentPack, ownershipBindings, ownershipKeys);
                 AddSceneTriggerOwnership(scene, contentPackId, hasContentPack, ownershipBindings, ownershipKeys);
-            }
-        }
-
-        private static void AddScenePropOwnership(
-            SceneTemplateAsset scene,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            DimensionScenePropTemplate[] props = scene.Props;
-            for (int i = 0; i < props.Length; i++)
-            {
-                DimensionScenePropTemplate prop = props[i];
-                if (prop != null)
-                {
-                    AddOwnership(hasContentPack, contentPackId, DimensionContentRecordKind.SceneProp, BuildSceneContentRecordId(scene.SceneId, "prop", prop.PropId, i), prop.DisplayName, ownershipBindings, ownershipKeys);
-                }
-            }
-        }
-
-        private static void AddSceneLootContainerOwnership(
-            SceneTemplateAsset scene,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            DimensionSceneLootContainerTemplate[] containers = scene.LootContainers;
-            for (int i = 0; i < containers.Length; i++)
-            {
-                DimensionSceneLootContainerTemplate container = containers[i];
-                if (container != null)
-                {
-                    AddOwnership(hasContentPack, contentPackId, DimensionContentRecordKind.SceneLootContainer, BuildSceneContentRecordId(scene.SceneId, "loot", container.ContainerId, i), container.DisplayName, ownershipBindings, ownershipKeys);
-                }
-            }
-        }
-
-        private static void AddSceneSpawnPointOwnership(
-            SceneTemplateAsset scene,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            DimensionSceneSpawnPointTemplate[] spawnPoints = scene.SpawnPoints;
-            for (int i = 0; i < spawnPoints.Length; i++)
-            {
-                DimensionSceneSpawnPointTemplate spawnPoint = spawnPoints[i];
-                if (spawnPoint != null)
-                {
-                    AddOwnership(hasContentPack, contentPackId, DimensionContentRecordKind.SceneSpawnPoint, BuildSceneContentRecordId(scene.SceneId, "spawn", spawnPoint.SpawnPointId, i), spawnPoint.DisplayName, ownershipBindings, ownershipKeys);
-                }
             }
         }
 
@@ -1093,172 +847,6 @@ namespace ExpandNullforge.Authoring
                     generationPass.DisplayName,
                     ownershipBindings,
                     ownershipKeys);
-            }
-        }
-
-        private static void AddGenerationTables(
-            DimensionTemplateAsset template,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionGenerationTableDefinition> generationTables,
-            List<DimensionGenerationTableEntryDefinition> generationTableEntries,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            Dictionary<string, bool> tableIds = new Dictionary<string, bool>();
-            Dictionary<string, bool> entryIds = new Dictionary<string, bool>();
-            AddGenerationTableAssets(
-                template.GlobalGenerationTables,
-                template.DimensionId,
-                string.Empty,
-                contentPackId,
-                hasContentPack,
-                generationTables,
-                generationTableEntries,
-                tableIds,
-                entryIds,
-                ownershipBindings,
-                ownershipKeys);
-
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                AddGenerationTableAssets(
-                    biome.GetGenerationTablesWithProfile(),
-                    template.DimensionId,
-                    biome.BiomeId,
-                    contentPackId,
-                    hasContentPack,
-                    generationTables,
-                    generationTableEntries,
-                    tableIds,
-                    entryIds,
-                    ownershipBindings,
-                    ownershipKeys);
-            }
-        }
-
-        private static void AddBiomeSemanticObjectTables(
-            DimensionTemplateAsset template,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionGenerationTableDefinition> generationTables,
-            List<DimensionGenerationTableEntryDefinition> generationTableEntries,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            Dictionary<string, bool> tableIds = new Dictionary<string, bool>();
-            Dictionary<string, bool> entryIds = new Dictionary<string, bool>();
-            DimensionSemanticObjectTableBuilder.AddExistingGenerationTableIds(generationTables, tableIds);
-            DimensionSemanticObjectTableBuilder.AddExistingGenerationTableEntryIds(generationTableEntries, entryIds);
-
-            BiomeTemplateAsset[] biomes = template.Biomes;
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomes[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                int firstNewTable = generationTables.Count;
-                int firstNewEntry = generationTableEntries.Count;
-                DimensionSemanticObjectTableBuilder.AddBiomeSemanticObjectTables(
-                    biome,
-                    template.DimensionId,
-                    generationTables,
-                    generationTableEntries,
-                    tableIds,
-                    entryIds);
-
-                for (int tableIndex = firstNewTable; tableIndex < generationTables.Count; tableIndex++)
-                {
-                    DimensionGenerationTableDefinition table = generationTables[tableIndex];
-                    AddOwnership(
-                        hasContentPack,
-                        contentPackId,
-                        DimensionContentRecordKind.GenerationTable,
-                        table.TableId,
-                        table.DisplayName,
-                        ownershipBindings,
-                        ownershipKeys);
-                }
-
-                for (int entryIndex = firstNewEntry; entryIndex < generationTableEntries.Count; entryIndex++)
-                {
-                    DimensionGenerationTableEntryDefinition entry = generationTableEntries[entryIndex];
-                    AddOwnership(
-                        hasContentPack,
-                        contentPackId,
-                        DimensionContentRecordKind.GenerationTableEntry,
-                        entry.EntryId,
-                        entry.SubjectId,
-                        ownershipBindings,
-                        ownershipKeys);
-                }
-            }
-        }
-
-        private static void AddBiomePaletteAssetReferences(
-            DimensionTemplateAsset template,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionAssetReferenceDefinition> assetReferences,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            if (!hasContentPack)
-            {
-                return;
-            }
-
-            Dictionary<string, bool> assetReferenceIds = new Dictionary<string, bool>();
-            BiomeTemplateAsset[] biomeAssets = template.Biomes;
-            for (int i = 0; i < biomeAssets.Length; i++)
-            {
-                BiomeTemplateAsset biome = biomeAssets[i];
-                if (biome == null)
-                {
-                    continue;
-                }
-
-                BiomePaletteTemplateAsset[] palettes = biome.GetPaletteTemplatesWithPresets();
-                for (int paletteIndex = 0; paletteIndex < palettes.Length; paletteIndex++)
-                {
-                    BiomePaletteTemplateAsset palette = palettes[paletteIndex];
-                    if (palette == null || !palette.Enabled)
-                    {
-                        continue;
-                    }
-
-                    List<DimensionAssetReferenceDefinition> paletteReferences =
-                        new List<DimensionAssetReferenceDefinition>();
-                    palette.AddAssetReferencesTo(contentPackId, template.DimensionId, paletteReferences);
-                    for (int referenceIndex = 0; referenceIndex < paletteReferences.Count; referenceIndex++)
-                    {
-                        DimensionAssetReferenceDefinition reference = paletteReferences[referenceIndex];
-                        if (!AddUnique(assetReferenceIds, reference.AssetId))
-                        {
-                            continue;
-                        }
-
-                        assetReferences.Add(reference);
-                        AddOwnership(
-                            hasContentPack,
-                            contentPackId,
-                            DimensionContentRecordKind.AssetReference,
-                            reference.AssetId,
-                            reference.DisplayName,
-                            ownershipBindings,
-                            ownershipKeys);
-                    }
-                }
             }
         }
 
@@ -1495,75 +1083,6 @@ namespace ExpandNullforge.Authoring
             }
         }
 
-        private static void AddGenerationTableAssets(
-            GenerationTableTemplateAsset[] assets,
-            string dimensionId,
-            string fallbackBiomeId,
-            string contentPackId,
-            bool hasContentPack,
-            List<DimensionGenerationTableDefinition> generationTables,
-            List<DimensionGenerationTableEntryDefinition> generationTableEntries,
-            Dictionary<string, bool> tableIds,
-            Dictionary<string, bool> entryIds,
-            List<DimensionContentOwnershipBinding> ownershipBindings,
-            Dictionary<string, bool> ownershipKeys)
-        {
-            if (assets == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < assets.Length; i++)
-            {
-                GenerationTableTemplateAsset asset = assets[i];
-                if (asset == null || !asset.Enabled)
-                {
-                    continue;
-                }
-
-                string scopeId = string.IsNullOrEmpty(fallbackBiomeId) ? string.Empty : fallbackBiomeId;
-                string tableId = BuildScopedId(dimensionId, scopeId, asset.TableId);
-                DimensionGenerationTableDefinition table =
-                    asset.ToTableDefinition(tableId, dimensionId, fallbackBiomeId);
-                if (!AddUnique(tableIds, table.TableId))
-                {
-                    continue;
-                }
-
-                generationTables.Add(table);
-                AddOwnership(
-                    hasContentPack,
-                    contentPackId,
-                    DimensionContentRecordKind.GenerationTable,
-                    table.TableId,
-                    table.DisplayName,
-                    ownershipBindings,
-                    ownershipKeys);
-
-                List<DimensionGenerationTableEntryDefinition> entries =
-                    new List<DimensionGenerationTableEntryDefinition>();
-                asset.AddEntryDefinitions(table.TableId, entries);
-                for (int entryIndex = 0; entryIndex < entries.Count; entryIndex++)
-                {
-                    DimensionGenerationTableEntryDefinition entry = entries[entryIndex];
-                    if (!AddUnique(entryIds, entry.EntryId))
-                    {
-                        continue;
-                    }
-
-                    generationTableEntries.Add(entry);
-                    AddOwnership(
-                        hasContentPack,
-                        contentPackId,
-                        DimensionContentRecordKind.GenerationTableEntry,
-                        entry.EntryId,
-                        entry.SubjectId,
-                        ownershipBindings,
-                        ownershipKeys);
-                }
-            }
-        }
-
         private static void AddPortalAccessRules(
             DimensionTemplateAsset template,
             string contentPackId,
@@ -1689,47 +1208,6 @@ namespace ExpandNullforge.Authoring
             return true;
         }
 
-        private static string ResolveCompiledZoneId(DimensionCompiledBiomeRegion region)
-        {
-            if (!string.IsNullOrEmpty(region.ZoneId))
-            {
-                return region.ZoneId;
-            }
-
-            if (!string.IsNullOrEmpty(region.SourceTemplateId))
-            {
-                return region.DimensionId + "." + region.SourceTemplateId;
-            }
-
-            return region.DimensionId + "." + region.BiomeId;
-        }
-
-        private static string BuildScopedId(string dimensionId, string zoneId, string id)
-        {
-            string resolvedId = id ?? string.Empty;
-            if (string.IsNullOrEmpty(resolvedId))
-            {
-                return string.Empty;
-            }
-
-            if (resolvedId.IndexOf('.') >= 0 || resolvedId.IndexOf(':') >= 0)
-            {
-                return resolvedId;
-            }
-
-            if (!string.IsNullOrEmpty(zoneId))
-            {
-                if (zoneId.StartsWith(dimensionId + "."))
-                {
-                    return zoneId + "." + resolvedId;
-                }
-
-                return dimensionId + "." + zoneId + "." + resolvedId;
-            }
-
-            return dimensionId + "." + resolvedId;
-        }
-
         private static string BuildSceneContentRecordId(
             string sceneId,
             string contentKind,
@@ -1766,18 +1244,13 @@ namespace ExpandNullforge.Authoring
                 new List<DimensionTravelRequirementDefinition>(),
                 new List<DimensionSceneTemplateDefinition>(),
                 new List<DimensionSceneDefinition>(),
-                new List<DimensionSpawnRule>(),
                 new List<DimensionEncounterDefinition>(),
                 new List<DimensionGenerationPassDefinition>(),
-                new List<DimensionResourceNodeDefinition>(),
                 new List<DimensionProgressFlag>(),
                 new List<DimensionWorldEventDefinition>(),
                 new List<DimensionContentOwnershipBinding>(),
                 new List<DimensionAssetReferenceDefinition>(),
-                new List<DimensionEnvironmentProfile>(),
-                new List<DimensionBiomeDefinition>(),
-                new List<DimensionGenerationTableDefinition>(),
-                new List<DimensionGenerationTableEntryDefinition>());
+                new List<DimensionBiomeDefinition>());
         }
 
         private struct ZoneAggregate

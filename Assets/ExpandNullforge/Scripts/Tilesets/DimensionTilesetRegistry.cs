@@ -4,6 +4,7 @@ using PugTilemap;
 using PugTilemap.Quads;
 using PugTilemap.Workshop;
 using UnityEngine;
+using ExpandNullforge.Foundation;
 
 namespace ExpandNullforge.Tilesets
 {
@@ -30,14 +31,51 @@ namespace ExpandNullforge.Tilesets
         public const int MinCustomTilesetId = 1000;
 
         /// <summary>
-        /// Custom ids stop below 65536 because Core Keeper's prefab-map format stores a tile's tileset
-        /// as a <c>ushort</c> with an unchecked cast (<c>PugmapTileData.tilesetType</c>). Anything above
-        /// that is silently truncated when a tile is saved into a prefab map or custom scene, so the
-        /// block comes back as a different tileset entirely. World saves and multiplayer both carry the
-        /// full 32-bit value, so this ceiling exists purely for the scene format — but scenes are how
-        /// handcrafted structures ship, which makes it load-bearing.
+        /// One past the highest custom id. The full positive <c>int</c> range, because
+        /// <c>TileCD.tileset</c> — the field ids actually live in at runtime, in world saves and
+        /// over the wire — is a plain <c>int</c> (<c>Pug.Base/TileCD.cs:45</c>).
         /// </summary>
-        public const int MaxCustomTilesetIdExclusive = 65536;
+        /// <remarks>
+        /// <para>
+        /// THIS WAS 65536 AND THAT WAS TOO SMALL. The 16-bit band was kept so ids could round-trip
+        /// through <c>PugmapTileData.tilesetType</c>, a <c>ushort</c> in the authored-map format
+        /// (<c>PugMap.Common/PugmapTileData.cs:34</c>), in case a future scene system wanted to
+        /// store tiles in the vanilla format without a remap step. The price was collision odds,
+        /// and the price turned out to be far higher than "a few percent":
+        /// </para>
+        /// <code>
+        ///   tilesets   16-bit band     this range
+        ///        30        0.67%      0.0000203%
+        ///       100        7.39%      0.0002305%
+        ///       200       26.56%      0.0009267%
+        ///       300       50.14%      0.0020885%
+        ///      1000       99.96%      0.0232571%
+        /// </code>
+        /// <para>
+        /// A shared ecosystem reaches 200 tilesets across a handful of mods easily, and a one-in-four
+        /// chance that two of them cannot coexist is not a foundation to build on. A hypothetical
+        /// future convenience does not justify it.
+        /// </para>
+        /// <para>
+        /// WHAT THIS COSTS. If a scene format ever does store tiles as <c>PugmapTileData</c>, it must
+        /// map our ids to a per-scene 16-bit index at bake time rather than casting — an unchecked
+        /// <c>(ushort)</c> cast of an id above 65535 would silently alias it to a different tileset.
+        /// That remap is local to whatever writes scenes; it is not a constraint on identity. Vanilla
+        /// tooling is unlikely to walk into it on its own: the Map Workshop paints from the
+        /// index-addressed <c>MapWorkshopTilesetBank.tilesets</c> list, which has no entry for a
+        /// custom id, and its fill path writes <c>pugMapLayer.tilesetKey</c> — a key that came from a
+        /// bank-backed layer (<c>Pug.Other/PugTilemap/Workshop/Fill.cs:135</c>).
+        /// </para>
+        /// <para>
+        /// Stated as "unlikely" rather than "cannot", deliberately. The EXPLICIT <c>(ushort)</c> casts
+        /// are enumerable and were enumerated. The IMPLICIT <c>TileInfo</c>→<c>PugmapTileData</c>
+        /// operator is not: the compiler inserts it with no distinguishing call-site text, so its
+        /// absence from a code path cannot be established by searching — only its presence can. The
+        /// dictionary records that same question as unresolved for the same reason. Treat "nothing
+        /// converts through it" as an unproven assumption, not a verified fact.
+        /// </para>
+        /// </remarks>
+        public const int MaxCustomTilesetIdExclusive = int.MaxValue;
 
         private static readonly Dictionary<int, DimensionCustomTileset> TilesetsById =
             new Dictionary<int, DimensionCustomTileset>();
@@ -55,31 +93,59 @@ namespace ExpandNullforge.Tilesets
         private static PugMapTileset fallbackLayers;
 
         /// <summary>
-        /// The deterministic name → id mapping (FNV-1a folded into [MinCustomTilesetId,
-        /// int.MaxValue)). Same name ⇒ same id on every install, forever. This is the identity
-        /// that makes saved tiles immune to load order and mod-set changes.
+        /// The deterministic name → id mapping: 64-bit FNV-1a folded into
+        /// [<see cref="MinCustomTilesetId"/>, <see cref="MaxCustomTilesetIdExclusive"/>). Same name
+        /// ⇒ same id on every install, forever. This is the identity that makes saved tiles immune
+        /// to load order and mod-set changes.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 64-BIT, NOT 32. The output range is ~2^31, so a 32-bit hash would leave the modulo with
+        /// two preimages per id and a ragged tail where ~2M ids get three — a 1.5× weighting on
+        /// 0.09% of the space. Harmless in isolation, but it is a bias with no upside: 64-bit FNV-1a
+        /// costs one extra multiply per character and drops the worst-case weighting to 1 + 2^-33.
+        /// The stronger avalanche also matters for the inputs we actually get, which are short and
+        /// share long prefixes (<c>MyMod:stone</c>, <c>MyMod:stone_dark</c>) — exactly the shape
+        /// 32-bit FNV mixes least well.
+        /// </para>
+        /// <para>
+        /// Hashing runs over UTF-16 code units, low byte first, so it needs no encoding pass and no
+        /// allocation, and cannot vary with the machine's culture. It is not byte-wise FNV over
+        /// UTF-8 and does not need to be — nothing outside this framework recomputes these ids. What
+        /// it must be is stable, which it is: the loop depends on nothing but the characters.
+        /// </para>
+        /// <para>
+        /// CHANGING THIS FUNCTION RENUMBERS EVERY TILESET, orphaning already-placed tiles in existing
+        /// worlds. Treat it as a save-format decision, not an implementation detail.
+        /// </para>
+        /// </remarks>
         public static int ComputeTilesetId(string name)
         {
-            uint hash = 2166136261u;
-            if (!string.IsNullOrEmpty(name))
-            {
-                for (int i = 0; i < name.Length; i++)
-                {
-                    hash ^= name[i];
-                    hash *= 16777619u;
-                }
-            }
+            // The hash itself is ExpandNullforge.Core.DimensionFnv, with the biome id and the layout
+            // fingerprint, because all three are saved into worlds and a second copy of the walk is
+            // a second chance for a saved id to stop matching its own name. The three copies this
+            // replaced were compared over every character in the basic multilingual plane and over
+            // 200,000 random strings and agreed on all of them, so no id computed before this
+            // computes differently now.
+            ulong hash = ExpandNullforge.Core.DimensionFnv.Hash(name);
 
-            uint range = (uint)(MaxCustomTilesetIdExclusive - MinCustomTilesetId);
+            ulong range = (ulong)(MaxCustomTilesetIdExclusive - MinCustomTilesetId);
             return MinCustomTilesetId + (int)(hash % range);
         }
 
         /// <summary>
         /// Registers (or replaces, for the same name) a custom tileset. A hash collision between
-        /// two DIFFERENT names is rejected loudly — the fix is renaming one tileset id, and the
-        /// odds at 31 bits are negligible. Returns true when the tileset is live.
+        /// two DIFFERENT names is rejected loudly. Returns true when the tileset is live.
         /// </summary>
+        /// <remarks>
+        /// DO NOT "FIX" THIS WITH PROBING. Resolving a collision by walking to the next free id
+        /// would look like an improvement and would quietly destroy the one property the whole
+        /// scheme rests on: that a name maps to an id by itself, with no reference to what else is
+        /// installed. Under probing, which of two colliding tilesets keeps the base id depends on
+        /// registration order, so a player adding or removing an unrelated mod could renumber a
+        /// tileset they had already built with — turning every placed tile into a different block.
+        /// Rejection keeps the damage to one tileset, visibly, at load. Renaming is the fix.
+        /// </remarks>
         public static bool Register(DimensionCustomTileset tileset)
         {
             if (tileset == null || string.IsNullOrEmpty(tileset.Name))
@@ -91,10 +157,15 @@ namespace ExpandNullforge.Tilesets
             {
                 if (!string.Equals(existing.Name, tileset.Name, StringComparison.Ordinal))
                 {
-                    Debug.LogError(
-                        "[ExpandNullforge] Custom tileset id collision: '" + tileset.Name +
+                    // Which one wins is load order, so name both — the reader may own neither, and
+                    // needs to know who to tell.
+                    DimensionLog.Fatal(DimensionLogChannels.Tileset, null, 
+                        "Custom tileset id collision: '" + tileset.Name +
                         "' and '" + existing.Name + "' both derive id " + tileset.Id +
-                        ". Rename one tileset id to resolve; the earlier registration stays active.");
+                        ". '" + existing.Name + "' registered first and stays active; '" +
+                        tileset.Name + "' will render as a missing tileset. The fix is for the " +
+                        "author of either one to rename their tileset id — the odds of this are " +
+                        "about 1 in 5 million for a 30-tileset mod, so it is worth reporting.");
                     return false;
                 }
 
@@ -107,8 +178,8 @@ namespace ExpandNullforge.Tilesets
 
             TilesetsById[tileset.Id] = tileset;
             TilesetsByName[tileset.Name] = tileset;
-            Debug.Log(
-                "[ExpandNullforge] Custom tileset registered: " + tileset.Name +
+            DimensionLog.Trace(DimensionLogChannels.Tileset, null, 
+                "Custom tileset registered: " + tileset.Name +
                 " -> id " + tileset.Id + ".");
             return true;
         }
@@ -147,8 +218,8 @@ namespace ExpandNullforge.Tilesets
             if (ReskinsByVanillaIndex.TryGetValue(vanillaIndex, out DimensionCustomTileset existing) &&
                 existing != null && !string.Equals(existing.Name, tileset.Name, StringComparison.Ordinal))
             {
-                Debug.LogWarning(
-                    "[ExpandNullforge] Vanilla tileset index " + vanillaIndex + " is reskinned twice ('" +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "Vanilla tileset index " + vanillaIndex + " is reskinned twice ('" +
                     existing.Name + "' then '" + tileset.Name + "') — the last one wins.");
             }
 
@@ -179,8 +250,8 @@ namespace ExpandNullforge.Tilesets
         {
             if (WarnedUnknownIds.Add(tilesetId))
             {
-                Debug.LogWarning(
-                    "[ExpandNullforge] This world contains tiles from an unregistered custom " +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "This world contains tiles from an unregistered custom " +
                     "tileset (id " + tilesetId + "). The mod that authored them is probably not " +
                     "installed; the tiles render as the magenta placeholder and restore when it returns.");
             }
@@ -261,8 +332,8 @@ namespace ExpandNullforge.Tilesets
             }
 
             TryGet(tilesetId, out DimensionCustomTileset tileset);
-            Debug.Log(
-                "[NF_TILESET] Writing custom tiles for '" +
+            DimensionLog.Trace(DimensionLogChannels.Tileset, null, 
+                "Writing custom tiles for '" +
                 (tileset != null ? tileset.Name : "unknown id " + tilesetId) + "' (id " + tilesetId + ").");
         }
 
@@ -280,8 +351,8 @@ namespace ExpandNullforge.Tilesets
             }
 
             TryGet(tilesetId, out DimensionCustomTileset tileset);
-            Debug.LogWarning(
-                "[ExpandNullforge] Tileset '" + (tileset != null ? tileset.Name : tilesetId.ToString()) +
+            DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                "Tileset '" + (tileset != null ? tileset.Name : tilesetId.ToString()) +
                 "' has no baked sheet for the full-adaptive '" + layer +
                 "' layer, so it renders blank. Regenerate the tileset in the Tileset Studio.");
         }

@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.NetCode;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Networking
 {
@@ -175,11 +176,11 @@ namespace ExpandNullforge.Networking
         RequestId = requestId,
         Accepted = success ? (byte)1 : (byte)0,
         Final = 1,
-        Code = ToFixed64(ToCode(snapshot.State)),
-        Message = ToFixed128(snapshot.Message),
-        TravelId = ToFixed64(snapshot.TravelId),
-        LoadTicketId = ToFixed64(snapshot.LoadTicketId),
-        TargetDimensionId = ToFixed64(snapshot.TargetDimensionId),
+        Code = DimensionFixedStrings.ToFixed64(ToCode(snapshot.State)),
+        Message = DimensionFixedStrings.ToFixed128(snapshot.Message),
+        TravelId = DimensionFixedStrings.ToFixed64(snapshot.TravelId),
+        LoadTicketId = DimensionFixedStrings.ToFixed64(snapshot.LoadTicketId),
+        TargetDimensionId = DimensionFixedStrings.ToFixed64(snapshot.TargetDimensionId),
         TargetLocalX = snapshot.TargetLocalPosition.x,
         TargetLocalY = snapshot.TargetLocalPosition.y,
         TargetAbsoluteX = snapshot.TargetAbsolutePosition.x,
@@ -210,46 +211,6 @@ namespace ExpandNullforge.Networking
           state == DimensionTravelState.Completed ||
           state == DimensionTravelState.Failed ||
           state == DimensionTravelState.Cancelled;
-    }
-
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
-
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
     }
 
     private readonly struct PendingTravelReply

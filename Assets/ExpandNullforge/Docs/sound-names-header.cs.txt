@@ -1,0 +1,124 @@
+// GENERATED FILE — do not hand-edit.
+//
+// Produced by Docs/harvest-sound-names.sh. The names come from two places that together cover
+// everything the game can address: the sound element assets it ships (their file names ARE the
+// names the hash is made from) and the game's own SfxTableID class, whose fields each hash one
+// string literal. Re-run the script after a Core Keeper update.
+using System.Collections.Generic;
+
+namespace ExpandNullforge.Authoring
+{
+    /// <summary>
+    /// Every sound Core Keeper can play by name, and the way a name becomes the number it stores.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE GAME STORES A SOUND AS A NUMBER, and the number is nothing but a hash of the sound's
+    /// name — Unity's own <c>Animator.StringToHash</c>. Nothing on disk records the name, which is
+    /// why sounds could not be authored in words until this table put the names back.
+    /// </para>
+    /// <para>
+    /// AN UNKNOWN NAME STILL HASHES. A mod that ships sound elements of its own names them
+    /// whatever it likes, and the same hash reaches them at runtime. So resolving does not refuse
+    /// unknown names — it hashes them and lets the caller decide whether to warn.
+    /// </para>
+    /// </remarks>
+    public static class DimensionSoundNames
+    {
+        /// <summary>The number the game will store for a sound of this name.</summary>
+        public static int Hash(string name)
+        {
+            return string.IsNullOrEmpty(name) ? 0 : UnityEngine.Animator.StringToHash(name);
+        }
+
+        /// <summary>Whether this is a name the game itself ships a sound under.</summary>
+        public static bool IsAGameSound(string name)
+        {
+            return !string.IsNullOrEmpty(name) && Known.Contains(name);
+        }
+
+        /// <summary>
+        /// Says so when a sound name is one the game has never heard of.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A MISTYPED SOUND NAME IS THE QUIETEST FAILURE IN THIS FRAMEWORK. Every name hashes, and
+        /// the hash of a typo is a perfectly valid number that no sound answers to, so the creature
+        /// swings in silence and nothing anywhere says why. That has to be said at generate time,
+        /// because there is no later moment where it can be.
+        /// </para>
+        /// <para>
+        /// IT IS A WARNING AND NEVER A REFUSAL. A mod that ships a sound of its own names it
+        /// whatever it likes, and that name is legitimately absent from this list.
+        /// </para>
+        /// <para>
+        /// THE OTHER HALF IS THE WRONG SORT OF NAME ENTIRELY. Three different kinds of string
+        /// address sound in Core Keeper — this one, a file path for ambience and music, and a puff
+        /// name — and pasting one into another's box is the mistake that has cost the most time
+        /// here. A value with a slash or a file extension in it is a file path in a field that
+        /// wants a sound name, and that is worth its own sentence rather than a generic "unknown".
+        /// See <c>Docs/sound-key-spaces.md</c>.
+        /// </para>
+        /// </remarks>
+        /// <param name="name">The name as authored. Blank is fine and says nothing.</param>
+        /// <param name="who">The thing being generated, already quoted as the caller quotes it — the sentence is completed with " gives ...".</param>
+        /// <param name="report">Where the sentence goes. Nothing happens without one.</param>
+        public static void WarnIfUnknown(string name, string who, System.Action<string> report)
+        {
+            if (report == null || string.IsNullOrEmpty(name) || IsAGameSound(name))
+            {
+                return;
+            }
+
+            if (LooksLikeAFilePath(name))
+            {
+                report(
+                    who + " gives '" + name + "' as a sound, which is the address of an " +
+                    "audio file rather than the name of a sound. File addresses work for ambience " +
+                    "and music; everything else is named. Pick a name from the sound list instead.");
+                return;
+            }
+
+            report(
+                who + " gives '" + name + "' as a sound, which is not one Core Keeper " +
+                "ships. If your mod does not bring a sound of that name, it will play as silence. " +
+                "Check the spelling against the sound list.");
+        }
+
+        /// <summary>Whether this reads as a path to a file rather than as the name of a sound.</summary>
+        private static bool LooksLikeAFilePath(string name)
+        {
+            if (name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0)
+            {
+                return true;
+            }
+
+            int dot = name.LastIndexOf('.');
+            return dot > 0 && dot < name.Length - 1;
+        }
+
+        /// <summary>The name a number came from, or null when no shipped sound hashes to it.</summary>
+        public static string NameForHash(int hash)
+        {
+            EnsureReverse();
+            string name;
+            return reverse.TryGetValue(hash, out name) ? name : null;
+        }
+
+        private static Dictionary<int, string> reverse;
+
+        private static void EnsureReverse()
+        {
+            if (reverse != null)
+            {
+                return;
+            }
+
+            reverse = new Dictionary<int, string>(All.Length);
+            for (int i = 0; i < All.Length; i++)
+            {
+                // Two names hashing to one number would be Unity's own collision; the later name
+                // simply wins, which is also what the game's dictionary would have done.
+                reverse[UnityEngine.Animator.StringToHash(All[i])] = All[i];
+            }
+        }

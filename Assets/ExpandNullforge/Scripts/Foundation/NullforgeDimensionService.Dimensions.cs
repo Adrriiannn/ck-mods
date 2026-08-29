@@ -133,7 +133,7 @@ namespace ExpandNullforge.Foundation
             definition.WithAbsoluteOrigin(new int2(definition.AbsoluteOrigin.x, clearedOriginY));
 
         DimensionFrameworkLog.Warning(
-            "[ExpandNullforge] Dimension '" + definition.Id + "' origin (" +
+            "Dimension '" + definition.Id + "' origin (" +
             definition.AbsoluteOrigin.x + "," + definition.AbsoluteOrigin.y +
             ") reached the protected overworld band; relocated to (" +
             relocated.AbsoluteOrigin.x + "," + relocated.AbsoluteOrigin.y + ").");
@@ -196,15 +196,12 @@ namespace ExpandNullforge.Foundation
       RemoveMarkersForDimension(dimensionId);
       RemoveAnchorsForDimension(dimensionId);
       RemoveBiomesForDimension(dimensionId);
-      RemoveGenerationTablesForDimension(dimensionId);
       RemoveGenerationReservationsForDimension(dimensionId);
       RemoveZoneDefinitionsForDimension(dimensionId);
-      RemoveEnvironmentProfilesForDimension(dimensionId);
       RemoveGenerationPassesForDimension(dimensionId);
       RemoveScenesForDimension(dimensionId);
       RemoveSceneTemplatesForDimension(dimensionId);
       RemoveEncountersForDimension(dimensionId);
-      RemoveResourceNodesForDimension(dimensionId);
       RemoveWorldEventsForDimension(dimensionId);
       RemoveTravelRequirementsForDimension(dimensionId);
       RemoveProgressFlagsForDimension(dimensionId);

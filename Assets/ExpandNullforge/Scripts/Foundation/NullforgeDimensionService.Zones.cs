@@ -86,6 +86,7 @@ namespace ExpandNullforge.Foundation
       }
 
       zoneDefinitions[zone.ZoneId] = zone;
+      BindZoneToGenerationGates(zone);
       RaiseZoneChanged(
           zone,
           DimensionZoneChangeKind.Registered,
@@ -94,6 +95,33 @@ namespace ExpandNullforge.Foundation
           "registered");
       result = DimensionOperationResult.Ok();
       return true;
+    }
+
+    /// <summary>
+    /// Tells the generation gates where a zone's biome actually is.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The bootstrap knows which ores and which blocks a biome names, but not the geography — the
+    /// bounds exist only once a zone is registered. So both gates keep the biome's answer waiting
+    /// and this marries it to every zone whose Kind is that biome's id. Kind IS the biome id: the
+    /// manifest builder passes the biome id as the zone's kind, and the generated bootstrap does
+    /// the same for the zones it ensures.
+    /// </para>
+    /// <para>
+    /// This lives HERE, at the bottom of registration, rather than at the one manifest-apply call
+    /// site it used to sit at. Zones created by the generated bootstrap's minimum-zone path never
+    /// went through that call site, so a dimension that never applied a content manifest bound
+    /// nothing and both gates stayed inert for it. Every path that can put a zone in the catalog
+    /// runs through register or update, so this is the one place that cannot be walked around.
+    /// </para>
+    /// </remarks>
+    private static void BindZoneToGenerationGates(DimensionZoneDefinition zone)
+    {
+      Generation.DimensionOreBiomeGate.BindZone(
+          zone.DimensionId, zone.Kind, zone.LocalBounds);
+      Generation.DimensionTerrainMaterialRegistry.BindZone(
+          zone.DimensionId, zone.Kind, zone.LocalBounds);
     }
 
     public bool TryUpdateZoneDefinition(
@@ -115,11 +143,16 @@ namespace ExpandNullforge.Foundation
 
       if (ZoneDefinitionEquals(previous, zone))
       {
+        // Nothing about the zone moved, but re-binding is still right and still free: both gates
+        // replace a row for the same biome and bounds rather than stacking a second one, and an
+        // update that arrives before the zone was ever bound would otherwise never bind at all.
+        BindZoneToGenerationGates(zone);
         result = DimensionOperationResult.Ok();
         return true;
       }
 
       zoneDefinitions[zone.ZoneId] = zone;
+      BindZoneToGenerationGates(zone);
       RaiseZoneChanged(
           zone,
           previous.Enabled == zone.Enabled

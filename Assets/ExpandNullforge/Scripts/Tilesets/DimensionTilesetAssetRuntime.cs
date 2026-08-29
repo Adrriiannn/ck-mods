@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using ExpandNullforge.Generation;
 using ExpandNullforge.Authoring;
 using ExpandNullforge.Foundation;
 using PugTilemap;
@@ -25,8 +27,8 @@ namespace ExpandNullforge.Tilesets
 
             if (asset.TilesetTexture == null)
             {
-                Debug.LogWarning(
-                    "[ExpandNullforge] Custom tileset '" + asset.TilesetName +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "Custom tileset '" + asset.TilesetName +
                     "' has no tileset texture assigned; it will render as the missing placeholder.");
             }
 
@@ -40,13 +42,7 @@ namespace ExpandNullforge.Tilesets
                 }
             };
 
-            // Ground-family types share the ground color so dug/watered ground stays coherent
-            // on the world map; wall keeps its own.
-            tileset.MapColors.Add(new DimensionTileMapColor(TileType.ground, asset.GroundMapColor));
-            tileset.MapColors.Add(new DimensionTileMapColor(TileType.dugUpGround, asset.GroundMapColor));
-            tileset.MapColors.Add(new DimensionTileMapColor(TileType.wateredGround, asset.GroundMapColor));
-            tileset.MapColors.Add(new DimensionTileMapColor(TileType.wall, asset.WallMapColor));
-
+            // The ART is everything a reskin has, so it is built for both kinds.
             ApplyStateLayers(asset, tileset);
             ApplyGeneratedGen(asset, tileset);
             LogTilesetDetails(asset, tileset);
@@ -54,12 +50,19 @@ namespace ExpandNullforge.Tilesets
             // Reskin mode: this block's textures dress a VANILLA tileset index instead of placing its
             // own tiles. Register only the render override — no custom id, no items. Render-only and
             // save-safe: disabling the block simply stops the override next load.
+            //
+            // NOTHING BELOW THE ART IS REGISTERED FOR A RESKIN, AND THAT IS NOT AN OVERSIGHT. Map
+            // colours, ground cover, ore veins and the two ground behaviours are all looked up by
+            // the block's OWN tileset id, while the tiles a reskin dresses keep the game's id in the
+            // world and in the save. Registering them would fill the tables with rows that could
+            // never be matched — the shape of bug this framework calls an identity gate — and the
+            // Tileset Studio hides those switches for a reskin for the same reason.
             if (asset.ItemMode == DimensionTilesetItemMode.ReskinVanilla)
             {
                 if (asset.ReskinTilesetIndex < 0)
                 {
-                    Debug.LogWarning(
-                        "[ExpandNullforge] Reskin block '" + asset.TilesetName +
+                    DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                        "Reskin block '" + asset.TilesetName +
                         "' has no vanilla tileset chosen; nothing to reskin.");
                     return false;
                 }
@@ -67,9 +70,20 @@ namespace ExpandNullforge.Tilesets
                 return DimensionTilesetRegistry.RegisterReskin(asset.ReskinTilesetIndex, tileset);
             }
 
-            // After the reskin branch on purpose: material overrides are only served for our own
-            // custom ids (GetOverrideMaterial passes vanilla indexes through), so a reskin block
-            // could never see the circuit material anyway.
+            // Ground-family types share the ground color so dug/watered ground stays coherent
+            // on the world map; wall keeps its own.
+            tileset.MapColors.Add(new DimensionTileMapColor(TileType.ground, asset.GroundMapColor));
+            tileset.MapColors.Add(new DimensionTileMapColor(TileType.dugUpGround, asset.GroundMapColor));
+            tileset.MapColors.Add(new DimensionTileMapColor(TileType.wateredGround, asset.GroundMapColor));
+            tileset.MapColors.Add(new DimensionTileMapColor(TileType.wall, asset.WallMapColor));
+
+            ApplyOverlayScatterRules(asset);
+            ApplyOreVeinRules(asset);
+            DimensionTilesetBehaviourRegistry.RegisterGroundBehaviour(asset.TilesetId, asset.SlimeBehaviour);
+            DimensionTilesetBehaviourRegistry.RegisterSurfaceBehaviour(asset.TilesetId, asset.SurfaceBehaviour);
+
+            // Material overrides are only served for our own custom ids (GetOverrideMaterial passes
+            // vanilla indexes through), so a reskin block could never see the circuit material.
             ApplyCircuitFloor(asset, tileset);
 
             return DimensionTilesetRegistry.Register(tileset);
@@ -83,22 +97,23 @@ namespace ExpandNullforge.Tilesets
         /// </summary>
         private static void LogTilesetDetails(DimensionTilesetAsset asset, DimensionCustomTileset tileset)
         {
-            const string Tag = "[NF_TILESET] ";
             Texture2D sheet = asset.TilesetTexture;
 
-            Debug.Log(
-                Tag + "identity='" + asset.TilesetName + "'  id=" + tileset.Id +
+            DimensionLog.Trace(DimensionLogChannels.Tileset, null, 
+                "identity='" + asset.TilesetName + "'  id=" + tileset.Id +
                 "  mode=" + asset.ItemMode +
                 (asset.ItemMode == DimensionTilesetItemMode.ReskinVanilla
                     ? "(vanilla " + asset.ReskinTilesetIndex + ")"
                     : string.Empty) +
                 "  type=" + asset.BlockTypeKey);
 
-            Debug.Log(
-                Tag + "sheet=" + (sheet != null ? sheet.name + " " + sheet.width + "x" + sheet.height : "MISSING") +
+            DimensionLog.Trace(DimensionLogChannels.Tileset, null, 
+                "sheet=" + (sheet != null ? sheet.name + " " + sheet.width + "x" + sheet.height : "MISSING") +
                 "  emissive=" + (asset.EmissiveTexture != null ? asset.EmissiveTexture.name : "none") +
                 "  states=" + asset.Layers.Count +
-                "  ores=" + asset.Ores.Count);
+                "  ores=" + asset.Ores.Count +
+                "  oreScatter=" + asset.OreScatterCount +
+                "  cover=" + asset.CoverCount);
 
             // Baked sheets are the whole rendering story; list them so a blank layer is traceable.
             string sheets = string.Empty;
@@ -110,20 +125,20 @@ namespace ExpandNullforge.Tilesets
                           (bound != null ? "=" + bound.width + "x" + bound.height : "=NULL");
             }
 
-            Debug.Log(Tag + "adaptive sheets [" + tileset.AdaptiveTextures.Count + "]: " +
+            DimensionLog.Trace(DimensionLogChannels.Tileset, null, "adaptive sheets [" + tileset.AdaptiveTextures.Count + "]: " +
                       (sheets.Length > 0 ? sheets : "(none — every full-adaptive layer will render blank)"));
 
-            // Ids are hashed into the ushort-safe band on purpose; anything outside it predates that
-            // rule and will corrupt its tiles the moment they are saved into a prefab map or scene.
+            // Ids live above the vanilla bank and below int.MaxValue (see MaxCustomTilesetIdExclusive).
+            // Anything outside that band was generated against a different framework version — most
+            // likely one that hashed into the old 16-bit band — and no longer names the same tileset.
             if (tileset.Id >= DimensionTilesetRegistry.MaxCustomTilesetIdExclusive ||
                 tileset.Id < DimensionTilesetRegistry.MinCustomTilesetId)
             {
-                Debug.LogWarning(
-                    Tag + "id " + tileset.Id + " is outside the safe range [" +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "id " + tileset.Id + " is outside the safe range [" +
                     DimensionTilesetRegistry.MinCustomTilesetId + ", " +
                     DimensionTilesetRegistry.MaxCustomTilesetIdExclusive +
-                    "). Tiles of this block saved into a prefab map or custom scene would be truncated to " +
-                    (tileset.Id & 0xFFFF) + ". Regenerate the block against the current framework.");
+                    "). Regenerate the block against the current framework.");
             }
         }
 
@@ -147,8 +162,8 @@ namespace ExpandNullforge.Tilesets
             Material template = asset.CircuitFloorMaterial;
             if (template == null)
             {
-                Debug.LogWarning(
-                    "[ExpandNullforge] Tileset '" + asset.TilesetName +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "Tileset '" + asset.TilesetName +
                     "' has the circuit floor enabled but no circuit-floor material reference; " +
                     "re-toggle it in the Tileset Studio so the material is assigned.");
                 return;
@@ -190,8 +205,8 @@ namespace ExpandNullforge.Tilesets
         {
             if (asset.GeneratedGen == null || asset.GeneratedGen.Count == 0)
             {
-                Debug.LogWarning(
-                    "[ExpandNullforge] Tileset '" + asset.TilesetName + "' has no baked sheets at all. " +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "Tileset '" + asset.TilesetName + "' has no baked sheets at all. " +
                     "Its ground and wall will render blank — open the Tileset Studio and generate it.");
                 return;
             }
@@ -222,13 +237,13 @@ namespace ExpandNullforge.Tilesets
             }
 
             DimensionFrameworkLog.Verbose(
-                "[ExpandNullforge] Tileset '" + asset.TilesetName + "' bound adaptive sheets: " +
+                "Tileset '" + asset.TilesetName + "' bound adaptive sheets: " +
                 (bound.Length > 0 ? bound : "(none)") + ".");
 
             if (missing.Length > 0)
             {
-                Debug.LogWarning(
-                    "[ExpandNullforge] Tileset '" + asset.TilesetName +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "Tileset '" + asset.TilesetName +
                     "' is missing the baked texture for: " + missing +
                     ". Those layers will render blank; regenerate the tileset and rebuild the mod.");
             }
@@ -267,6 +282,86 @@ namespace ExpandNullforge.Tilesets
                     texture = config.texture
                 };
             }
+        }
+
+        /// <summary>
+        /// Tells the generator what this block scatters over its own ground.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Ticking "grass tufts" used to make a block's grass art render and nothing ever place any.
+        /// Core Keeper scatters vanilla overlays from generation code that names tilesets by hardcoded
+        /// id, so a custom tileset is never a candidate however complete its art is — the block looked
+        /// finished in the Studio and came out bare in the world.
+        /// </para>
+        /// <para>
+        /// Registered even when the block has no art for the overlay yet: the density is the author's
+        /// intent, and a missing texture is a separate problem that the sheet generation reports.
+        /// </para>
+        /// </remarks>
+        private static void ApplyOverlayScatterRules(DimensionTilesetAsset asset)
+        {
+            List<DimensionOverlayRule> rules = new List<DimensionOverlayRule>();
+
+            // Reads the ARRAYS, never asset.Layers: a serialized List of a custom class arrives
+            // empty at mod runtime, so the old read compiled, ran, found nothing and registered
+            // nothing — four toggles and four sliders that placed grass in the editor's head only.
+            // EditorSetGroundCover fills the arrays at Generate for exactly this read.
+            for (int i = 0; i < asset.CoverCount; i++)
+            {
+                string stateKey;
+                float density;
+                if (!asset.TryGetCover(i, out stateKey, out density) || density <= 0f)
+                {
+                    continue;
+                }
+
+                LayerName layer;
+                TileType tileType;
+                if (!DimensionOverlayRuleRegistry.TryGetScatterLayer(stateKey, out layer, out tileType))
+                {
+                    continue;
+                }
+
+                rules.Add(new DimensionOverlayRule(layer, tileType, density));
+            }
+
+            DimensionOverlayRuleRegistry.Register(asset.TilesetId, rules);
+        }
+
+        /// <summary>
+        /// Registers the block's vein rules for natural scattering in generated walls.
+        /// </summary>
+        /// <remarks>
+        /// Reads the ARRAYS, never <c>asset.Ores</c>: a serialized List of a custom class
+        /// arrives empty at mod runtime, and the arrays are the mirror the generator fills at
+        /// Generate precisely so this read survives. The <c>oreScatter=</c> line in the
+        /// [NF_TILESET] log is the in-game proof.
+        /// </remarks>
+        private static void ApplyOreVeinRules(DimensionTilesetAsset asset)
+        {
+            List<Generation.DimensionOreVeinRule> rules =
+                new List<Generation.DimensionOreVeinRule>();
+            for (int i = 0; i < asset.OreScatterCount; i++)
+            {
+                string itemId;
+                bool isCustom;
+                float abundance;
+                int sizeMin;
+                int sizeMax;
+                if (!asset.TryGetOreScatter(i, out itemId, out isCustom, out abundance, out sizeMin, out sizeMax) ||
+                    abundance <= 0f)
+                {
+                    continue;
+                }
+
+                // The carrier is always the block's OWN tileset: the generated vein object
+                // stamped (own tileset, ore), and the drop resolves by first match on the pair.
+                rules.Add(new Generation.DimensionOreVeinRule(
+                    asset.TilesetId, itemId, abundance, sizeMin, sizeMax));
+            }
+
+            Generation.DimensionOreVeinRuleRegistry.Register(asset.TilesetId, rules);
         }
     }
 }

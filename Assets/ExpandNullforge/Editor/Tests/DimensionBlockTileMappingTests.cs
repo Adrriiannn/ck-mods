@@ -1,6 +1,7 @@
 #if UNITY_INCLUDE_TESTS
 using ExpandNullforge.Api;
 using ExpandNullforge.Generation;
+using ExpandNullforge.Tilesets;
 using NUnit.Framework;
 using PugTilemap;
 
@@ -54,14 +55,37 @@ namespace ExpandNullforge.EditorTools
             Assert.That(tileset, Is.EqualTo(7));
         }
 
+        /// <summary>
+        /// A named custom block resolves to the id its NAME derives to. This used to assert the
+        /// opposite — that resolution failed — which was correct while nothing could turn a name
+        /// into an id. It can now: the id is a pure function of the name, so it resolves without
+        /// the tileset being installed or even existing.
+        /// </summary>
         [Test]
-        public void CustomBlock_DoesNotSilentlyResolveToTileset0()
+        public void CustomBlock_ResolvesToTheIdItsNameDerivesTo()
         {
             DimensionCompiledBlock block = new DimensionCompiledBlock(
                 DimensionTileRole.Ground, DimensionBlockTilesetSource.Custom, 0, "mod:crystal");
 
-            // No tileset provider ships yet, so a custom block must fail resolution loudly rather
-            // than defaulting to tileset 0 and generating the wrong material.
+            Assert.That(DimensionBlockTileMapping.TryResolveTileset(block, out int tileset), Is.True);
+
+            Assert.That(
+                tileset,
+                Is.EqualTo(DimensionTilesetRegistry.ComputeTilesetId("mod:crystal")));
+            Assert.That(tileset, Is.Not.EqualTo(0), "Never silently vanilla dirt.");
+        }
+
+        /// <summary>
+        /// The half of the original test that still matters: a block flagged custom that names NO
+        /// tileset has no identity to be correct about, so it must fail loudly rather than defaulting
+        /// to tileset 0 and quietly generating dirt where the author asked for something else.
+        /// </summary>
+        [Test]
+        public void CustomBlockNamingNothing_FailsRatherThanFallingBackToTileset0()
+        {
+            DimensionCompiledBlock block = new DimensionCompiledBlock(
+                DimensionTileRole.Ground, DimensionBlockTilesetSource.Custom, 0, string.Empty);
+
             Assert.That(DimensionBlockTileMapping.TryResolveTileset(block, out int tileset), Is.False);
             Assert.That(tileset, Is.EqualTo(0));
         }

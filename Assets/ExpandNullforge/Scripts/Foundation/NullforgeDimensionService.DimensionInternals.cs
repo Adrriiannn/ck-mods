@@ -39,7 +39,7 @@ namespace ExpandNullforge.Foundation
              math.all(a.AbsoluteOrigin == b.AbsoluteOrigin) &&
              BoundsEqual(a.LocalBounds, b.LocalBounds) &&
              a.GenerationVersion == b.GenerationVersion &&
-             a.SpaceKind == b.SpaceKind &&
+             a.Type == b.Type &&
              a.Capabilities == b.Capabilities &&
              a.LifecycleState == b.LifecycleState;
     }

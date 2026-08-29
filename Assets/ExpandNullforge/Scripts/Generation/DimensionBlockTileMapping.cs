@@ -1,4 +1,5 @@
 using ExpandNullforge.Api;
+using ExpandNullforge.Tilesets;
 using PugTilemap;
 
 namespace ExpandNullforge.Generation
@@ -45,11 +46,30 @@ namespace ExpandNullforge.Generation
         }
 
         /// <summary>
-        /// Resolves a block's tileset to a Core Keeper tileset index. Vanilla blocks carry the
-        /// index directly. Custom blocks require a tileset provider that does not ship yet, so
-        /// they resolve to false rather than defaulting to tileset 0 — the caller must report the
-        /// gap instead of generating the wrong material.
+        /// Resolves a block's tileset to a Core Keeper tileset index. Vanilla blocks carry the index
+        /// directly; a custom block's index is derived from its tileset NAME. False means the block
+        /// names no tileset at all — never a silent fall back to tileset 0, which would generate
+        /// dirt where the author asked for something else.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THIS USED TO ALWAYS FAIL for custom blocks, because nothing could turn a name into an
+        /// index. That is no longer true: a custom tileset's id is a pure function of its name
+        /// (<see cref="DimensionTilesetRegistry.ComputeTilesetId"/>), so it resolves without the
+        /// tileset being installed, or registered, or even existing.
+        /// </para>
+        /// <para>
+        /// WHY IT RESOLVES EVEN WHEN THE TILESET IS NOT INSTALLED. The alternative is refusing to
+        /// write the tile, which does not produce "nothing" — it produces a HOLE. Missing ground is
+        /// a pit, missing wall is open space, and a dimension generated that way is structurally
+        /// wrong in a way that outlives the missing mod. Writing the tile instead keeps the terrain
+        /// correct and costs only appearance: an unregistered id renders through the framework's
+        /// missing-tileset placeholder, and because the id is derived from the name rather than
+        /// handed out, installing the mod later makes every one of those tiles correct with no
+        /// migration. The caller still reports the situation; it just does not corrupt the world
+        /// over it.
+        /// </para>
+        /// </remarks>
         public static bool TryResolveTileset(DimensionCompiledBlock block, out int tileset)
         {
             if (block.TilesetSource == DimensionBlockTilesetSource.Vanilla)
@@ -58,8 +78,29 @@ namespace ExpandNullforge.Generation
                 return true;
             }
 
-            tileset = 0;
-            return false;
+            string name = block.CustomTilesetId;
+            if (string.IsNullOrEmpty(name))
+            {
+                // A block flagged custom that names nothing is an authoring error, and the one case
+                // where refusing to write is right: there is no identity to be correct about.
+                tileset = 0;
+                return false;
+            }
+
+            tileset = DimensionTilesetRegistry.ComputeTilesetId(name);
+            return true;
+        }
+
+        /// <summary>
+        /// True when a resolved custom tileset has no registered visuals in this session, so its
+        /// tiles will render as the missing-tileset placeholder. Diagnostic only — the tiles are
+        /// still correct, and become correct-looking as soon as the owning mod is installed.
+        /// </summary>
+        public static bool IsCustomTilesetMissing(DimensionCompiledBlock block)
+        {
+            return block.TilesetSource == DimensionBlockTilesetSource.Custom &&
+                   !string.IsNullOrEmpty(block.CustomTilesetId) &&
+                   !DimensionTilesetRegistry.TryGetByName(block.CustomTilesetId, out _);
         }
     }
 }

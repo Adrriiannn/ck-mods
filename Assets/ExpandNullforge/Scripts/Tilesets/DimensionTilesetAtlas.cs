@@ -13,8 +13,10 @@ namespace ExpandNullforge.Tilesets
     /// (fill type, the face it draws on, vertical offset/stretch, what tile it targets), its 9-way adaptive
     /// lookup (start/length sub-lists into a flat sprite-coord array, masked by the layer's available
     /// directions and varied by a position random — as <c>QuadGeneratorExtensions.ResolveQuad</c> does),
-    /// and its RandomFill sprite list. All coords are 0-1 UVs in dirt_tileset.png. No file I/O — the mod
-    /// sandbox forbids System.IO; an empty bake ⇒ callers fall back.
+    /// and its RandomFill sprite list. All coords are 0-1 UVs in dirt_tileset.png. No file I/O, because the bake is
+    /// C# literals rather than data. The sandbox bans System.IO but not writing: the game's own
+    /// <c>API.ConfigFilesystem</c> is the door, and this framework writes its save files through it.
+    /// An empty bake ⇒ callers fall back.
     /// </summary>
     public static class DimensionTilesetAtlas
     {

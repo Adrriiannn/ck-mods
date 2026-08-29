@@ -11,19 +11,6 @@ namespace ExpandNullforge.Foundation
       return DimensionTemplateCompiler.Compile(template);
     }
 
-    public bool TryBuildDimensionTemplateManifest(
-        DimensionTemplateAsset template,
-        out DimensionContentManifest manifest,
-        out DimensionCompiledGenerationPlan compiledPlan,
-        out DimensionOperationResult result)
-    {
-      return DimensionTemplateManifestBuilder.TryBuildManifest(
-          template,
-          out manifest,
-          out compiledPlan,
-          out result);
-    }
-
     public bool TryApplyDimensionTemplate(
         DimensionTemplateAsset template,
         bool updateExistingRecords,
@@ -54,17 +41,7 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (!TryApplyEnvironmentProfileTemplates(template, updateExistingRecords, out result))
-      {
-        return false;
-      }
-
       if (!TryApplyBiomeTemplates(template, updateExistingRecords, out result))
-      {
-        return false;
-      }
-
-      if (!TryApplyBiomePaletteAssetReferences(template, updateExistingRecords, out result))
       {
         return false;
       }
@@ -79,16 +56,6 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (!TryApplyGenerationTableTemplates(template, updateExistingRecords, out result))
-      {
-        return false;
-      }
-
-      if (!TryApplyBiomeSemanticObjectTables(template, updateExistingRecords, out result))
-      {
-        return false;
-      }
-
       if (!TryApplySceneTemplates(template, updateExistingRecords, out result))
       {
         return false;
@@ -99,116 +66,8 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (!TryApplyResourceNodes(compiledPlan, updateExistingRecords, out result))
-      {
-        return false;
-      }
-
-      if (!TryApplySpawnRules(compiledPlan, updateExistingRecords, out result))
-      {
-        return false;
-      }
-
       result = DimensionOperationResult.Ok();
       return true;
-    }
-
-    private bool TryApplyBiomeSemanticObjectTables(
-        DimensionTemplateAsset template,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      List<DimensionGenerationTableDefinition> semanticTables =
-          new List<DimensionGenerationTableDefinition>();
-      List<DimensionGenerationTableEntryDefinition> semanticEntries =
-          new List<DimensionGenerationTableEntryDefinition>();
-      Dictionary<string, bool> tableIds = new Dictionary<string, bool>();
-      Dictionary<string, bool> entryIds = new Dictionary<string, bool>();
-
-      AddExplicitGenerationTableIds(
-          template.GlobalGenerationTables,
-          template.DimensionId,
-          string.Empty,
-          tableIds);
-
-      BiomeTemplateAsset[] biomesToApply = template.Biomes;
-      for (int i = 0; i < biomesToApply.Length; i++)
-      {
-        BiomeTemplateAsset biome = biomesToApply[i];
-        if (biome == null)
-        {
-          continue;
-        }
-
-        AddExplicitGenerationTableIds(
-            biome.GetGenerationTablesWithProfile(),
-            template.DimensionId,
-            biome.BiomeId,
-            tableIds);
-
-        DimensionSemanticObjectTableBuilder.AddBiomeSemanticObjectTables(
-            biome,
-            template.DimensionId,
-            semanticTables,
-            semanticEntries,
-            tableIds,
-            entryIds);
-      }
-
-      for (int tableIndex = 0; tableIndex < semanticTables.Count; tableIndex++)
-      {
-        if (!TryApplyGenerationTable(
-                semanticTables[tableIndex],
-                updateExistingRecords,
-                out result))
-        {
-          return false;
-        }
-      }
-
-      for (int entryIndex = 0; entryIndex < semanticEntries.Count; entryIndex++)
-      {
-        if (!TryApplyGenerationTableEntry(
-                semanticEntries[entryIndex],
-                updateExistingRecords,
-                out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private static void AddExplicitGenerationTableIds(
-        GenerationTableTemplateAsset[] generationTableAssets,
-        string dimensionId,
-        string fallbackBiomeId,
-        Dictionary<string, bool> tableIds)
-    {
-      if (generationTableAssets == null || tableIds == null)
-      {
-        return;
-      }
-
-      for (int i = 0; i < generationTableAssets.Length; i++)
-      {
-        GenerationTableTemplateAsset generationTableAsset = generationTableAssets[i];
-        if (generationTableAsset == null || !generationTableAsset.Enabled)
-        {
-          continue;
-        }
-
-        string scopeId = string.IsNullOrEmpty(fallbackBiomeId) ? string.Empty : fallbackBiomeId;
-        string tableId = BuildScopedId(dimensionId, scopeId, generationTableAsset.TableId);
-        if (string.IsNullOrEmpty(tableId) || tableIds.ContainsKey(tableId))
-        {
-          continue;
-        }
-
-        tableIds.Add(tableId, true);
-      }
     }
 
     private bool TryApplyTemplateContentPack(
@@ -254,355 +113,6 @@ namespace ExpandNullforge.Foundation
       }
 
       return TryRegisterContentPack(contentPack, out result);
-    }
-
-    private bool TryApplyEnvironmentProfileTemplates(
-        DimensionTemplateAsset template,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      List<DimensionEnvironmentProfile> environmentProfiles =
-          new List<DimensionEnvironmentProfile>();
-      Dictionary<string, bool> profileIds = new Dictionary<string, bool>();
-
-      EnvironmentProfileTemplateAsset[] templateProfiles = template.EnvironmentProfiles;
-      for (int i = 0; i < templateProfiles.Length; i++)
-      {
-        AddEnvironmentProfileFromTemplate(
-            templateProfiles[i],
-            template.DimensionId,
-            environmentProfiles,
-            profileIds);
-      }
-
-      BiomeTemplateAsset[] biomeAssets = template.Biomes;
-      for (int i = 0; i < biomeAssets.Length; i++)
-      {
-        BiomeTemplateAsset biome = biomeAssets[i];
-        if (biome == null)
-        {
-          continue;
-        }
-
-        EnvironmentProfileTemplateAsset[] biomeProfiles =
-            biome.GetEnvironmentProfileTemplatesWithPresets();
-        for (int profileIndex = 0; profileIndex < biomeProfiles.Length; profileIndex++)
-        {
-          AddEnvironmentProfileFromTemplate(
-              biomeProfiles[profileIndex],
-              template.DimensionId,
-              environmentProfiles,
-              profileIds);
-        }
-      }
-
-      for (int i = 0; i < environmentProfiles.Count; i++)
-      {
-        if (!TryApplyEnvironmentProfile(
-                environmentProfiles[i],
-                updateExistingRecords,
-                out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private static void AddEnvironmentProfileFromTemplate(
-        EnvironmentProfileTemplateAsset asset,
-        string dimensionId,
-        List<DimensionEnvironmentProfile> destination,
-        Dictionary<string, bool> profileIds)
-    {
-      if (asset == null || string.IsNullOrEmpty(asset.ProfileId))
-      {
-        return;
-      }
-
-      DimensionEnvironmentProfile profile = asset.ToEnvironmentProfile(dimensionId);
-      if (profileIds.ContainsKey(profile.ProfileId))
-      {
-        return;
-      }
-
-      profileIds.Add(profile.ProfileId, true);
-      destination.Add(profile);
-    }
-
-    private bool TryApplyEnvironmentProfile(
-        DimensionEnvironmentProfile environmentProfile,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      DimensionEnvironmentProfile existing;
-      if (TryGetEnvironmentProfile(environmentProfile.ProfileId, out existing))
-      {
-        if (EnvironmentProfileEquals(existing, environmentProfile))
-        {
-          result = DimensionOperationResult.Ok();
-          return true;
-        }
-
-        if (!updateExistingRecords)
-        {
-          result = DimensionOperationResult.Failed(
-              "environment-profile-conflict",
-              "An environment profile with this id already exists with different metadata: " + environmentProfile.ProfileId + ".");
-          return false;
-        }
-
-        return TryUpdateEnvironmentProfile(environmentProfile, "dimension-template-apply", out result);
-      }
-
-      return TryRegisterEnvironmentProfile(environmentProfile, out result);
-    }
-
-    private bool TryApplyBiomePaletteAssetReferences(
-        DimensionTemplateAsset template,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      if (string.IsNullOrEmpty(template.ContentPackId))
-      {
-        result = DimensionOperationResult.Ok();
-        return true;
-      }
-
-      List<DimensionAssetReferenceDefinition> assetReferences =
-          new List<DimensionAssetReferenceDefinition>();
-      BiomeTemplateAsset[] biomeAssets = template.Biomes;
-      for (int i = 0; i < biomeAssets.Length; i++)
-      {
-        BiomeTemplateAsset biome = biomeAssets[i];
-        if (biome == null)
-        {
-          continue;
-        }
-
-        BiomePaletteTemplateAsset[] palettes = biome.GetPaletteTemplatesWithPresets();
-        for (int paletteIndex = 0; paletteIndex < palettes.Length; paletteIndex++)
-        {
-          BiomePaletteTemplateAsset palette = palettes[paletteIndex];
-          if (palette == null || !palette.Enabled)
-          {
-            continue;
-          }
-
-          palette.AddAssetReferencesTo(
-              template.ContentPackId,
-              template.DimensionId,
-              assetReferences);
-        }
-      }
-
-      Dictionary<string, bool> appliedIds = new Dictionary<string, bool>();
-      for (int i = 0; i < assetReferences.Count; i++)
-      {
-        DimensionAssetReferenceDefinition assetReference = assetReferences[i];
-        if (string.IsNullOrEmpty(assetReference.AssetId) ||
-            appliedIds.ContainsKey(assetReference.AssetId))
-        {
-          continue;
-        }
-
-        appliedIds.Add(assetReference.AssetId, true);
-        if (!TryApplyAssetReference(assetReference, updateExistingRecords, out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private bool TryApplyAssetReference(
-        DimensionAssetReferenceDefinition assetReference,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      DimensionAssetReferenceDefinition existing;
-      if (TryGetAssetReference(assetReference.AssetId, out existing))
-      {
-        if (AssetReferenceEquals(existing, assetReference))
-        {
-          result = DimensionOperationResult.Ok();
-          return true;
-        }
-
-        if (!updateExistingRecords)
-        {
-          result = DimensionOperationResult.Failed(
-              "asset-reference-conflict",
-              "An asset reference with this id already exists with different metadata: " + assetReference.AssetId + ".");
-          return false;
-        }
-
-        return TryUpdateAssetReference(assetReference, "dimension-template-apply", out result);
-      }
-
-      return TryRegisterAssetReference(assetReference, out result);
-    }
-
-    private bool TryApplyGenerationTableTemplates(
-        DimensionTemplateAsset template,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      if (!TryApplyGenerationTableAssets(
-              template.GlobalGenerationTables,
-              template.DimensionId,
-              string.Empty,
-              updateExistingRecords,
-              out result))
-      {
-        return false;
-      }
-
-      BiomeTemplateAsset[] biomesToApply = template.Biomes;
-      for (int i = 0; i < biomesToApply.Length; i++)
-      {
-        BiomeTemplateAsset biome = biomesToApply[i];
-        if (biome == null)
-        {
-          continue;
-        }
-
-        if (!TryApplyGenerationTableAssets(
-                biome.GetGenerationTablesWithProfile(),
-                template.DimensionId,
-                biome.BiomeId,
-                updateExistingRecords,
-                out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private bool TryApplyGenerationTableAssets(
-        GenerationTableTemplateAsset[] generationTableAssets,
-        string dimensionId,
-        string fallbackBiomeId,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      if (generationTableAssets == null)
-      {
-        result = DimensionOperationResult.Ok();
-        return true;
-      }
-
-      for (int i = 0; i < generationTableAssets.Length; i++)
-      {
-        GenerationTableTemplateAsset generationTableAsset = generationTableAssets[i];
-        if (generationTableAsset == null || !generationTableAsset.Enabled)
-        {
-          continue;
-        }
-
-        string scopeId = string.IsNullOrEmpty(fallbackBiomeId) ? string.Empty : fallbackBiomeId;
-        string tableId = BuildScopedId(dimensionId, scopeId, generationTableAsset.TableId);
-        DimensionGenerationTableDefinition table =
-            generationTableAsset.ToTableDefinition(tableId, dimensionId, fallbackBiomeId);
-
-        if (!TryApplyGenerationTable(table, updateExistingRecords, out result))
-        {
-          return false;
-        }
-
-        if (!TryApplyGenerationTableEntries(generationTableAsset, table.TableId, updateExistingRecords, out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private bool TryApplyGenerationTable(
-        DimensionGenerationTableDefinition table,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      DimensionGenerationTableDefinition existing;
-      if (TryGetGenerationTable(table.TableId, out existing))
-      {
-        if (GenerationTableEquals(existing, table))
-        {
-          result = DimensionOperationResult.Ok();
-          return true;
-        }
-
-        if (!updateExistingRecords)
-        {
-          result = DimensionOperationResult.Failed(
-              "generation-table-conflict",
-              "A generation table with this id already exists with different metadata: " + table.TableId + ".");
-          return false;
-        }
-
-        return TryUpdateGenerationTable(table, "dimension-template-apply", out result);
-      }
-
-      return TryRegisterGenerationTable(table, out result);
-    }
-
-    private bool TryApplyGenerationTableEntries(
-        GenerationTableTemplateAsset generationTableAsset,
-        string tableId,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      System.Collections.Generic.List<DimensionGenerationTableEntryDefinition> entries =
-          new System.Collections.Generic.List<DimensionGenerationTableEntryDefinition>();
-      generationTableAsset.AddEntryDefinitions(tableId, entries);
-      for (int i = 0; i < entries.Count; i++)
-      {
-        DimensionGenerationTableEntryDefinition entry = entries[i];
-        if (!TryApplyGenerationTableEntry(entry, updateExistingRecords, out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private bool TryApplyGenerationTableEntry(
-        DimensionGenerationTableEntryDefinition entry,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      DimensionGenerationTableEntryDefinition existing;
-      if (TryGetGenerationTableEntry(entry.EntryId, out existing))
-      {
-        if (GenerationTableEntryEquals(existing, entry))
-        {
-          result = DimensionOperationResult.Ok();
-          return true;
-        }
-
-        if (!updateExistingRecords)
-        {
-          result = DimensionOperationResult.Failed(
-              "generation-table-entry-conflict",
-              "A generation table entry with this id already exists with different metadata: " + entry.EntryId + ".");
-          return false;
-        }
-
-        return TryUpdateGenerationTableEntry(entry, "dimension-template-apply", out result);
-      }
-
-      return TryRegisterGenerationTableEntry(entry, out result);
     }
 
     private bool TryApplyDimensionDefinition(
@@ -684,7 +194,7 @@ namespace ExpandNullforge.Foundation
       for (int i = 0; i < plan.BiomeRegions.Count; i++)
       {
         DimensionCompiledBiomeRegion region = plan.BiomeRegions[i];
-        string zoneId = ResolveCompiledZoneId(region);
+        string zoneId = DimensionTemplateCompiler.ResolveCompiledZoneId(region);
         DimensionZoneDefinition zone =
             new DimensionZoneDefinition(
                 zoneId,
@@ -796,7 +306,7 @@ namespace ExpandNullforge.Foundation
         }
 
         if (!TryApplySceneTemplateAssets(
-                biome.GetScenePoolWithPresets(),
+                biome.ScenePool,
                 template.DimensionId,
                 biome.BiomeId,
                 updateExistingRecords,
@@ -829,6 +339,35 @@ namespace ExpandNullforge.Foundation
         if (sceneAsset == null)
         {
           continue;
+        }
+
+        // The placement policy goes into the pool the placement pass reads. Registered before
+        // any equality short-circuit below, because the pool is a static that empties on domain
+        // reload while these template records persist — an early continue would leave the
+        // policy lost exactly when it looks already-applied. In this direct-apply path the
+        // scene's tile data is registered under the raw scene id (there is no mod name to
+        // qualify with); the built mod's bootstrap uses the qualified name instead.
+        if (sceneAsset.Enabled)
+        {
+          Scenes.DimensionScenePoolRegistry.Register(
+              dimensionId,
+              new Scenes.DimensionScenePoolEntry(
+                  sceneAsset.SceneId,
+                  sceneAsset.SceneId,
+                  fallbackZoneId ?? string.Empty,
+                  sceneAsset.AllowedBiomeIds,
+                  sceneAsset.PlacementMode,
+                  new Unity.Mathematics.int2(sceneAsset.ExactLocalPosition.x, sceneAsset.ExactLocalPosition.y),
+                  sceneAsset.PreferredLocalBounds,
+                  sceneAsset.PlacementMode == DimensionScenePlacementMode.PreferredBounds,
+                  sceneAsset.MinRadiusTiles,
+                  sceneAsset.MaxRadiusTiles,
+                  sceneAsset.RadialBiomeId,
+                  new Unity.Mathematics.int2(sceneAsset.FootprintSize.x, sceneAsset.FootprintSize.y),
+                  sceneAsset.Weight,
+                  sceneAsset.Unique,
+                  sceneAsset.Required,
+                  sceneAsset.Priority));
         }
 
         DimensionSceneTemplateDefinition template =
@@ -925,129 +464,5 @@ namespace ExpandNullforge.Foundation
       return true;
     }
 
-    private bool TryApplyResourceNodes(
-        DimensionCompiledGenerationPlan plan,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      for (int i = 0; i < plan.ResourceNodes.Count; i++)
-      {
-        DimensionResourceNodeDefinition node = plan.ResourceNodes[i];
-        DimensionResourceNodeDefinition existing;
-        if (TryGetResourceNode(node.NodeId, out existing))
-        {
-          if (ResourceNodeEquals(existing, node))
-          {
-            continue;
-          }
-
-          if (!updateExistingRecords)
-          {
-            result = DimensionOperationResult.Failed(
-                "resource-node-conflict",
-                "A resource node with this id already exists with different metadata: " + node.NodeId + ".");
-            return false;
-          }
-
-          if (!TryUpdateResourceNode(node, "dimension-template-apply", out result))
-          {
-            return false;
-          }
-
-          continue;
-        }
-
-        if (!TryRegisterResourceNode(node, out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private bool TryApplySpawnRules(
-        DimensionCompiledGenerationPlan plan,
-        bool updateExistingRecords,
-        out DimensionOperationResult result)
-    {
-      for (int i = 0; i < plan.SpawnRules.Count; i++)
-      {
-        DimensionSpawnRule rule = plan.SpawnRules[i];
-        DimensionSpawnRule existing;
-        if (TryGetSpawnRule(rule.RuleId, out existing))
-        {
-          if (SpawnRuleEquals(existing, rule))
-          {
-            continue;
-          }
-
-          if (!updateExistingRecords)
-          {
-            result = DimensionOperationResult.Failed(
-                "spawn-rule-conflict",
-                "A spawn rule with this id already exists with different metadata: " + rule.RuleId + ".");
-            return false;
-          }
-
-          if (!TryUpdateSpawnRule(rule, "dimension-template-apply", out result))
-          {
-            return false;
-          }
-
-          continue;
-        }
-
-        if (!TryRegisterSpawnRule(rule, out result))
-        {
-          return false;
-        }
-      }
-
-      result = DimensionOperationResult.Ok();
-      return true;
-    }
-
-    private static string ResolveCompiledZoneId(DimensionCompiledBiomeRegion region)
-    {
-      if (!string.IsNullOrEmpty(region.ZoneId))
-      {
-        return region.ZoneId;
-      }
-
-      if (!string.IsNullOrEmpty(region.SourceTemplateId))
-      {
-        return region.DimensionId + "." + region.SourceTemplateId;
-      }
-
-      return region.DimensionId + "." + region.BiomeId;
-    }
-
-    private static string BuildScopedId(string dimensionId, string zoneId, string id)
-    {
-      string resolvedId = id ?? string.Empty;
-      if (string.IsNullOrEmpty(resolvedId))
-      {
-        return string.Empty;
-      }
-
-      if (resolvedId.IndexOf('.') >= 0 || resolvedId.IndexOf(':') >= 0)
-      {
-        return resolvedId;
-      }
-
-      if (!string.IsNullOrEmpty(zoneId))
-      {
-        if (zoneId.StartsWith(dimensionId + "."))
-        {
-          return zoneId + "." + resolvedId;
-        }
-
-        return dimensionId + "." + zoneId + "." + resolvedId;
-      }
-
-      return dimensionId + "." + resolvedId;
-    }
   }
 }

@@ -284,9 +284,6 @@ namespace ExpandNullforge.Api
         {
             return
                 CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.SceneTemplate, biomeId) +
-                CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.SceneProp, biomeId) +
-                CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.SceneLootContainer, biomeId) +
-                CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.SceneSpawnPoint, biomeId) +
                 CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.SceneTrigger, biomeId);
         }
 
@@ -299,8 +296,7 @@ namespace ExpandNullforge.Api
                 CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.Animal, biomeId) +
                 CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.Critter, biomeId) +
                 CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.Mob, biomeId) +
-                CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.Boss, biomeId) +
-                CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.SceneSpawnPoint, biomeId);
+                CountContentForBiomeOrGlobal(summary, DimensionAuthoringContentSummaryKind.Boss, biomeId);
         }
 
         private static int CountContentForBiomeOrGlobal(

@@ -107,20 +107,6 @@ namespace ExpandNullforge.Foundation
       return false;
     }
 
-    private bool TryGetEnabledEnvironmentProfile(
-        string profileId,
-        out DimensionEnvironmentProfile profile)
-    {
-      if (environmentProfiles.TryGetValue(profileId, out profile) &&
-          profile.Enabled)
-      {
-        return true;
-      }
-
-      profile = default(DimensionEnvironmentProfile);
-      return false;
-    }
-
     private bool ValidateBiome(
         DimensionBiomeDefinition biome,
         out DimensionOperationResult result)
@@ -135,13 +121,6 @@ namespace ExpandNullforge.Foundation
           !definitions.ContainsKey(biome.DimensionId))
       {
         result = DimensionOperationResult.Failed("biome-dimension-not-found", "No dimension with that id is registered.");
-        return false;
-      }
-
-      if (!string.IsNullOrEmpty(biome.EnvironmentProfileId) &&
-          !environmentProfiles.ContainsKey(biome.EnvironmentProfileId))
-      {
-        result = DimensionOperationResult.Failed("biome-environment-profile-not-found", "No environment profile with that id is registered.");
         return false;
       }
 

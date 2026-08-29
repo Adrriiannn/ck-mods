@@ -22,12 +22,7 @@ namespace ExpandNullforge.Api
         public readonly int BiomeCount;
         public readonly int SceneTemplateCount;
         public readonly int SceneCount;
-        public readonly int SpawnRuleCount;
         public readonly int GenerationPassCount;
-        public readonly int ResourceNodeCount;
-        public readonly int EnvironmentProfileCount;
-        public readonly int GenerationTableCount;
-        public readonly int GenerationTableEntryCount;
         public readonly int OwnershipBindingCount;
         public readonly int AssetReferenceCount;
         public readonly int AuthoredContentCount;
@@ -66,12 +61,7 @@ namespace ExpandNullforge.Api
             int biomeCount,
             int sceneTemplateCount,
             int sceneCount,
-            int spawnRuleCount,
             int generationPassCount,
-            int resourceNodeCount,
-            int environmentProfileCount,
-            int generationTableCount,
-            int generationTableEntryCount,
             int ownershipBindingCount,
             int assetReferenceCount,
             int authoredContentCount,
@@ -109,12 +99,7 @@ namespace ExpandNullforge.Api
             BiomeCount = biomeCount < 0 ? 0 : biomeCount;
             SceneTemplateCount = sceneTemplateCount < 0 ? 0 : sceneTemplateCount;
             SceneCount = sceneCount < 0 ? 0 : sceneCount;
-            SpawnRuleCount = spawnRuleCount < 0 ? 0 : spawnRuleCount;
             GenerationPassCount = generationPassCount < 0 ? 0 : generationPassCount;
-            ResourceNodeCount = resourceNodeCount < 0 ? 0 : resourceNodeCount;
-            EnvironmentProfileCount = environmentProfileCount < 0 ? 0 : environmentProfileCount;
-            GenerationTableCount = generationTableCount < 0 ? 0 : generationTableCount;
-            GenerationTableEntryCount = generationTableEntryCount < 0 ? 0 : generationTableEntryCount;
             OwnershipBindingCount = ownershipBindingCount < 0 ? 0 : ownershipBindingCount;
             AssetReferenceCount = assetReferenceCount < 0 ? 0 : assetReferenceCount;
             AuthoredContentCount = authoredContentCount < 0 ? 0 : authoredContentCount;

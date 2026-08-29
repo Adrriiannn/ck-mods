@@ -90,7 +90,7 @@ namespace ExpandNullforge.EditorTools
                 new DimensionBounds(int2.zero, new int2(4, 4)),
                 new DimensionBounds(int2.zero, new int2(4, 4)),
                 0,
-                DimensionSpaceKind.PocketWorld);
+                DimensionType.World);
             Assert.That(invalid.IsValid, Is.False);
         }
 
@@ -107,7 +107,7 @@ namespace ExpandNullforge.EditorTools
                 playable,
                 coordinate,
                 padding,
-                DimensionSpaceKind.PocketWorld);
+                DimensionType.World);
         }
     }
 }

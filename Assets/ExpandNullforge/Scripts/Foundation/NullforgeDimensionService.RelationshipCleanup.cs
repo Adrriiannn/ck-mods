@@ -322,23 +322,6 @@ namespace ExpandNullforge.Foundation
       }
     }
 
-    private void RemoveEnvironmentProfilesForDimension(string dimensionId)
-    {
-      List<string> profileIds = new List<string>();
-      foreach (DimensionEnvironmentProfile profile in environmentProfiles.Values)
-      {
-        if (string.Equals(profile.DimensionId, dimensionId, StringComparison.Ordinal))
-        {
-          profileIds.Add(profile.ProfileId);
-        }
-      }
-
-      for (int i = 0; i < profileIds.Count; i++)
-      {
-        environmentProfiles.Remove(profileIds[i]);
-      }
-    }
-
     private void RemoveGenerationPassesForDimension(string dimensionId)
     {
       List<string> passIds = new List<string>();
@@ -388,23 +371,6 @@ namespace ExpandNullforge.Foundation
       for (int i = 0; i < encounterIds.Count; i++)
       {
         encounters.Remove(encounterIds[i]);
-      }
-    }
-
-    private void RemoveResourceNodesForDimension(string dimensionId)
-    {
-      List<string> nodeIds = new List<string>();
-      foreach (DimensionResourceNodeDefinition node in resourceNodes.Values)
-      {
-        if (string.Equals(node.DimensionId, dimensionId, StringComparison.Ordinal))
-        {
-          nodeIds.Add(node.NodeId);
-        }
-      }
-
-      for (int i = 0; i < nodeIds.Count; i++)
-      {
-        resourceNodes.Remove(nodeIds[i]);
       }
     }
 

@@ -381,6 +381,8 @@ namespace ExpandNullforge.Foundation
         record.PlannedPasses.Add(generationPass);
       }
 
+      SynthesizeDefaultPasses(record, definition);
+
       if (record.PlannedPasses.Count == 0)
       {
         return false;
@@ -405,6 +407,166 @@ namespace ExpandNullforge.Foundation
           ComputePlannedGenerationProgress(record, 0f),
           "Generation pass started: " + GenerationPassName(firstPass) + ".");
       return true;
+    }
+
+    /// <summary>
+    /// Completes an authored plan with the passes every dimension needs but nobody has to
+    /// author: terrain first, scene placement after.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Passes only exist when a creator authors them, and most never will — before this,
+    /// a dimension with no authored passes ran exactly one provider in single-provider mode
+    /// and its scenes never placed, while a dimension with ONE authored scenes pass ran
+    /// scenes over bare void. The synthetic entries live only in the record's planned list:
+    /// validation, persistence and the Studio's pass UI never see them.
+    /// </para>
+    /// <para>
+    /// The terrain choice mirrors the providers' own mutual exclusion: the tile-map
+    /// provider claims dimensions with a painted map, the safe platform takes the rest.
+    /// </para>
+    /// </remarks>
+    private void SynthesizeDefaultPasses(
+        RuntimeGenerationRecord record,
+        DimensionDefinition definition)
+    {
+      bool hasTerrain = false;
+      bool hasScenes = false;
+      for (int i = 0; i < record.PlannedPasses.Count; i++)
+      {
+        hasTerrain |= record.PlannedPasses[i].Phase == DimensionGenerationPassPhase.Terrain;
+        hasScenes |= record.PlannedPasses[i].Phase == DimensionGenerationPassPhase.Scenes;
+      }
+
+      if (!hasTerrain)
+      {
+        string terrainProviderId = SelectDefaultTerrainProvider(definition, record);
+        if (!string.IsNullOrEmpty(terrainProviderId))
+        {
+          record.PlannedPasses.Insert(0, new DimensionGenerationPassDefinition(
+              definition.Id + ":auto-terrain",
+              "Terrain",
+              definition.Id,
+              string.Empty,
+              false,
+              default,
+              DimensionGenerationPassPhase.Terrain,
+              int.MinValue,
+              terrainProviderId,
+              true));
+        }
+      }
+
+      // Dungeons carve before scenes decorate: Structures phase sorts between them.
+      bool hasStructures = false;
+      for (int i = 0; i < record.PlannedPasses.Count; i++)
+      {
+        hasStructures |= record.PlannedPasses[i].Phase == DimensionGenerationPassPhase.Structures;
+      }
+
+      if (!hasStructures &&
+          generationProviders.TryGetValue(
+              DimensionGenerationProviderIds.DungeonPlacement,
+              out IDimensionGenerationProvider dungeonProvider) &&
+          dungeonProvider is IDimensionGenerationPassProvider &&
+          dungeonProvider.CanGenerate(definition, record.Request.LocalBounds))
+      {
+        record.PlannedPasses.Add(new DimensionGenerationPassDefinition(
+            definition.Id + ":auto-dungeons",
+            "Dungeons",
+            definition.Id,
+            string.Empty,
+            false,
+            default,
+            DimensionGenerationPassPhase.Structures,
+            int.MaxValue,
+            DimensionGenerationProviderIds.DungeonPlacement,
+            true));
+      }
+
+      if (!hasScenes &&
+          generationProviders.TryGetValue(
+              DimensionGenerationProviderIds.ScenePlacement,
+              out IDimensionGenerationProvider sceneProvider) &&
+          sceneProvider is IDimensionGenerationPassProvider &&
+          sceneProvider.CanGenerate(definition, record.Request.LocalBounds))
+      {
+        record.PlannedPasses.Add(new DimensionGenerationPassDefinition(
+            definition.Id + ":auto-scenes",
+            "Places",
+            definition.Id,
+            string.Empty,
+            false,
+            default,
+            DimensionGenerationPassPhase.Scenes,
+            int.MaxValue,
+            DimensionGenerationProviderIds.ScenePlacement,
+            true));
+      }
+
+      // Ore for the non-painted world: the painted path grows veins inside its own write
+      // list, so the provider's CanGenerate refuses painted dimensions and this pass only
+      // appears where it is the sole way veins can exist.
+      bool hasOre = false;
+      for (int i = 0; i < record.PlannedPasses.Count; i++)
+      {
+        hasOre |= record.PlannedPasses[i].Phase == DimensionGenerationPassPhase.Ore;
+      }
+
+      if (!hasOre &&
+          generationProviders.TryGetValue(
+              DimensionGenerationProviderIds.OreScatter,
+              out IDimensionGenerationProvider oreProvider) &&
+          oreProvider is IDimensionGenerationPassProvider &&
+          oreProvider.CanGenerate(definition, record.Request.LocalBounds))
+      {
+        record.PlannedPasses.Add(new DimensionGenerationPassDefinition(
+            definition.Id + ":auto-ore",
+            "Ore",
+            definition.Id,
+            string.Empty,
+            false,
+            default,
+            DimensionGenerationPassPhase.Ore,
+            int.MaxValue,
+            DimensionGenerationProviderIds.OreScatter,
+            true));
+      }
+
+      // Synthetic entries may land around authored ones of other phases; the ladder's
+      // promise is phase order, so restate it.
+      record.PlannedPasses.Sort(
+          (left, right) =>
+          {
+            int phase = ((int)left.Phase).CompareTo((int)right.Phase);
+            return phase != 0 ? phase : left.Priority.CompareTo(right.Priority);
+          });
+    }
+
+    /// <summary>The terrain provider this dimension would use in single-provider mode.</summary>
+    private string SelectDefaultTerrainProvider(
+        DimensionDefinition definition,
+        RuntimeGenerationRecord record)
+    {
+      if (generationProviders.TryGetValue(
+              DimensionGenerationProviderIds.TileMap,
+              out IDimensionGenerationProvider tileMap) &&
+          tileMap is IDimensionGenerationPassProvider &&
+          tileMap.CanGenerate(definition, record.Request.LocalBounds))
+      {
+        return DimensionGenerationProviderIds.TileMap;
+      }
+
+      if (generationProviders.TryGetValue(
+              DimensionGenerationProviderIds.SafePlatform,
+              out IDimensionGenerationProvider safePlatform) &&
+          safePlatform is IDimensionGenerationPassProvider &&
+          safePlatform.CanGenerate(definition, record.Request.LocalBounds))
+      {
+        return DimensionGenerationProviderIds.SafePlatform;
+      }
+
+      return string.Empty;
     }
 
     private void TickRuntimeGenerationPassProvider(

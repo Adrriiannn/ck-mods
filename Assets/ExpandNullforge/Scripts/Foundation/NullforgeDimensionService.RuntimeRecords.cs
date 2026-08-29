@@ -51,7 +51,6 @@ namespace ExpandNullforge.Foundation
       public Dictionary<string, bool> StarterIds;
       public Dictionary<string, bool> SceneTemplateIds;
       public Dictionary<string, bool> SceneIds;
-      public Dictionary<string, bool> SpawnRuleIds;
       public Dictionary<string, bool> EncounterIds;
       public Dictionary<string, bool> ResourceNodeIds;
       public Dictionary<string, bool> ProgressFlagIds;

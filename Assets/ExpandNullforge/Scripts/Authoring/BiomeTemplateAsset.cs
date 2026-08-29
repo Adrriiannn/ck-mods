@@ -5,19 +5,23 @@ using UnityEngine;
 
 namespace ExpandNullforge.Authoring
 {
-    [CreateAssetMenu(menuName = "Dimension Framework/Biome Template")]
+    [CreateAssetMenu(menuName = "Dimensions API/Biome Template")]
     public sealed class BiomeTemplateAsset : ScriptableObject
     {
+        // The environment-profile and palette template layers, the content-preset mixin, and the
+        // per-biome resource-node / spawn-rule / generation-table lists that once sat here were
+        // Phase-0 surfaces nothing consumed. The separate Biome Generation Profile asset that used
+        // to hold a second list of generation passes was folded into generationPasses below, so the
+        // steps a biome runs are all in one place. A biome IS its block lists now: music and ambience
+        // live directly below, ground fog and map colour ride the tileset, creatures ride the
+        // per-creature spawn chain, and ore patches ride the tileset's ore config.
         [SerializeField] private string biomeId = "biome";
         [SerializeField] private string displayName = "Biome";
         [SerializeField] private string environmentProfileId = string.Empty;
-        [SerializeField] private EnvironmentProfileTemplateAsset environmentProfileTemplate;
         [SerializeField] private string paletteAssetId = string.Empty;
-        [SerializeField] private BiomePaletteTemplateAsset paletteTemplate;
         [SerializeField] private string spawnTableId = string.Empty;
         [SerializeField] private string resourceTableId = string.Empty;
         [SerializeField] private string worldEventTableId = string.Empty;
-        [SerializeField] private BiomeContentPresetAsset[] contentPresets = new BiomeContentPresetAsset[0];
         [SerializeField] private Color mapColor = new Color(0.25f, 0.45f, 0.55f, 1f);
         [SerializeField] private int priority;
         [SerializeField] private bool enabled = true;
@@ -27,23 +31,34 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private string[] floorObjectIds = new string[0];
         [SerializeField] private string[] wallObjectIds = new string[0];
         [SerializeField] private string[] oreObjectIds = new string[0];
-        [SerializeField] private string[] waterObjectIds = new string[0];
         [SerializeField] private SceneTemplateAsset[] scenePool = new SceneTemplateAsset[0];
-        [SerializeField] private ResourceNodeTemplateAsset[] resourceNodes = new ResourceNodeTemplateAsset[0];
-        [SerializeField] private SpawnRuleTemplateAsset[] spawnRules = new SpawnRuleTemplateAsset[0];
-        [SerializeField] private BiomeGenerationProfileAsset generationProfile;
         [SerializeField] private GenerationPassTemplateAsset[] generationPasses = new GenerationPassTemplateAsset[0];
-        [SerializeField] private GenerationTableTemplateAsset[] generationTables = new GenerationTableTemplateAsset[0];
+        [Tooltip("Announce this biome with a title card the first time a player walks into it.")]
+        [SerializeField] private bool showTitleOnDiscovery = true;
+
+        [Tooltip("Colour of the title text and the gamepad light. Blank uses the map colour.")]
+        [SerializeField] private bool overrideTitleColor;
+        [SerializeField] private Color titleColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+
+        [Tooltip("Object whose icon flanks the title. Leave empty for no icons.")]
+        [SerializeField] private string titleIconObjectId = string.Empty;
+
+        [Tooltip("Looping ambience for this biome, picked from the Sound Library. Empty for none.")]
+        [SerializeField] private string ambienceSoundKey = string.Empty;
+
+        [Tooltip("How loud this biome's ambience gets at its fullest.")]
+        [Range(0f, 2f)]
+        [SerializeField] private float ambienceVolume = 1f;
+
+        [Tooltip("Which of the game's music playlists this biome plays. Empty keeps the surrounding music.")]
+        [SerializeField] private string musicRosterName = string.Empty;
+
         [SerializeField] private string notes = string.Empty;
 
         private void OnValidate()
         {
-            contentPresets = CopyObjects(contentPresets);
             scenePool = CopyObjects(scenePool);
-            resourceNodes = CopyObjects(resourceNodes);
-            spawnRules = CopyObjects(spawnRules);
             generationPasses = CopyObjects(generationPasses);
-            generationTables = CopyObjects(generationTables);
         }
 
         public string BiomeId
@@ -59,6 +74,69 @@ namespace ExpandNullforge.Authoring
         public string Notes
         {
             get { return notes ?? string.Empty; }
+        }
+
+        /// <summary>Whether walking into this biome announces it with a title card.</summary>
+        /// <remarks>
+        /// On by default, because a biome nobody is told they have entered reads as an art change
+        /// rather than a place. An author who wants a seamless transition — a cave that is really part
+        /// of the biome above it — turns it off.
+        /// </remarks>
+        public bool ShowTitleOnDiscovery
+        {
+            get { return showTitleOnDiscovery; }
+        }
+
+        /// <summary>
+        /// The colour of the title, falling back to the map colour.
+        /// </summary>
+        /// <remarks>
+        /// Falls back rather than defaulting to white so a biome gets a sensible title colour for free:
+        /// the map colour is already chosen to say "this place", and the two matching is what makes the
+        /// title feel like part of the biome rather than a caption over it.
+        /// </remarks>
+        public Color TitleColor
+        {
+            get { return overrideTitleColor ? titleColor : mapColor; }
+        }
+
+        /// <summary>The object whose icon flanks the title, or empty for none.</summary>
+        public string TitleIconObjectId
+        {
+            get { return titleIconObjectId ?? string.Empty; }
+        }
+
+        /// <summary>The looping ambience this biome adds to the game's own mix, or empty for none.</summary>
+        public string AmbienceSoundKey
+        {
+            get { return ambienceSoundKey ?? string.Empty; }
+        }
+
+        /// <summary>
+        /// How loud the ambience gets at its fullest.
+        /// </summary>
+        /// <remarks>
+        /// A multiplier on the volume Core Keeper works out from how much of the biome surrounds the
+        /// player, not a fixed level — so the sound still swells as they walk in rather than snapping
+        /// on at the boundary.
+        /// </remarks>
+        public float AmbienceVolume
+        {
+            get { return ambienceVolume < 0f ? 0f : ambienceVolume; }
+        }
+
+        /// <summary>
+        /// The name of the game's music playlist this biome plays, or empty to keep the surrounding
+        /// music.
+        /// </summary>
+        /// <remarks>
+        /// Empty is a reasonable default rather than a gap: a small biome inside a larger one usually
+        /// wants the host's music to keep playing, and interrupting it every time the player steps
+        /// through a doorway is worse than no music of its own.
+        /// </remarks>
+        public string MusicRosterName
+        {
+            get { return musicRosterName ?? string.Empty; }
         }
 
         public bool Enabled
@@ -91,73 +169,9 @@ namespace ExpandNullforge.Authoring
             get { return scenePool ?? new SceneTemplateAsset[0]; }
         }
 
-        public BiomeContentPresetAsset[] ContentPresets
-        {
-            get { return contentPresets ?? new BiomeContentPresetAsset[0]; }
-        }
-
-        public ResourceNodeTemplateAsset[] ResourceNodes
-        {
-            get { return resourceNodes ?? new ResourceNodeTemplateAsset[0]; }
-        }
-
-        public SpawnRuleTemplateAsset[] SpawnRules
-        {
-            get { return spawnRules ?? new SpawnRuleTemplateAsset[0]; }
-        }
-
-        public BiomeGenerationProfileAsset GenerationProfile
-        {
-            get { return generationProfile; }
-        }
-
-        public EnvironmentProfileTemplateAsset EnvironmentProfileTemplate
-        {
-            get { return environmentProfileTemplate; }
-        }
-
         public string EnvironmentProfileId
         {
             get { return environmentProfileId ?? string.Empty; }
-        }
-
-        public string ResolvedEnvironmentProfileId
-        {
-            get
-            {
-                if (!string.IsNullOrEmpty(EnvironmentProfileId))
-                {
-                    return EnvironmentProfileId;
-                }
-
-                if (environmentProfileTemplate != null && environmentProfileTemplate.Enabled)
-                {
-                    return environmentProfileTemplate.ProfileId;
-                }
-
-                BiomeContentPresetAsset[] presets = ContentPresets;
-                for (int i = 0; i < presets.Length; i++)
-                {
-                    BiomeContentPresetAsset preset = presets[i];
-                    if (preset == null || !preset.Enabled)
-                    {
-                        continue;
-                    }
-
-                    string presetProfileId = preset.ResolvedEnvironmentProfileId;
-                    if (!string.IsNullOrEmpty(presetProfileId))
-                    {
-                        return presetProfileId;
-                    }
-                }
-
-                return string.Empty;
-            }
-        }
-
-        public BiomePaletteTemplateAsset PaletteTemplate
-        {
-            get { return paletteTemplate; }
         }
 
         public string PaletteAssetId
@@ -165,275 +179,43 @@ namespace ExpandNullforge.Authoring
             get { return paletteAssetId ?? string.Empty; }
         }
 
-        public string ResolvedPaletteAssetId
-        {
-            get
-            {
-                if (!string.IsNullOrEmpty(PaletteAssetId))
-                {
-                    return PaletteAssetId;
-                }
-
-                if (paletteTemplate != null && paletteTemplate.Enabled)
-                {
-                    return paletteTemplate.PaletteId;
-                }
-
-                BiomeContentPresetAsset[] presets = ContentPresets;
-                for (int i = 0; i < presets.Length; i++)
-                {
-                    BiomeContentPresetAsset preset = presets[i];
-                    if (preset == null || !preset.Enabled)
-                    {
-                        continue;
-                    }
-
-                    string presetPaletteId = preset.ResolvedPaletteAssetId;
-                    if (!string.IsNullOrEmpty(presetPaletteId))
-                    {
-                        return presetPaletteId;
-                    }
-                }
-
-                return string.Empty;
-            }
-        }
-
+        /// <summary>The generation steps this biome runs, in order.</summary>
+        /// <remarks>
+        /// <para>
+        /// The only list of them. A separate Biome Generation Profile asset used to sit in front of
+        /// this one and get prepended to it, which meant the passes a biome ran were split across
+        /// two assets and only one of them was editable where the biome was edited. It also had no
+        /// creation path anywhere in the product, so the only profiles that ever existed were the
+        /// ones the starter factory made. Its passes were folded into this list.
+        /// </para>
+        /// <para>
+        /// Nothing was lost by folding: a pass is itself a standalone shared asset, so several
+        /// biomes wanting the same recipe reference the same pass assets from their own lists.
+        /// </para>
+        /// <para>
+        /// Returns a copy with the empty slots stripped, because a list a creator has grown in the
+        /// inspector routinely holds a trailing null and callers here index straight into it.
+        /// </para>
+        /// </remarks>
         public GenerationPassTemplateAsset[] GenerationPasses
         {
-            get { return generationPasses ?? new GenerationPassTemplateAsset[0]; }
+            get { return CopyObjects(generationPasses); }
         }
 
-        public GenerationTableTemplateAsset[] GenerationTables
+        /// <summary>The blocks this biome's floors are made of. A biome IS its block lists.</summary>
+        public string[] FloorObjectIds
         {
-            get { return generationTables ?? new GenerationTableTemplateAsset[0]; }
+            get { return CopyNonEmptyStrings(floorObjectIds); }
         }
 
-        public GenerationPassTemplateAsset[] GetGenerationPassesWithProfile()
+        public string[] WallObjectIds
         {
-            List<GenerationPassTemplateAsset> combined = new List<GenerationPassTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddGenerationPassesTo(combined);
-            }
-
-            if (generationProfile != null)
-            {
-                generationProfile.AddGenerationPassesTo(combined);
-            }
-
-            AddRange(GenerationPasses, combined);
-            return combined.ToArray();
+            get { return CopyNonEmptyStrings(wallObjectIds); }
         }
 
-        public GenerationTableTemplateAsset[] GetGenerationTablesWithProfile()
+        public string[] OreObjectIds
         {
-            List<GenerationTableTemplateAsset> combined = new List<GenerationTableTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddGenerationTablesTo(combined);
-            }
-
-            if (generationProfile != null)
-            {
-                generationProfile.AddGenerationTablesTo(combined);
-            }
-
-            AddRange(GenerationTables, combined);
-            return combined.ToArray();
-        }
-
-        public SceneTemplateAsset[] GetScenePoolWithPresets()
-        {
-            List<SceneTemplateAsset> combined = new List<SceneTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddScenePoolTo(combined);
-            }
-
-            AddRange(ScenePool, combined);
-            return combined.ToArray();
-        }
-
-        public ResourceNodeTemplateAsset[] GetResourceNodesWithPresets()
-        {
-            List<ResourceNodeTemplateAsset> combined = new List<ResourceNodeTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddResourceNodesTo(combined);
-            }
-
-            AddRange(ResourceNodes, combined);
-            return combined.ToArray();
-        }
-
-        public SpawnRuleTemplateAsset[] GetSpawnRulesWithPresets()
-        {
-            List<SpawnRuleTemplateAsset> combined = new List<SpawnRuleTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddSpawnRulesTo(combined);
-            }
-
-            AddRange(SpawnRules, combined);
-            return combined.ToArray();
-        }
-
-        public EnvironmentProfileTemplateAsset[] GetEnvironmentProfileTemplatesWithPresets()
-        {
-            List<EnvironmentProfileTemplateAsset> combined = new List<EnvironmentProfileTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddEnvironmentProfileTemplatesTo(combined);
-            }
-
-            if (environmentProfileTemplate != null)
-            {
-                combined.Add(environmentProfileTemplate);
-            }
-
-            return combined.ToArray();
-        }
-
-        public BiomePaletteTemplateAsset[] GetPaletteTemplatesWithPresets()
-        {
-            List<BiomePaletteTemplateAsset> combined = new List<BiomePaletteTemplateAsset>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddPaletteTemplatesTo(combined);
-            }
-
-            if (paletteTemplate != null)
-            {
-                combined.Add(paletteTemplate);
-            }
-
-            return combined.ToArray();
-        }
-
-        public string[] GetFloorObjectIdsWithPresets()
-        {
-            List<string> combined = new List<string>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddFloorObjectIdsTo(combined);
-            }
-
-            AddStringRange(floorObjectIds, combined);
-            return combined.ToArray();
-        }
-
-        public string[] GetWallObjectIdsWithPresets()
-        {
-            List<string> combined = new List<string>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddWallObjectIdsTo(combined);
-            }
-
-            AddStringRange(wallObjectIds, combined);
-            return combined.ToArray();
-        }
-
-        public string[] GetOreObjectIdsWithPresets()
-        {
-            List<string> combined = new List<string>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddOreObjectIdsTo(combined);
-            }
-
-            AddStringRange(oreObjectIds, combined);
-            return combined.ToArray();
-        }
-
-        public string[] GetWaterObjectIdsWithPresets()
-        {
-            List<string> combined = new List<string>();
-            BiomeContentPresetAsset[] presets = ContentPresets;
-            for (int i = 0; i < presets.Length; i++)
-            {
-                BiomeContentPresetAsset preset = presets[i];
-                if (preset == null)
-                {
-                    continue;
-                }
-
-                preset.AddWaterObjectIdsTo(combined);
-            }
-
-            AddStringRange(waterObjectIds, combined);
-            return combined.ToArray();
+            get { return CopyNonEmptyStrings(oreObjectIds); }
         }
 
         public DimensionBiomeDefinition ToBiomeDefinition(string dimensionId)
@@ -442,8 +224,8 @@ namespace ExpandNullforge.Authoring
                 biomeId,
                 displayName,
                 dimensionId,
-                ResolvedEnvironmentProfileId,
-                ResolvedPaletteAssetId,
+                environmentProfileId,
+                paletteAssetId,
                 spawnTableId,
                 resourceTableId,
                 worldEventTableId,
@@ -489,55 +271,14 @@ namespace ExpandNullforge.Authoring
             notes = newNotes ?? string.Empty;
         }
 
-        public void ConfigureEnvironmentProfile(
-            string profileId,
-            EnvironmentProfileTemplateAsset template)
-        {
-            environmentProfileId = profileId ?? string.Empty;
-            environmentProfileTemplate = template;
-        }
-
-        public void ConfigurePalette(
-            string newPaletteAssetId,
-            BiomePaletteTemplateAsset template)
-        {
-            paletteAssetId = newPaletteAssetId ?? string.Empty;
-            paletteTemplate = template;
-        }
-
-        public void ConfigureGenerationProfile(BiomeGenerationProfileAsset profile)
-        {
-            generationProfile = profile;
-        }
-
-        public void SetContentPresets(IReadOnlyList<BiomeContentPresetAsset> presets)
-        {
-            contentPresets = CopyObjects(presets);
-        }
-
         public void SetScenePool(IReadOnlyList<SceneTemplateAsset> scenes)
         {
             scenePool = CopyObjects(scenes);
         }
 
-        public void SetResourceNodes(IReadOnlyList<ResourceNodeTemplateAsset> nodes)
-        {
-            resourceNodes = CopyObjects(nodes);
-        }
-
-        public void SetSpawnRules(IReadOnlyList<SpawnRuleTemplateAsset> rules)
-        {
-            spawnRules = CopyObjects(rules);
-        }
-
         public void SetGenerationPasses(IReadOnlyList<GenerationPassTemplateAsset> passes)
         {
             generationPasses = CopyObjects(passes);
-        }
-
-        public void SetGenerationTables(IReadOnlyList<GenerationTableTemplateAsset> tables)
-        {
-            generationTables = CopyObjects(tables);
         }
 
         public void ApplyFallbackLocalBounds(
@@ -558,7 +299,6 @@ namespace ExpandNullforge.Authoring
             string[] floorIds,
             string[] wallIds,
             string[] oreIds,
-            string[] waterIds,
             bool replaceExisting)
         {
             floorObjectIds = replaceExisting
@@ -570,10 +310,7 @@ namespace ExpandNullforge.Authoring
             oreObjectIds = replaceExisting
                 ? CopyNonEmptyStrings(oreIds)
                 : MergeStringArrays(oreObjectIds, oreIds);
-            waterObjectIds = replaceExisting
-                ? CopyNonEmptyStrings(waterIds)
-                : MergeStringArrays(waterObjectIds, waterIds);
-            notes = "Semantic terrain preset applied. Runtime generation will expand these IDs into scoped generation tables.";
+            notes = "Semantic terrain preset applied.";
         }
 
         public void ApplyMinimalBiomePreset(
@@ -590,7 +327,6 @@ namespace ExpandNullforge.Authoring
             ApplySemanticTerrainPreset(
                 floorIds,
                 wallIds,
-                new string[0],
                 new string[0],
                 true);
             notes = "Generated from the minimal biome preset.";
@@ -689,26 +425,6 @@ namespace ExpandNullforge.Authoring
             }
 
             return false;
-        }
-
-        private static void AddRange<T>(T[] source, List<T> destination)
-            where T : Object
-        {
-            if (source == null || destination == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < source.Length; i++)
-            {
-                T item = source[i];
-                if (item == null)
-                {
-                    continue;
-                }
-
-                destination.Add(item);
-            }
         }
 
         private static void AddStringRange(string[] source, List<string> destination)

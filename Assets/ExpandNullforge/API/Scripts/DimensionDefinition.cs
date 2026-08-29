@@ -9,7 +9,7 @@ namespace ExpandNullforge.Api
         public readonly int2 AbsoluteOrigin;
         public readonly DimensionBounds LocalBounds;
         public readonly int GenerationVersion;
-        public readonly DimensionSpaceKind SpaceKind;
+        public readonly DimensionType Type;
         public readonly DimensionCapabilityFlags Capabilities;
         public readonly DimensionLifecycleState LifecycleState;
 
@@ -25,7 +25,7 @@ namespace ExpandNullforge.Api
                 absoluteOrigin,
                 localBounds,
                 generationVersion,
-                id == DimensionIds.Overworld ? DimensionSpaceKind.Overworld : DimensionSpaceKind.PocketWorld,
+                DimensionType.World,
                 DimensionCapabilityFlags.LocalCoordinates
                     | DimensionCapabilityFlags.AbsoluteCoordinates
                     | DimensionCapabilityFlags.PlayerContext
@@ -37,6 +37,9 @@ namespace ExpandNullforge.Api
         {
         }
 
+        /// <summary>Source-compat bridge for generated bootstraps that predate DimensionType.</summary>
+#pragma warning disable 618
+        [System.Obsolete("Use the DimensionType overload.")]
         public DimensionDefinition(
             string id,
             string displayName,
@@ -46,13 +49,35 @@ namespace ExpandNullforge.Api
             DimensionSpaceKind spaceKind,
             DimensionCapabilityFlags capabilities,
             DimensionLifecycleState lifecycleState)
+            : this(
+                id,
+                displayName,
+                absoluteOrigin,
+                localBounds,
+                generationVersion,
+                DimensionTypeMigration.Normalize((int)spaceKind),
+                capabilities,
+                lifecycleState)
+        {
+        }
+#pragma warning restore 618
+
+        public DimensionDefinition(
+            string id,
+            string displayName,
+            int2 absoluteOrigin,
+            DimensionBounds localBounds,
+            int generationVersion,
+            DimensionType type,
+            DimensionCapabilityFlags capabilities,
+            DimensionLifecycleState lifecycleState)
         {
             Id = id;
             DisplayName = displayName;
             AbsoluteOrigin = absoluteOrigin;
             LocalBounds = localBounds;
             GenerationVersion = generationVersion;
-            SpaceKind = spaceKind;
+            Type = type;
             Capabilities = capabilities;
             LifecycleState = lifecycleState;
         }
@@ -95,7 +120,7 @@ namespace ExpandNullforge.Api
                 AbsoluteOrigin,
                 LocalBounds,
                 GenerationVersion,
-                SpaceKind,
+                Type,
                 Capabilities,
                 lifecycleState);
         }
@@ -113,7 +138,7 @@ namespace ExpandNullforge.Api
                 absoluteOrigin,
                 LocalBounds,
                 GenerationVersion,
-                SpaceKind,
+                Type,
                 Capabilities,
                 LifecycleState);
         }

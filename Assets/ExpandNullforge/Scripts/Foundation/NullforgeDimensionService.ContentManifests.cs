@@ -335,13 +335,9 @@ namespace ExpandNullforge.Foundation
           new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> sceneIds =
           new Dictionary<string, bool>(StringComparer.Ordinal);
-      Dictionary<string, bool> spawnRuleIds =
-          new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> encounterIds =
           new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> generationPassIds =
-          new Dictionary<string, bool>(StringComparer.Ordinal);
-      Dictionary<string, bool> resourceNodeIds =
           new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> progressFlagIds =
           new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -349,13 +345,7 @@ namespace ExpandNullforge.Foundation
           new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> assetReferenceIds =
           new Dictionary<string, bool>(StringComparer.Ordinal);
-      Dictionary<string, bool> environmentProfileIds =
-          new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> biomeIds =
-          new Dictionary<string, bool>(StringComparer.Ordinal);
-      Dictionary<string, bool> tableIds =
-          new Dictionary<string, bool>(StringComparer.Ordinal);
-      Dictionary<string, bool> entryIds =
           new Dictionary<string, bool>(StringComparer.Ordinal);
       Dictionary<string, bool> ownershipKeys =
           new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -374,17 +364,12 @@ namespace ExpandNullforge.Foundation
             StarterIds = starterIds,
             SceneTemplateIds = sceneTemplateIds,
             SceneIds = sceneIds,
-            SpawnRuleIds = spawnRuleIds,
             EncounterIds = encounterIds,
-            ResourceNodeIds = resourceNodeIds,
             ProgressFlagIds = progressFlagIds,
             WorldEventIds = worldEventIds,
             GenerationPassIds = generationPassIds,
             AssetReferenceIds = assetReferenceIds,
-            EnvironmentProfileIds = environmentProfileIds,
             BiomeIds = biomeIds,
-            TableIds = tableIds,
-            EntryIds = entryIds,
             OwnershipKeys = ownershipKeys
           };
       List<DimensionDefinition> manifestDimensions =
@@ -397,8 +382,6 @@ namespace ExpandNullforge.Foundation
           new List<DimensionPortalDefinition>();
       List<DimensionSceneDefinition> acceptedManifestScenes =
           new List<DimensionSceneDefinition>();
-      List<DimensionSpawnRule> acceptedManifestSpawnRules =
-          new List<DimensionSpawnRule>();
       List<DimensionGenerationPassDefinition> acceptedManifestGenerationPasses =
           new List<DimensionGenerationPassDefinition>();
       List<DimensionProgressFlag> acceptedManifestProgressFlags =
@@ -698,35 +681,6 @@ namespace ExpandNullforge.Foundation
             result);
       }
 
-      IReadOnlyList<DimensionSpawnRule> manifestSpawnRules =
-          request.Manifest.SpawnRules ?? new List<DimensionSpawnRule>();
-      for (int i = 0; i < manifestSpawnRules.Count; i++)
-      {
-        DimensionSpawnRule rule = manifestSpawnRules[i];
-        DimensionOperationResult result =
-            ValidateManifestSpawnRule(
-                rule,
-                request.UpdateExisting,
-                dimensionIds,
-                zoneIds,
-                spawnRuleIds,
-                manifestDimensions,
-                manifestZones);
-        if (result.Success)
-        {
-          acceptedManifestSpawnRules.Add(rule);
-        }
-
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            DimensionContentManifestOperationKind.Validate,
-            DimensionContentRecordKind.SpawnRule,
-            rule.RuleId,
-            false,
-            result);
-      }
-
       IReadOnlyList<DimensionEncounterDefinition> manifestEncounters =
           request.Manifest.Encounters ?? new List<DimensionEncounterDefinition>();
       for (int i = 0; i < manifestEncounters.Count; i++)
@@ -739,14 +693,12 @@ namespace ExpandNullforge.Foundation
                 dimensionIds,
                 zoneIds,
                 sceneIds,
-                spawnRuleIds,
                 progressFlagIds,
                 mapMarkerIds,
                 encounterIds,
                 manifestDimensions,
                 manifestZones,
                 acceptedManifestScenes,
-                acceptedManifestSpawnRules,
                 acceptedManifestProgressFlags,
                 acceptedManifestMarkers);
         AddManifestOperation(
@@ -759,8 +711,6 @@ namespace ExpandNullforge.Foundation
             result);
       }
 
-      IReadOnlyList<DimensionResourceNodeDefinition> manifestResourceNodes =
-          request.Manifest.ResourceNodes ?? new List<DimensionResourceNodeDefinition>();
       IReadOnlyList<DimensionGenerationPassDefinition> manifestGenerationPasses =
           request.Manifest.GenerationPasses ?? new List<DimensionGenerationPassDefinition>();
       for (int i = 0; i < manifestGenerationPasses.Count; i++)
@@ -790,30 +740,6 @@ namespace ExpandNullforge.Foundation
             result);
       }
 
-      for (int i = 0; i < manifestResourceNodes.Count; i++)
-      {
-        DimensionResourceNodeDefinition node = manifestResourceNodes[i];
-        DimensionOperationResult result =
-            ValidateManifestResourceNode(
-                node,
-                request.UpdateExisting,
-                dimensionIds,
-                zoneIds,
-                generationPassIds,
-                resourceNodeIds,
-                manifestDimensions,
-                manifestZones,
-                acceptedManifestGenerationPasses);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            DimensionContentManifestOperationKind.Validate,
-            DimensionContentRecordKind.ResourceNode,
-            node.NodeId,
-            false,
-            result);
-      }
-
       IReadOnlyList<DimensionWorldEventDefinition> manifestWorldEvents =
           request.Manifest.WorldEvents ?? new List<DimensionWorldEventDefinition>();
       for (int i = 0; i < manifestWorldEvents.Count; i++)
@@ -836,29 +762,6 @@ namespace ExpandNullforge.Foundation
             DimensionContentManifestOperationKind.Validate,
             DimensionContentRecordKind.WorldEvent,
             worldEvent.EventId,
-            false,
-            result);
-      }
-
-      IReadOnlyList<DimensionEnvironmentProfile> manifestEnvironmentProfiles =
-          request.Manifest.EnvironmentProfiles ?? new List<DimensionEnvironmentProfile>();
-      for (int i = 0; i < manifestEnvironmentProfiles.Count; i++)
-      {
-        DimensionEnvironmentProfile profile = manifestEnvironmentProfiles[i];
-        DimensionOperationResult result =
-            ValidateManifestEnvironmentProfile(
-                profile,
-                request.UpdateExisting,
-                dimensionIds,
-                zoneIds,
-                manifestZones,
-                environmentProfileIds);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            DimensionContentManifestOperationKind.Validate,
-            DimensionContentRecordKind.EnvironmentProfile,
-            profile.ProfileId,
             false,
             result);
       }
@@ -896,7 +799,6 @@ namespace ExpandNullforge.Foundation
                 biome,
                 request.UpdateExisting,
                 dimensionIds,
-                environmentProfileIds,
                 biomeIds);
         AddManifestOperation(
             operations,
@@ -904,49 +806,6 @@ namespace ExpandNullforge.Foundation
             DimensionContentManifestOperationKind.Validate,
             DimensionContentRecordKind.Biome,
             biome.BiomeId,
-            false,
-            result);
-      }
-
-      IReadOnlyList<DimensionGenerationTableDefinition> manifestTables =
-          request.Manifest.GenerationTables ?? new List<DimensionGenerationTableDefinition>();
-      for (int i = 0; i < manifestTables.Count; i++)
-      {
-        DimensionGenerationTableDefinition table = manifestTables[i];
-        DimensionOperationResult result =
-            ValidateManifestGenerationTable(
-                table,
-                request.UpdateExisting,
-                dimensionIds,
-                biomeIds,
-                tableIds);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            DimensionContentManifestOperationKind.Validate,
-            DimensionContentRecordKind.GenerationTable,
-            table.TableId,
-            false,
-            result);
-      }
-
-      IReadOnlyList<DimensionGenerationTableEntryDefinition> manifestEntries =
-          request.Manifest.GenerationTableEntries ?? new List<DimensionGenerationTableEntryDefinition>();
-      for (int i = 0; i < manifestEntries.Count; i++)
-      {
-        DimensionGenerationTableEntryDefinition entry = manifestEntries[i];
-        DimensionOperationResult result =
-            ValidateManifestGenerationTableEntry(
-                entry,
-                request.UpdateExisting,
-                tableIds,
-                entryIds);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            DimensionContentManifestOperationKind.Validate,
-            DimensionContentRecordKind.GenerationTableEntry,
-            entry.EntryId,
             false,
             result);
       }
@@ -1067,6 +926,11 @@ namespace ExpandNullforge.Foundation
         bool success = exists
             ? TryUpdateZoneDefinition(zone, request.Reason, out result)
             : TryRegisterZoneDefinition(zone, out result);
+        // The gates are bound inside register/update now (NullforgeDimensionService.Zones.cs,
+        // BindZoneToGenerationGates), so this loop no longer binds them itself. Manifest apply
+        // was never the only way a zone reaches the catalog, and the bootstrap's own zones came
+        // in the other way — which is how a biome's ore list could be compiled, shipped and
+        // still never gate anything.
         AddManifestOperation(
             operations,
             ref errorCount,
@@ -1276,25 +1140,6 @@ namespace ExpandNullforge.Foundation
             result);
       }
 
-      IReadOnlyList<DimensionSpawnRule> manifestSpawnRules =
-          request.Manifest.SpawnRules ?? new List<DimensionSpawnRule>();
-      for (int i = 0; i < manifestSpawnRules.Count; i++)
-      {
-        DimensionSpawnRule rule = manifestSpawnRules[i];
-        bool exists = spawnRules.ContainsKey(rule.RuleId);
-        bool success = exists
-            ? TryUpdateSpawnRule(rule, request.Reason, out result)
-            : TryRegisterSpawnRule(rule, out result);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
-            DimensionContentRecordKind.SpawnRule,
-            rule.RuleId,
-            success,
-            result);
-      }
-
       IReadOnlyList<DimensionEncounterDefinition> manifestEncounters =
           request.Manifest.Encounters ?? new List<DimensionEncounterDefinition>();
       for (int i = 0; i < manifestEncounters.Count; i++)
@@ -1314,8 +1159,6 @@ namespace ExpandNullforge.Foundation
             result);
       }
 
-      IReadOnlyList<DimensionResourceNodeDefinition> manifestResourceNodes =
-          request.Manifest.ResourceNodes ?? new List<DimensionResourceNodeDefinition>();
       IReadOnlyList<DimensionGenerationPassDefinition> manifestGenerationPasses =
           request.Manifest.GenerationPasses ?? new List<DimensionGenerationPassDefinition>();
       for (int i = 0; i < manifestGenerationPasses.Count; i++)
@@ -1335,23 +1178,6 @@ namespace ExpandNullforge.Foundation
             result);
       }
 
-      for (int i = 0; i < manifestResourceNodes.Count; i++)
-      {
-        DimensionResourceNodeDefinition node = manifestResourceNodes[i];
-        bool exists = resourceNodes.ContainsKey(node.NodeId);
-        bool success = exists
-            ? TryUpdateResourceNode(node, request.Reason, out result)
-            : TryRegisterResourceNode(node, out result);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
-            DimensionContentRecordKind.ResourceNode,
-            node.NodeId,
-            success,
-            result);
-      }
-
       IReadOnlyList<DimensionWorldEventDefinition> manifestWorldEvents =
           request.Manifest.WorldEvents ?? new List<DimensionWorldEventDefinition>();
       for (int i = 0; i < manifestWorldEvents.Count; i++)
@@ -1367,25 +1193,6 @@ namespace ExpandNullforge.Foundation
             exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
             DimensionContentRecordKind.WorldEvent,
             worldEvent.EventId,
-            success,
-            result);
-      }
-
-      IReadOnlyList<DimensionEnvironmentProfile> manifestEnvironmentProfiles =
-          request.Manifest.EnvironmentProfiles ?? new List<DimensionEnvironmentProfile>();
-      for (int i = 0; i < manifestEnvironmentProfiles.Count; i++)
-      {
-        DimensionEnvironmentProfile profile = manifestEnvironmentProfiles[i];
-        bool exists = environmentProfiles.ContainsKey(profile.ProfileId);
-        bool success = exists
-            ? TryUpdateEnvironmentProfile(profile, request.Reason, out result)
-            : TryRegisterEnvironmentProfile(profile, out result);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
-            DimensionContentRecordKind.EnvironmentProfile,
-            profile.ProfileId,
             success,
             result);
       }
@@ -1424,44 +1231,6 @@ namespace ExpandNullforge.Foundation
             exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
             DimensionContentRecordKind.Biome,
             biome.BiomeId,
-            success,
-            result);
-      }
-
-      IReadOnlyList<DimensionGenerationTableDefinition> manifestTables =
-          request.Manifest.GenerationTables ?? new List<DimensionGenerationTableDefinition>();
-      for (int i = 0; i < manifestTables.Count; i++)
-      {
-        DimensionGenerationTableDefinition table = manifestTables[i];
-        bool exists = generationTables.ContainsKey(table.TableId);
-        bool success = exists
-            ? TryUpdateGenerationTable(table, request.Reason, out result)
-            : TryRegisterGenerationTable(table, out result);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
-            DimensionContentRecordKind.GenerationTable,
-            table.TableId,
-            success,
-            result);
-      }
-
-      IReadOnlyList<DimensionGenerationTableEntryDefinition> manifestEntries =
-          request.Manifest.GenerationTableEntries ?? new List<DimensionGenerationTableEntryDefinition>();
-      for (int i = 0; i < manifestEntries.Count; i++)
-      {
-        DimensionGenerationTableEntryDefinition entry = manifestEntries[i];
-        bool exists = generationTableEntries.ContainsKey(entry.EntryId);
-        bool success = exists
-            ? TryUpdateGenerationTableEntry(entry, request.Reason, out result)
-            : TryRegisterGenerationTableEntry(entry, out result);
-        AddManifestOperation(
-            operations,
-            ref errorCount,
-            exists ? DimensionContentManifestOperationKind.Update : DimensionContentManifestOperationKind.Register,
-            DimensionContentRecordKind.GenerationTableEntry,
-            entry.EntryId,
             success,
             result);
       }
@@ -2101,52 +1870,10 @@ namespace ExpandNullforge.Foundation
       return DimensionOperationResult.Ok();
     }
 
-    private DimensionOperationResult ValidateManifestEnvironmentProfile(
-        DimensionEnvironmentProfile profile,
-        bool updateExisting,
-        Dictionary<string, bool> manifestDimensionIds,
-        Dictionary<string, bool> manifestZoneIds,
-        List<DimensionZoneDefinition> manifestZones,
-        Dictionary<string, bool> manifestProfileIds)
-    {
-      if (string.IsNullOrEmpty(profile.ProfileId))
-      {
-        return DimensionOperationResult.Failed("environment-profile-id-empty", "An environment profile id is required.");
-      }
-
-      if (!TryAddManifestId(manifestProfileIds, profile.ProfileId))
-      {
-        return DimensionOperationResult.Failed("manifest-environment-profile-duplicate", "The manifest contains the same environment profile more than once.");
-      }
-
-      if (!updateExisting && environmentProfiles.ContainsKey(profile.ProfileId))
-      {
-        return DimensionOperationResult.Failed("environment-profile-already-registered", "An environment profile with that id is already registered.");
-      }
-
-      if (!DimensionKnownForManifest(profile.DimensionId, manifestDimensionIds))
-      {
-        return DimensionOperationResult.Failed("environment-profile-dimension-not-found", "The environment profile dimension is not registered.");
-      }
-
-      if (!string.IsNullOrEmpty(profile.ZoneId))
-      {
-        DimensionZoneDefinition zone;
-        if (TryGetManifestAwareZone(profile.ZoneId, manifestZoneIds, manifestZones, out zone) &&
-            !string.Equals(zone.DimensionId, profile.DimensionId, StringComparison.Ordinal))
-        {
-          return DimensionOperationResult.Failed("environment-profile-zone-dimension-mismatch", "The environment profile zone belongs to another dimension.");
-        }
-      }
-
-      return DimensionOperationResult.Ok();
-    }
-
     private DimensionOperationResult ValidateManifestBiome(
         DimensionBiomeDefinition biome,
         bool updateExisting,
         Dictionary<string, bool> manifestDimensionIds,
-        Dictionary<string, bool> manifestEnvironmentProfileIds,
         Dictionary<string, bool> manifestBiomeIds)
     {
       if (string.IsNullOrEmpty(biome.BiomeId))
@@ -2168,103 +1895,6 @@ namespace ExpandNullforge.Foundation
           !DimensionKnownForManifest(biome.DimensionId, manifestDimensionIds))
       {
         return DimensionOperationResult.Failed("biome-dimension-not-found", "No dimension with that id is registered.");
-      }
-
-      if (!string.IsNullOrEmpty(biome.EnvironmentProfileId) &&
-          !EnvironmentProfileKnownForManifest(biome.EnvironmentProfileId, manifestEnvironmentProfileIds))
-      {
-        return DimensionOperationResult.Failed("biome-environment-profile-not-found", "No environment profile with that id is registered or declared by this manifest.");
-      }
-
-      return DimensionOperationResult.Ok();
-    }
-
-    private DimensionOperationResult ValidateManifestGenerationTable(
-        DimensionGenerationTableDefinition table,
-        bool updateExisting,
-        Dictionary<string, bool> manifestDimensionIds,
-        Dictionary<string, bool> manifestBiomeIds,
-        Dictionary<string, bool> manifestTableIds)
-    {
-      if (string.IsNullOrEmpty(table.TableId))
-      {
-        return DimensionOperationResult.Failed("generation-table-id-empty", "A generation table id is required.");
-      }
-
-      if (!TryAddManifestId(manifestTableIds, table.TableId))
-      {
-        return DimensionOperationResult.Failed("manifest-generation-table-duplicate", "The manifest contains the same generation table more than once.");
-      }
-
-      if (!updateExisting && generationTables.ContainsKey(table.TableId))
-      {
-        return DimensionOperationResult.Failed("generation-table-already-registered", "A generation table with that id is already registered.");
-      }
-
-      if (!IsValidGenerationTableKind(table.Kind))
-      {
-        return DimensionOperationResult.Failed("generation-table-kind-invalid", "A valid generation table kind is required.");
-      }
-
-      if (!string.IsNullOrEmpty(table.DimensionId) &&
-          !DimensionKnownForManifest(table.DimensionId, manifestDimensionIds))
-      {
-        return DimensionOperationResult.Failed("generation-table-dimension-not-found", "No dimension with that id is registered.");
-      }
-
-      if (!string.IsNullOrEmpty(table.BiomeId) &&
-          !BiomeKnownForManifest(table.BiomeId, manifestBiomeIds))
-      {
-        return DimensionOperationResult.Failed("generation-table-biome-not-found", "No biome with that id is registered or declared by this manifest.");
-      }
-
-      return DimensionOperationResult.Ok();
-    }
-
-    private DimensionOperationResult ValidateManifestGenerationTableEntry(
-        DimensionGenerationTableEntryDefinition entry,
-        bool updateExisting,
-        Dictionary<string, bool> manifestTableIds,
-        Dictionary<string, bool> manifestEntryIds)
-    {
-      if (string.IsNullOrEmpty(entry.EntryId))
-      {
-        return DimensionOperationResult.Failed("generation-table-entry-id-empty", "A generation table entry id is required.");
-      }
-
-      if (!TryAddManifestId(manifestEntryIds, entry.EntryId))
-      {
-        return DimensionOperationResult.Failed("manifest-generation-table-entry-duplicate", "The manifest contains the same generation table entry more than once.");
-      }
-
-      if (!updateExisting && generationTableEntries.ContainsKey(entry.EntryId))
-      {
-        return DimensionOperationResult.Failed("generation-table-entry-already-registered", "A generation table entry with that id is already registered.");
-      }
-
-      if (string.IsNullOrEmpty(entry.TableId))
-      {
-        return DimensionOperationResult.Failed("generation-table-id-empty", "A generation table id is required.");
-      }
-
-      if (!GenerationTableKnownForManifest(entry.TableId, manifestTableIds))
-      {
-        return DimensionOperationResult.Failed("generation-table-not-found", "No generation table with that id is registered or declared by this manifest.");
-      }
-
-      if (string.IsNullOrEmpty(entry.SubjectId))
-      {
-        return DimensionOperationResult.Failed("generation-table-entry-subject-id-empty", "A generation table entry subject id is required.");
-      }
-
-      if (entry.Weight <= 0)
-      {
-        return DimensionOperationResult.Failed("generation-table-entry-weight-invalid", "A generation table entry weight must be greater than zero.");
-      }
-
-      if (entry.MinCount < 0 || entry.MaxCount < entry.MinCount)
-      {
-        return DimensionOperationResult.Failed("generation-table-entry-count-invalid", "A generation table entry count range is invalid.");
       }
 
       return DimensionOperationResult.Ok();
@@ -2419,14 +2049,12 @@ namespace ExpandNullforge.Foundation
         Dictionary<string, bool> manifestDimensionIds,
         Dictionary<string, bool> manifestZoneIds,
         Dictionary<string, bool> manifestSceneIds,
-        Dictionary<string, bool> manifestSpawnRuleIds,
         Dictionary<string, bool> manifestProgressFlagIds,
         Dictionary<string, bool> manifestMarkerIds,
         Dictionary<string, bool> manifestEncounterIds,
         List<DimensionDefinition> manifestDimensions,
         List<DimensionZoneDefinition> manifestZones,
         List<DimensionSceneDefinition> manifestScenes,
-        List<DimensionSpawnRule> manifestSpawnRules,
         List<DimensionProgressFlag> manifestProgressFlags,
         List<DimensionMapMarker> manifestMarkers)
     {
@@ -2476,16 +2104,6 @@ namespace ExpandNullforge.Foundation
         }
       }
 
-      if (!string.IsNullOrEmpty(encounter.SpawnRuleId))
-      {
-        DimensionSpawnRule spawnRule;
-        if (TryGetManifestAwareSpawnRule(encounter.SpawnRuleId, manifestSpawnRuleIds, manifestSpawnRules, out spawnRule) &&
-            !string.Equals(spawnRule.DimensionId, encounter.DimensionId, StringComparison.Ordinal))
-        {
-          return DimensionOperationResult.Failed("encounter-spawn-rule-dimension-mismatch", "The encounter spawn rule belongs to another dimension.");
-        }
-      }
-
       if (!string.IsNullOrEmpty(encounter.MarkerId))
       {
         DimensionMapMarker marker;
@@ -2504,162 +2122,6 @@ namespace ExpandNullforge.Foundation
             !string.Equals(flag.DimensionId, encounter.DimensionId, StringComparison.Ordinal))
         {
           return DimensionOperationResult.Failed("encounter-defeat-flag-dimension-mismatch", "The encounter defeat flag belongs to another dimension.");
-        }
-      }
-
-      return DimensionOperationResult.Ok();
-    }
-
-    private DimensionOperationResult ValidateManifestSpawnRule(
-        DimensionSpawnRule rule,
-        bool updateExisting,
-        Dictionary<string, bool> manifestDimensionIds,
-        Dictionary<string, bool> manifestZoneIds,
-        Dictionary<string, bool> manifestRuleIds,
-        List<DimensionDefinition> manifestDimensions,
-        List<DimensionZoneDefinition> manifestZones)
-    {
-      if (string.IsNullOrEmpty(rule.RuleId))
-      {
-        return DimensionOperationResult.Failed("spawn-rule-id-empty", "A spawn rule id is required.");
-      }
-
-      if (!TryAddManifestId(manifestRuleIds, rule.RuleId))
-      {
-        return DimensionOperationResult.Failed("manifest-spawn-rule-duplicate", "The manifest contains the same spawn rule more than once.");
-      }
-
-      if (!updateExisting && spawnRules.ContainsKey(rule.RuleId))
-      {
-        return DimensionOperationResult.Failed("spawn-rule-already-registered", "A spawn rule with that id is already registered.");
-      }
-
-      if (string.IsNullOrEmpty(rule.SubjectId))
-      {
-        return DimensionOperationResult.Failed("spawn-rule-subject-empty", "A spawn rule subject id is required.");
-      }
-
-      if (!IsValidSpawnSubjectKind(rule.SubjectKind) || rule.SubjectKind == DimensionSpawnSubjectKind.Any)
-      {
-        return DimensionOperationResult.Failed("spawn-rule-kind-invalid", "The spawn rule subject kind is not supported.");
-      }
-
-      if (rule.Weight <= 0)
-      {
-        return DimensionOperationResult.Failed("spawn-rule-weight-invalid", "The spawn rule weight must be greater than zero.");
-      }
-
-      DimensionDefinition dimension;
-      if (!TryGetManifestAwareDimension(rule.DimensionId, manifestDimensionIds, manifestDimensions, out dimension))
-      {
-        return DimensionOperationResult.Failed("spawn-rule-dimension-not-found", "The spawn rule dimension is not registered or declared by this manifest.");
-      }
-
-      if (!string.IsNullOrEmpty(rule.ZoneId))
-      {
-        DimensionZoneDefinition zone;
-        if (TryGetManifestAwareZone(rule.ZoneId, manifestZoneIds, manifestZones, out zone) &&
-            !string.Equals(zone.DimensionId, rule.DimensionId, StringComparison.Ordinal))
-        {
-          return DimensionOperationResult.Failed("spawn-rule-zone-dimension-mismatch", "The spawn rule zone belongs to another dimension.");
-        }
-      }
-
-      if (rule.HasLocalBounds)
-      {
-        if (rule.LocalBounds.Size.x <= 0 || rule.LocalBounds.Size.y <= 0)
-        {
-          return DimensionOperationResult.Failed("spawn-rule-bounds-invalid", "The spawn rule local bounds must have a positive size.");
-        }
-
-        if (!dimension.LocalBounds.Contains(rule.LocalBounds.Min) ||
-            !dimension.LocalBounds.Contains(rule.LocalBounds.MaxExclusive - new int2(1, 1)))
-        {
-          return DimensionOperationResult.Failed("spawn-rule-bounds-out-of-dimension", "The spawn rule bounds are outside the spawn rule dimension.");
-        }
-      }
-
-      return DimensionOperationResult.Ok();
-    }
-
-    private DimensionOperationResult ValidateManifestResourceNode(
-        DimensionResourceNodeDefinition node,
-        bool updateExisting,
-        Dictionary<string, bool> manifestDimensionIds,
-        Dictionary<string, bool> manifestZoneIds,
-        Dictionary<string, bool> manifestGenerationPassIds,
-        Dictionary<string, bool> manifestNodeIds,
-        List<DimensionDefinition> manifestDimensions,
-        List<DimensionZoneDefinition> manifestZones,
-        List<DimensionGenerationPassDefinition> manifestGenerationPasses)
-    {
-      if (string.IsNullOrEmpty(node.NodeId))
-      {
-        return DimensionOperationResult.Failed("resource-node-id-empty", "A resource node id is required.");
-      }
-
-      if (!TryAddManifestId(manifestNodeIds, node.NodeId))
-      {
-        return DimensionOperationResult.Failed("manifest-resource-node-duplicate", "The manifest contains the same resource node more than once.");
-      }
-
-      if (!updateExisting && resourceNodes.ContainsKey(node.NodeId))
-      {
-        return DimensionOperationResult.Failed("resource-node-already-registered", "A resource node with that id is already registered.");
-      }
-
-      if (string.IsNullOrEmpty(node.ResourceId))
-      {
-        return DimensionOperationResult.Failed("resource-node-resource-empty", "A resource id is required.");
-      }
-
-      if (!IsValidResourceNodeKind(node.Kind) || node.Kind == DimensionResourceNodeKind.Any)
-      {
-        return DimensionOperationResult.Failed("resource-node-kind-invalid", "The resource node kind is not supported.");
-      }
-
-      if (node.Weight <= 0)
-      {
-        return DimensionOperationResult.Failed("resource-node-weight-invalid", "The resource node weight must be greater than zero.");
-      }
-
-      DimensionDefinition dimension;
-      if (!TryGetManifestAwareDimension(node.DimensionId, manifestDimensionIds, manifestDimensions, out dimension))
-      {
-        return DimensionOperationResult.Failed("resource-node-dimension-not-found", "The resource node dimension is not registered or declared by this manifest.");
-      }
-
-      if (!string.IsNullOrEmpty(node.ZoneId))
-      {
-        DimensionZoneDefinition zone;
-        if (TryGetManifestAwareZone(node.ZoneId, manifestZoneIds, manifestZones, out zone) &&
-            !string.Equals(zone.DimensionId, node.DimensionId, StringComparison.Ordinal))
-        {
-          return DimensionOperationResult.Failed("resource-node-zone-dimension-mismatch", "The resource node zone belongs to another dimension.");
-        }
-      }
-
-      if (!string.IsNullOrEmpty(node.GenerationPassId))
-      {
-        DimensionGenerationPassDefinition generationPass;
-        if (TryGetManifestAwareGenerationPass(node.GenerationPassId, manifestGenerationPassIds, manifestGenerationPasses, out generationPass) &&
-            !string.Equals(generationPass.DimensionId, node.DimensionId, StringComparison.Ordinal))
-        {
-          return DimensionOperationResult.Failed("resource-node-pass-dimension-mismatch", "The resource node generation pass belongs to another dimension.");
-        }
-      }
-
-      if (node.HasLocalBounds)
-      {
-        if (node.LocalBounds.Size.x <= 0 || node.LocalBounds.Size.y <= 0)
-        {
-          return DimensionOperationResult.Failed("resource-node-bounds-invalid", "The resource node local bounds must have a positive size.");
-        }
-
-        if (!dimension.LocalBounds.Contains(node.LocalBounds.Min) ||
-            !dimension.LocalBounds.Contains(node.LocalBounds.MaxExclusive - new int2(1, 1)))
-        {
-          return DimensionOperationResult.Failed("resource-node-bounds-out-of-dimension", "The resource node bounds are outside the resource node dimension.");
         }
       }
 
@@ -3166,45 +2628,6 @@ namespace ExpandNullforge.Foundation
       return false;
     }
 
-    private bool EnvironmentProfileKnownForManifest(
-        string profileId,
-        Dictionary<string, bool> manifestEnvironmentProfileIds)
-    {
-      if (string.IsNullOrEmpty(profileId))
-      {
-        return false;
-      }
-
-      return environmentProfiles.ContainsKey(profileId) ||
-             manifestEnvironmentProfileIds.ContainsKey(profileId);
-    }
-
-    private bool BiomeKnownForManifest(
-        string biomeId,
-        Dictionary<string, bool> manifestBiomeIds)
-    {
-      if (string.IsNullOrEmpty(biomeId))
-      {
-        return false;
-      }
-
-      return biomes.ContainsKey(biomeId) ||
-             manifestBiomeIds.ContainsKey(biomeId);
-    }
-
-    private bool GenerationTableKnownForManifest(
-        string tableId,
-        Dictionary<string, bool> manifestTableIds)
-    {
-      if (string.IsNullOrEmpty(tableId))
-      {
-        return false;
-      }
-
-      return generationTables.ContainsKey(tableId) ||
-             manifestTableIds.ContainsKey(tableId);
-    }
-
     private bool PortalKnownForManifest(
         string portalId,
         Dictionary<string, bool> manifestPortalIds)
@@ -3290,42 +2713,6 @@ namespace ExpandNullforge.Foundation
       return false;
     }
 
-    private bool TryGetManifestAwareSpawnRule(
-        string ruleId,
-        Dictionary<string, bool> manifestRuleIds,
-        List<DimensionSpawnRule> manifestRules,
-        out DimensionSpawnRule rule)
-    {
-      if (string.IsNullOrEmpty(ruleId))
-      {
-        rule = default(DimensionSpawnRule);
-        return false;
-      }
-
-      if (spawnRules.TryGetValue(ruleId, out rule))
-      {
-        return true;
-      }
-
-      if (!manifestRuleIds.ContainsKey(ruleId))
-      {
-        rule = default(DimensionSpawnRule);
-        return false;
-      }
-
-      for (int i = 0; i < manifestRules.Count; i++)
-      {
-        if (string.Equals(manifestRules[i].RuleId, ruleId, StringComparison.Ordinal))
-        {
-          rule = manifestRules[i];
-          return true;
-        }
-      }
-
-      rule = default(DimensionSpawnRule);
-      return false;
-    }
-
     private bool TryGetManifestAwareProgressFlag(
         string flagId,
         Dictionary<string, bool> manifestFlagIds,
@@ -3359,42 +2746,6 @@ namespace ExpandNullforge.Foundation
       }
 
       flag = default(DimensionProgressFlag);
-      return false;
-    }
-
-    private bool TryGetManifestAwareGenerationPass(
-        string passId,
-        Dictionary<string, bool> manifestPassIds,
-        List<DimensionGenerationPassDefinition> manifestPasses,
-        out DimensionGenerationPassDefinition generationPass)
-    {
-      if (string.IsNullOrEmpty(passId))
-      {
-        generationPass = default(DimensionGenerationPassDefinition);
-        return false;
-      }
-
-      if (generationPasses.TryGetValue(passId, out generationPass))
-      {
-        return true;
-      }
-
-      if (!manifestPassIds.ContainsKey(passId))
-      {
-        generationPass = default(DimensionGenerationPassDefinition);
-        return false;
-      }
-
-      for (int i = 0; i < manifestPasses.Count; i++)
-      {
-        if (string.Equals(manifestPasses[i].PassId, passId, StringComparison.Ordinal))
-        {
-          generationPass = manifestPasses[i];
-          return true;
-        }
-      }
-
-      generationPass = default(DimensionGenerationPassDefinition);
       return false;
     }
 
@@ -3460,12 +2811,8 @@ namespace ExpandNullforge.Foundation
           return manifestContext.SceneIds.ContainsKey(recordId);
         case DimensionContentRecordKind.SceneTemplate:
           return manifestContext.SceneTemplateIds.ContainsKey(recordId);
-        case DimensionContentRecordKind.SpawnRule:
-          return manifestContext.SpawnRuleIds.ContainsKey(recordId);
         case DimensionContentRecordKind.Encounter:
           return manifestContext.EncounterIds.ContainsKey(recordId);
-        case DimensionContentRecordKind.ResourceNode:
-          return manifestContext.ResourceNodeIds.ContainsKey(recordId);
         case DimensionContentRecordKind.ProgressFlag:
           return manifestContext.ProgressFlagIds.ContainsKey(recordId);
         case DimensionContentRecordKind.WorldEvent:
@@ -3482,14 +2829,8 @@ namespace ExpandNullforge.Foundation
           return manifestContext.AnchorIds.ContainsKey(recordId);
         case DimensionContentRecordKind.AssetReference:
           return manifestContext.AssetReferenceIds.ContainsKey(recordId);
-        case DimensionContentRecordKind.EnvironmentProfile:
-          return manifestContext.EnvironmentProfileIds.ContainsKey(recordId);
         case DimensionContentRecordKind.Biome:
           return manifestContext.BiomeIds.ContainsKey(recordId);
-        case DimensionContentRecordKind.GenerationTable:
-          return manifestContext.TableIds.ContainsKey(recordId);
-        case DimensionContentRecordKind.GenerationTableEntry:
-          return manifestContext.EntryIds.ContainsKey(recordId);
         case DimensionContentRecordKind.Item:
         case DimensionContentRecordKind.Recipe:
         case DimensionContentRecordKind.Workbench:

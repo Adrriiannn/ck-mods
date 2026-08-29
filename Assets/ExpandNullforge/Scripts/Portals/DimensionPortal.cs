@@ -34,6 +34,29 @@ namespace ExpandNullforge.Portals
     [SerializeField]
     private DimensionPortalVisual visual;
 
+    /// <summary>
+    /// How one offering slot presents what belongs in it. Written by the generator from the
+    /// portal's access rule; read by the hint patch when the window is open.
+    /// </summary>
+    [System.Serializable]
+    public struct OfferingSlotLook
+    {
+      public string itemName;
+      public int amount;
+      public DimensionPortalOfferingLook look;
+      public Sprite customSprite;
+      [Range(0f, 1f)] public float dimness;
+    }
+
+    [Header("Offering")]
+    [Tooltip("The items this portal asks for — one window slot each. Empty for a portal that asks for nothing.")]
+    [SerializeField]
+    private System.Collections.Generic.List<OfferingSlotLook> offeringSlots =
+        new System.Collections.Generic.List<OfferingSlotLook>();
+
+    /// <summary>The chest-style handler behind the offering window, alive while occupied.</summary>
+    public InventoryHandler offeringHandler { get; private set; }
+
     private float lastUseTime = -1000.0f;
     private bool wasActivePreviousFrame;
     private bool visualStateInitialized;
@@ -108,8 +131,126 @@ namespace ExpandNullforge.Portals
 
     public override void OnFree()
     {
+      ClosePortalOfferingWindow();
+      offeringHandler = null;
       StopInstantAmbience();
       base.OnFree();
+    }
+
+    /// <summary>Whether this portal asks for an offering before it will carry anyone.</summary>
+    /// <remarks>
+    /// The entity answers this, never the serialized look table. The placed entry portal and the
+    /// return portal are two entities sharing one visual prefab, so the look table reaches both
+    /// of them; only the entry portal's entity carries the offering buffer. A return portal that
+    /// opened an offering window would strand the player inside the dimension.
+    /// </remarks>
+    public bool HasOfferingWindow
+    {
+      get
+      {
+        if (!entityExist)
+        {
+          return false;
+        }
+
+        Unity.Entities.DynamicBuffer<DimensionPortalOfferingEntry> entries;
+        return EntityUtility.TryGetBuffer(base.entity, base.world, out entries) &&
+               entries.Length > 0;
+      }
+    }
+
+    /// <summary>The authored look of one offering slot, for the hint patch.</summary>
+    public bool TryGetOfferingLook(int slotIndex, out OfferingSlotLook look)
+    {
+      if (offeringSlots == null || slotIndex < 0 || slotIndex >= offeringSlots.Count)
+      {
+        look = default(OfferingSlotLook);
+        return false;
+      }
+
+      look = offeringSlots[slotIndex];
+      return true;
+    }
+
+    /// <summary>
+    /// Whether every offering slot already holds what it asks for, read from this side's copy of
+    /// the portal's inventory. The server re-checks through the requirement evaluator — this only
+    /// decides whether interacting opens the window or attempts the journey.
+    /// </summary>
+    public bool IsOfferingSatisfiedLocally()
+    {
+      if (!HasOfferingWindow)
+      {
+        return true;
+      }
+
+      if (!entityExist)
+      {
+        return false;
+      }
+
+      Unity.Entities.DynamicBuffer<DimensionPortalOfferingEntry> entries;
+      Unity.Entities.DynamicBuffer<ContainedObjectsBuffer> contents;
+      if (!EntityUtility.TryGetBuffer(base.entity, base.world, out entries) ||
+          !EntityUtility.TryGetBuffer(base.entity, base.world, out contents))
+      {
+        return false;
+      }
+
+      for (int i = 0; i < entries.Length; i++)
+      {
+        ObjectID slotObject = ObjectID.None;
+        int slotAmount = 0;
+        if (i < contents.Length)
+        {
+          slotObject = contents[i].objectData.objectID;
+          slotAmount = contents[i].objectData.amount;
+        }
+
+        if (!DimensionPortalOfferingLedger.SlotSatisfies(
+                slotObject,
+                slotAmount,
+                entries[i].ResolvedObjectId,
+                entries[i].Amount))
+        {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    /// <summary>Opens the offering window — the chest window, wearing the portal's slots.</summary>
+    private void OpenPortalOfferingWindow()
+    {
+      PlayerController player = Manager.main != null ? Manager.main.player : null;
+      if (player == null)
+      {
+        return;
+      }
+
+      if (offeringHandler == null)
+      {
+        offeringHandler = new InventoryHandler(this, base.world, false, 0, false);
+      }
+
+      player.SetActiveInventoryHandler(offeringHandler);
+      Manager.ui.OnChestInventoryOpen();
+    }
+
+    /// <summary>Closes the offering window if it is the one the player has open.</summary>
+    private void ClosePortalOfferingWindow()
+    {
+      Manager manager = Manager.main;
+      PlayerController player = manager != null ? manager.player : null;
+      if (player == null ||
+          offeringHandler == null ||
+          player.activeInventoryHandler != offeringHandler)
+      {
+        return;
+      }
+
+      Manager.ui.HideAllInventoryAndCraftingUI(true);
     }
 
     private bool IsInstantPortalObject()
@@ -234,12 +375,23 @@ namespace ExpandNullforge.Portals
 
       lastUseTime = Time.unscaledTime;
 
+      // A portal that asks for an offering opens its window until the offering is complete —
+      // that is the whole conversation: interact, see the slots and their ghosts, fill them.
+      // Once every slot holds what it asks for, the same interact becomes the journey.
+      if (HasOfferingWindow && !IsOfferingSatisfiedLocally())
+      {
+        OpenPortalOfferingWindow();
+        return;
+      }
+
+      ClosePortalOfferingWindow();
+
       string portalId;
       bool requireGenerated;
       bool allowFallback;
       if (!TryResolvePortalRequest(out portalId, out requireGenerated, out allowFallback))
       {
-        Debug.LogWarning("[ExpandNullforge] Dimension portal interaction ignored because no portal id is configured.");
+        DimensionLog.Problem(DimensionLogChannels.Portal, null, "Dimension portal interaction ignored because no portal id is configured.");
         return;
       }
 
@@ -257,12 +409,12 @@ namespace ExpandNullforge.Portals
 
       if (requestId == 0)
       {
-        Debug.LogWarning("[ExpandNullforge] Dimension portal interaction could not queue a travel request.");
+        DimensionLog.Problem(DimensionLogChannels.Portal, null, "Dimension portal interaction could not queue a travel request.");
         return;
       }
 
       DimensionFrameworkLog.Verbose(
-          "[ExpandNullforge] Dimension portal travel request queued. requestId=" +
+          "Dimension portal travel request queued. requestId=" +
           requestId +
           " portalId=" +
           portalId);
@@ -278,7 +430,9 @@ namespace ExpandNullforge.Portals
 
     public void OnLeavePortal()
     {
-      // Kept as a stable prefab callback. The portal currently has no local exit cleanup.
+      // A player wandering off with the offering window open would carry the portal's window
+      // with them — the same courtesy a chest pays when its opener walks away.
+      ClosePortalOfferingWindow();
     }
 
     public void PlayLocalTeleportEffects()

@@ -20,7 +20,7 @@ namespace ExpandNullforge.Api
         public readonly DimensionBounds CoordinateLocalBounds;
         public readonly DimensionBounds CoordinateAbsoluteBounds;
         public readonly int PaddingTiles;
-        public readonly DimensionSpaceKind SpaceKind;
+        public readonly DimensionType Type;
 
         public DimensionCoordinateDomain(
             string dimensionId,
@@ -28,7 +28,7 @@ namespace ExpandNullforge.Api
             DimensionBounds playableLocalBounds,
             DimensionBounds coordinateLocalBounds,
             int paddingTiles,
-            DimensionSpaceKind spaceKind)
+            DimensionType type)
         {
             IsValid = !string.IsNullOrEmpty(dimensionId);
             DimensionId = dimensionId;
@@ -44,7 +44,7 @@ namespace ExpandNullforge.Api
                     absoluteOrigin + coordinateLocalBounds.Min,
                     absoluteOrigin + coordinateLocalBounds.MaxExclusive);
             PaddingTiles = math.max(0, paddingTiles);
-            SpaceKind = spaceKind;
+            Type = type;
         }
 
         public bool IsOverworld

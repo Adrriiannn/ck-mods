@@ -4,6 +4,7 @@ using Pug.Conversion;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Scripting;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Portals
 {
@@ -26,8 +27,8 @@ namespace ExpandNullforge.Portals
 
       AddComponentData(new DimensionPortalCD
       {
-        PortalId = ToFixed64(authoring.PortalId),
-        TargetDimensionId = ToFixed64(authoring.PreviewTargetDimensionId),
+        PortalId = DimensionFixedStrings.ToFixed64(authoring.PortalId),
+        TargetDimensionId = DimensionFixedStrings.ToFixed64(authoring.PreviewTargetDimensionId),
         TargetLocalX = authoring.PreviewTargetLocalX,
         TargetLocalY = authoring.PreviewTargetLocalY,
         ActivationCooldownSeconds = Mathf.Max(0.0f, authoring.ActivationCooldownSeconds),
@@ -67,24 +68,5 @@ namespace ExpandNullforge.Portals
       EnsureHasBuffer<TriggerExitInteractionBuffer>();
     }
 
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = Math.Min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 }

@@ -16,5 +16,17 @@ namespace ExpandNullforge.Tilesets
 
         /// <summary>True when <see cref="oreItemId"/> is a custom item id from this mod's Resources.</summary>
         public bool isCustomItem;
+
+        /// <summary>
+        /// About how many veins appear per 100 wall tiles of this block. 0 means paint-only:
+        /// the vein exists, but only where the author placed one.
+        /// </summary>
+        public float abundance = 1f;
+
+        /// <summary>Smallest vein, in blocks. Vanilla's veins are small contiguous clumps.</summary>
+        public int veinSizeMin = 3;
+
+        /// <summary>Largest vein, in blocks.</summary>
+        public int veinSizeMax = 6;
     }
 }

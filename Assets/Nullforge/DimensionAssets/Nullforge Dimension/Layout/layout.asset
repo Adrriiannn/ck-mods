@@ -14,20 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   layoutId: layout
   displayName: Dimension Layout
-  layoutKind: 0
-  regions:
-  - regionId: single-biome
-    biomeId: Nullforge:Iceborne
-    zoneId: Nullforge:Iceborne
-    displayName: Single Biome
-    localMin: {x: -8, y: -8}
-    localMaxExclusive: {x: 8, y: 8}
-    priority: 0
-    enabled: 1
+  layoutKind: 4
+  regions: []
   gridLocalMin: {x: -64, y: -64}
   gridCellSize: {x: 64, y: 64}
   gridCells: []
-  radialBandSizeTiles: 64
+  radialBandSizeTiles: 128
   radialRings: []
   biomeMask: {fileID: 0}
   maskBiomeMappings: []
@@ -35,3 +27,6 @@ MonoBehaviour:
   tilesPerMaskPixel: {x: 16, y: 16}
   maskAlphaThreshold: 8
   notes: Generated from the single-biome square preset.
+  layoutVersion: 1
+  driftPolicy: 0
+  publishedVersions: []

@@ -148,6 +148,19 @@ namespace ExpandNullforge.Authoring
             VanillaCenterGlowIntensity;
         [SerializeField] private bool playReadyFlash = true;
 
+        // WHY SEVERAL OF THE FIELDS BELOW WARN CS0414. The Studio and the package utility read and
+        // write these by string through SerializedProperty ("centerParticlesEnabled",
+        // "centerParticleTexture", ...), which the compiler cannot see, so it reports them as
+        // assigned and never used. Their C# accessors were removed because nothing called them;
+        // the fields themselves are load-bearing and every saved profile asset holds them, so a
+        // rename here breaks the Studio and every profile on disk.
+        //
+        // THE WARNINGS ARE SUPPRESSED FOR THE BLOCK, NOT FOR THE FILE. They were the largest run of
+        // framework text in the game's own start-up log, sitting directly above the two lines that
+        // prove the mod compiled, and a reader scrolling past forty of them does not reach the
+        // lines that matter. The pragma is closed again immediately below, so a genuinely dead
+        // field written after this block still warns.
+#pragma warning disable 0414
         [SerializeField] private bool centerParticlesEnabled = true;
         [Tooltip("Automatically derive the moving GatherEnergy flecks from the activated center palette. The exact vanilla particle gradient is preserved while the center palette is vanilla.")]
         [SerializeField] private bool centerParticlesFollowCenterPalette = true;
@@ -192,6 +205,7 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private bool centerParticleTrailsEnabled = true;
         [Min(0.0f)]
         [SerializeField] private float centerParticleTrailLifetimeMultiplier = 1.0f;
+#pragma warning restore 0414
         [Tooltip("Screen-space position relative to the vanilla inner energy effect, in source pixels.")]
         [SerializeField] private Vector2 centerParticleOffsetPixels = Vector2.zero;
         [SerializeField] private Vector2 centerParticleScale = Vector2.one;
@@ -316,11 +330,6 @@ namespace ExpandNullforge.Authoring
         public int CenterIdleAnimationIndex { get { return 0; } }
         public int CenterOpeningAnimationIndex { get { return 1; } }
         public bool PlayReadyFlash { get { return playReadyFlash; } }
-        public bool CenterParticlesEnabled { get { return centerParticlesEnabled; } }
-        public bool CenterParticlesFollowCenterPalette
-        {
-            get { return centerParticlesFollowCenterPalette; }
-        }
         public Color CenterParticleTint { get { return centerParticleTint; } }
         public DataBlockRef<SpriteAsset> CenterSwirlSpriteAsset
         {
@@ -335,8 +344,6 @@ namespace ExpandNullforge.Authoring
         public Color CenterSwirlEmissiveColor { get { return centerSwirlEmissiveColor; } }
         public bool CenterSwirlFlipX { get { return centerSwirlFlipX; } }
         public bool CenterSwirlFlipY { get { return centerSwirlFlipY; } }
-        public Sprite CenterParticleSprite { get { return centerParticleSprite; } }
-        public Texture2D CenterParticleTexture { get { return centerParticleTexture; } }
         public bool ReadyFlashFollowsCenterPalette
         {
             get { return readyFlashFollowsCenterPalette; }
@@ -345,31 +352,6 @@ namespace ExpandNullforge.Authoring
         public float CenterParticleEmissionMultiplier
         {
             get { return Mathf.Max(0.0f, centerParticleEmissionMultiplier); }
-        }
-        public float CenterParticleSizeMultiplier
-        {
-            get { return Mathf.Max(0.0f, centerParticleSizeMultiplier); }
-        }
-        public float CenterParticleLifetimeMultiplier
-        {
-            get { return Mathf.Max(0.0f, centerParticleLifetimeMultiplier); }
-        }
-        public float CenterParticleOrbitSpeedMultiplier
-        {
-            get { return Mathf.Clamp(centerParticleOrbitSpeedMultiplier, -8.0f, 8.0f); }
-        }
-        public float CenterParticleRadialSpeedMultiplier
-        {
-            get { return Mathf.Clamp(centerParticleRadialSpeedMultiplier, -8.0f, 8.0f); }
-        }
-        public float CenterParticleRadiusMultiplier
-        {
-            get { return Mathf.Max(0.0f, centerParticleRadiusMultiplier); }
-        }
-        public bool CenterParticleTrailsEnabled { get { return centerParticleTrailsEnabled; } }
-        public float CenterParticleTrailLifetimeMultiplier
-        {
-            get { return Mathf.Max(0.0f, centerParticleTrailLifetimeMultiplier); }
         }
         public Vector2 CenterParticleOffsetPixels { get { return centerParticleOffsetPixels; } }
         public Vector2 CenterParticleScale { get { return ClampLayerScale(centerParticleScale); } }
@@ -398,7 +380,21 @@ namespace ExpandNullforge.Authoring
         }
         public bool GroundLightEnabled { get { return groundLightEnabled; } }
         public Color GroundLightColor { get { return groundLightColor; } }
-        public float GroundLightIntensity { get { return Mathf.Max(0.0f, groundLightIntensity); } }
+        /// <summary>
+        /// The brightness the light actually holds in game. The vanilla LightFlickerEffect
+        /// overwrites Unity's authored intensity within a frame of the portal spawning, settling
+        /// around the midpoint of the runtime range, so the serialized starting value cannot be
+        /// observed and is not used. The field is kept only so existing assets still load.
+        /// </summary>
+        public float GroundLightIntensity
+        {
+            get
+            {
+                return Mathf.Max(
+                    0.0f,
+                    (GroundLightMinimumIntensity + GroundLightMaximumIntensity) * 0.5f);
+            }
+        }
         public float GroundLightRange { get { return Mathf.Max(0.01f, groundLightRange); } }
         public float GroundLightMinimumIntensity
         {

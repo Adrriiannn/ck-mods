@@ -23,7 +23,8 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private Vector2Int reservedLocalMin = new Vector2Int(-4096, -4096);
         [SerializeField] private Vector2Int reservedLocalMaxExclusive = new Vector2Int(4096, 4096);
         [SerializeField] private int generationVersion = 1;
-        [SerializeField] private DimensionSpaceKind spaceKind = DimensionSpaceKind.PocketWorld;
+        [UnityEngine.Serialization.FormerlySerializedAs("spaceKind")]
+        [SerializeField] private DimensionType dimensionType = DimensionType.World;
         [SerializeField] private DimensionCapabilityFlags capabilities =
             DimensionCapabilityFlags.LocalCoordinates |
             DimensionCapabilityFlags.AbsoluteCoordinates |
@@ -39,22 +40,36 @@ namespace ExpandNullforge.Authoring
             DimensionCapabilityFlags.Multiplayer |
             DimensionCapabilityFlags.CoordinateInterop;
         [SerializeField] private DimensionLayoutTemplateAsset layoutTemplate;
-        [SerializeField] private EnvironmentProfileTemplateAsset[] environmentProfiles = new EnvironmentProfileTemplateAsset[0];
         [SerializeField] private BiomeTemplateAsset[] biomes = new BiomeTemplateAsset[0];
         [SerializeField] private SceneTemplateAsset[] globalScenes = new SceneTemplateAsset[0];
-        [SerializeField] private ResourceNodeTemplateAsset[] globalResourceNodes = new ResourceNodeTemplateAsset[0];
         [SerializeField] private DimensionItemAsset[] globalItems = new DimensionItemAsset[0];
         [SerializeField] private DimensionTilesetAsset[] tilesets = new DimensionTilesetAsset[0];
         [SerializeField] private DimensionRecipeAsset[] globalRecipes = new DimensionRecipeAsset[0];
         [SerializeField] private DimensionWorkbenchAsset[] globalWorkbenches = new DimensionWorkbenchAsset[0];
         [SerializeField] private DimensionLootTableAsset[] globalLootTables = new DimensionLootTableAsset[0];
+        [SerializeField] private DimensionDungeonAsset[] globalDungeons = new DimensionDungeonAsset[0];
+        [SerializeField] private DimensionContainerAsset[] globalContainers = new DimensionContainerAsset[0];
+        [SerializeField] private DimensionPlantAsset[] globalPlants = new DimensionPlantAsset[0];
+        [SerializeField] private DimensionDishAsset[] globalDishes = new DimensionDishAsset[0];
+        [SerializeField] private DimensionWorldObjectAsset[] globalWorldObjects = new DimensionWorldObjectAsset[0];
+        [SerializeField] private DimensionVehicleAsset[] globalVehicles = new DimensionVehicleAsset[0];
+        [SerializeField] private DimensionProjectileAsset[] globalProjectiles = new DimensionProjectileAsset[0];
+        [SerializeField] private DimensionExplosionAsset[] globalExplosions = new DimensionExplosionAsset[0];
         [SerializeField] private DimensionAnimalAsset[] globalAnimals = new DimensionAnimalAsset[0];
         [SerializeField] private DimensionCritterAsset[] globalCritters = new DimensionCritterAsset[0];
+
+        [Tooltip("The pieces of the game itself this mod replaces, rather than adds to.")]
+        [SerializeField] private DimensionNamedAreaAsset[] namedAreas =
+            new DimensionNamedAreaAsset[0];
+        [SerializeField] private DimensionGameSetupAsset[] globalGameSetups =
+            new DimensionGameSetupAsset[0];
+
+        [Tooltip("Stat effects this mod invented — buffs, curses, poisonings the game did not have.")]
+        [SerializeField] private DimensionConditionAsset[] globalConditions =
+            new DimensionConditionAsset[0];
         [SerializeField] private DimensionMobAsset[] globalMobs = new DimensionMobAsset[0];
         [SerializeField] private DimensionBossAsset[] globalBosses = new DimensionBossAsset[0];
-        [SerializeField] private SpawnRuleTemplateAsset[] globalSpawnRules = new SpawnRuleTemplateAsset[0];
         [SerializeField] private GenerationPassTemplateAsset[] globalGenerationPasses = new GenerationPassTemplateAsset[0];
-        [SerializeField] private GenerationTableTemplateAsset[] globalGenerationTables = new GenerationTableTemplateAsset[0];
         [SerializeField] private DimensionPortalAccessRuleAsset[] portalAccessRules = new DimensionPortalAccessRuleAsset[0];
         [SerializeField] private float portalActivationChargeSeconds = 30.0f;
         [SerializeField] private DimensionPortalVisualProfileAsset portalVisualProfile;
@@ -69,6 +84,16 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private string instantPortalActivationSound = "AF_portal_appear";
         [SerializeField] private string instantPortalDeactivationSound = "AF_portal_collapse";
         [SerializeField] private string instantPortalLoopSound = string.Empty;
+
+        [Tooltip("The music that plays while a player is inside this dimension. One of the game's " +
+                 "own music names — MOLD_DUNGEON, MYSTERY, HOME_BASE and the rest — or a name of " +
+                 "your own with your tracks listed below. Leave it empty to let the ground decide, " +
+                 "which is what the game does everywhere else.")]
+        [SerializeField] private string music = string.Empty;
+
+        [Tooltip("Your own tracks, when the music above is a name of your own rather than one of " +
+                 "the game's. Clip keys, the way sounds are named.")]
+        [SerializeField] private string[] musicTracks = new string[0];
 
         public string DimensionId
         {
@@ -120,11 +145,6 @@ namespace ExpandNullforge.Authoring
             get { return layoutTemplate; }
         }
 
-        public EnvironmentProfileTemplateAsset[] EnvironmentProfiles
-        {
-            get { return environmentProfiles ?? new EnvironmentProfileTemplateAsset[0]; }
-        }
-
         public BiomeTemplateAsset[] Biomes
         {
             get { return biomes ?? new BiomeTemplateAsset[0]; }
@@ -133,11 +153,6 @@ namespace ExpandNullforge.Authoring
         public SceneTemplateAsset[] GlobalScenes
         {
             get { return globalScenes ?? new SceneTemplateAsset[0]; }
-        }
-
-        public ResourceNodeTemplateAsset[] GlobalResourceNodes
-        {
-            get { return globalResourceNodes ?? new ResourceNodeTemplateAsset[0]; }
         }
 
         public DimensionItemAsset[] GlobalItems
@@ -165,6 +180,61 @@ namespace ExpandNullforge.Authoring
             get { return globalLootTables ?? new DimensionLootTableAsset[0]; }
         }
 
+        /// <summary>The dungeons this dimension's world generation may grow.</summary>
+        public DimensionDungeonAsset[] GlobalDungeons
+        {
+            get { return globalDungeons ?? new DimensionDungeonAsset[0]; }
+        }
+
+        /// <summary>The containers this dimension defines — chests, stashes, display stands.</summary>
+        public DimensionContainerAsset[] GlobalContainers
+        {
+            get { return globalContainers ?? new DimensionContainerAsset[0]; }
+        }
+
+        /// <summary>The crops this dimension defines. Each one emits a seed, a plant and a ripe plant.</summary>
+        public DimensionPlantAsset[] GlobalPlants
+        {
+            get { return globalPlants ?? new DimensionPlantAsset[0]; }
+        }
+
+        /// <summary>
+        /// The kinds of dish this dimension adds to the cooking pot.
+        /// </summary>
+        /// <remarks>
+        /// One entry per family, not per pair and not per quality. The pot has no recipe list: every
+        /// pair of ingredients is a recipe, and the dish that comes out is whichever family the
+        /// leading ingredient names. Each family here becomes three items — ordinary, rare and epic.
+        /// </remarks>
+        public DimensionDishAsset[] GlobalDishes
+        {
+            get { return globalDishes ?? new DimensionDishAsset[0]; }
+        }
+
+        /// <summary>The placed objects that are not containers, stations, plants or creatures.</summary>
+        public DimensionWorldObjectAsset[] GlobalWorldObjects
+        {
+            get { return globalWorldObjects ?? new DimensionWorldObjectAsset[0]; }
+        }
+
+        /// <summary>The things this dimension lets a player ride.</summary>
+        public DimensionVehicleAsset[] GlobalVehicles
+        {
+            get { return globalVehicles ?? new DimensionVehicleAsset[0]; }
+        }
+
+        /// <summary>What this dimension's weapons and creatures fire.</summary>
+        public DimensionProjectileAsset[] GlobalProjectiles
+        {
+            get { return globalProjectiles ?? new DimensionProjectileAsset[0]; }
+        }
+
+        /// <summary>The blasts this dimension's bombs turn into.</summary>
+        public DimensionExplosionAsset[] GlobalExplosions
+        {
+            get { return globalExplosions ?? new DimensionExplosionAsset[0]; }
+        }
+
         public DimensionAnimalAsset[] GlobalAnimals
         {
             get { return globalAnimals ?? new DimensionAnimalAsset[0]; }
@@ -173,6 +243,23 @@ namespace ExpandNullforge.Authoring
         public DimensionCritterAsset[] GlobalCritters
         {
             get { return globalCritters ?? new DimensionCritterAsset[0]; }
+        }
+
+        /// <summary>The pieces of the game itself this mod replaces, rather than adds to.</summary>
+        public DimensionNamedAreaAsset[] NamedAreas
+        {
+            get { return namedAreas ?? new DimensionNamedAreaAsset[0]; }
+        }
+
+        public DimensionGameSetupAsset[] GlobalGameSetups
+        {
+            get { return globalGameSetups ?? new DimensionGameSetupAsset[0]; }
+        }
+
+        /// <summary>Stat effects this mod invented.</summary>
+        public DimensionConditionAsset[] GlobalConditions
+        {
+            get { return globalConditions ?? new DimensionConditionAsset[0]; }
         }
 
         public DimensionMobAsset[] GlobalMobs
@@ -185,19 +272,9 @@ namespace ExpandNullforge.Authoring
             get { return globalBosses ?? new DimensionBossAsset[0]; }
         }
 
-        public SpawnRuleTemplateAsset[] GlobalSpawnRules
-        {
-            get { return globalSpawnRules ?? new SpawnRuleTemplateAsset[0]; }
-        }
-
         public GenerationPassTemplateAsset[] GlobalGenerationPasses
         {
             get { return globalGenerationPasses ?? new GenerationPassTemplateAsset[0]; }
-        }
-
-        public GenerationTableTemplateAsset[] GlobalGenerationTables
-        {
-            get { return globalGenerationTables ?? new GenerationTableTemplateAsset[0]; }
         }
 
         public DimensionPortalAccessRuleAsset[] PortalAccessRules
@@ -251,6 +328,50 @@ namespace ExpandNullforge.Authoring
             get { return instantPortalLoopSound ?? string.Empty; }
         }
 
+        /// <summary>
+        /// What this dimension sounds like, or empty to leave the music to the ground underfoot.
+        /// </summary>
+        /// <remarks>
+        /// Either one of the game's own <c>MusicRosterType</c> names or a name of the author's own
+        /// backed by <see cref="MusicTracks"/>. Both are answered the same way at load, because the
+        /// framework's own rosters are appended to the game's list and are picked by exactly the
+        /// same lookup — so an author never has to know which kind they typed.
+        /// </remarks>
+        public string Music
+        {
+            get { return music ?? string.Empty; }
+        }
+
+        /// <summary>The author's own tracks, when <see cref="Music"/> names a roster of their own.</summary>
+        public string[] MusicTracks
+        {
+            get { return musicTracks ?? new string[0]; }
+        }
+
+        /// <summary>Whether the music name is one this mod has to supply the tracks for.</summary>
+        /// <remarks>
+        /// The generator answers this by asking whether the name parses as one of the game's
+        /// rosters, which it cannot do from here — the enum lives in the game assembly and this
+        /// asset is read in contexts that have no game loaded. So this only reports that TRACKS
+        /// were listed, and the emitter decides what to do with them.
+        /// </remarks>
+        public bool HasOwnMusicTracks
+        {
+            get
+            {
+                string[] tracks = MusicTracks;
+                for (int i = 0; i < tracks.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(tracks[i]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
         public void SetPortalSoundSettings(
             string newPlacedActivationSound,
             int newInstantSoundMode,
@@ -284,7 +405,7 @@ namespace ExpandNullforge.Authoring
             string newContentPackVersion,
             string newContentPackAuthor,
             int newMinimumApiVersion,
-            DimensionSpaceKind newSpaceKind,
+            DimensionType newDimensionType,
             DimensionCapabilityFlags newCapabilities)
         {
             dimensionId = newDimensionId ?? string.Empty;
@@ -295,7 +416,7 @@ namespace ExpandNullforge.Authoring
             contentPackVersion = newContentPackVersion ?? string.Empty;
             contentPackAuthor = newContentPackAuthor ?? string.Empty;
             minimumApiVersion = Mathf.Max(1, newMinimumApiVersion);
-            spaceKind = newSpaceKind;
+            dimensionType = newDimensionType;
             capabilities = newCapabilities;
         }
 
@@ -343,11 +464,6 @@ namespace ExpandNullforge.Authoring
             layoutTemplate = template;
         }
 
-        public void SetEnvironmentProfiles(IReadOnlyList<EnvironmentProfileTemplateAsset> assets)
-        {
-            environmentProfiles = CopyObjects(assets);
-        }
-
         public void SetBiomes(IReadOnlyList<BiomeTemplateAsset> assets)
         {
             biomes = CopyObjects(assets);
@@ -356,11 +472,6 @@ namespace ExpandNullforge.Authoring
         public void SetGlobalScenes(IReadOnlyList<SceneTemplateAsset> assets)
         {
             globalScenes = CopyObjects(assets);
-        }
-
-        public void SetGlobalResourceNodes(IReadOnlyList<ResourceNodeTemplateAsset> assets)
-        {
-            globalResourceNodes = CopyObjects(assets);
         }
 
         public void SetGlobalItems(IReadOnlyList<DimensionItemAsset> assets)
@@ -398,6 +509,16 @@ namespace ExpandNullforge.Authoring
             globalCritters = CopyObjects(assets);
         }
 
+        public void SetGlobalGameSetups(IReadOnlyList<DimensionGameSetupAsset> assets)
+        {
+            globalGameSetups = CopyObjects(assets);
+        }
+
+        public void SetGlobalConditions(IReadOnlyList<DimensionConditionAsset> assets)
+        {
+            globalConditions = CopyObjects(assets);
+        }
+
         public void SetGlobalMobs(IReadOnlyList<DimensionMobAsset> assets)
         {
             globalMobs = CopyObjects(assets);
@@ -408,19 +529,9 @@ namespace ExpandNullforge.Authoring
             globalBosses = CopyObjects(assets);
         }
 
-        public void SetGlobalSpawnRules(IReadOnlyList<SpawnRuleTemplateAsset> assets)
-        {
-            globalSpawnRules = CopyObjects(assets);
-        }
-
         public void SetGlobalGenerationPasses(IReadOnlyList<GenerationPassTemplateAsset> assets)
         {
             globalGenerationPasses = CopyObjects(assets);
-        }
-
-        public void SetGlobalGenerationTables(IReadOnlyList<GenerationTableTemplateAsset> assets)
-        {
-            globalGenerationTables = CopyObjects(assets);
         }
 
         public void SetPortalAccessRules(IReadOnlyList<DimensionPortalAccessRuleAsset> assets)
@@ -459,7 +570,8 @@ namespace ExpandNullforge.Authoring
                 new int2(absoluteOrigin.x, absoluteOrigin.y),
                 resolvedReservedLocalBounds,
                 generationVersion,
-                spaceKind,
+                // Normalize guards the one YAML case FormerlySerializedAs cannot: a raw 0.
+                DimensionTypeMigration.Normalize((int)dimensionType),
                 NormalizeRuntimeCapabilities(capabilities),
                 DimensionLifecycleState.Registered);
         }

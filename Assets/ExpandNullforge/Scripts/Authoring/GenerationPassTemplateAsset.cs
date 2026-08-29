@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace ExpandNullforge.Authoring
 {
-    [CreateAssetMenu(menuName = "Dimension Framework/Generation Pass Template")]
+    [CreateAssetMenu(menuName = "Dimensions API/Generation Pass Template")]
     public sealed class GenerationPassTemplateAsset : ScriptableObject
     {
         [SerializeField] private string passId = "terrain";

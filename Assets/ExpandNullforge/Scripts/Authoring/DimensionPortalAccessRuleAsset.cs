@@ -30,16 +30,48 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private int amount;
         [SerializeField] private bool consumeOnTravel;
 
+        [Tooltip("How the empty offering slot shows what belongs in it: the item's own dimmed ghost with its full tooltip, a black mystery silhouette with no tooltip, or a sprite of your own.")]
+        [SerializeField] private Portals.DimensionPortalOfferingLook slotLook;
+
+        [Tooltip("Your own hint art, when the look above says so.")]
+        [SerializeField] private Sprite slotSprite;
+
+        [Tooltip("How faint the hint is, 0 to 1. 0 keeps the game's own dimming.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float slotDimness;
+
         public DimensionPortalRequiredItemTemplate(
             string itemId,
             string displayName,
             int amount,
             bool consumeOnTravel)
+            : this(
+                itemId,
+                displayName,
+                amount,
+                consumeOnTravel,
+                Portals.DimensionPortalOfferingLook.GhostOfTheItem,
+                null,
+                0f)
+        {
+        }
+
+        public DimensionPortalRequiredItemTemplate(
+            string itemId,
+            string displayName,
+            int amount,
+            bool consumeOnTravel,
+            Portals.DimensionPortalOfferingLook slotLook,
+            Sprite slotSprite,
+            float slotDimness)
         {
             this.itemId = itemId ?? string.Empty;
             this.displayName = displayName ?? string.Empty;
             this.amount = Mathf.Max(1, amount);
             this.consumeOnTravel = consumeOnTravel;
+            this.slotLook = slotLook;
+            this.slotSprite = slotSprite;
+            this.slotDimness = Mathf.Clamp01(slotDimness);
         }
 
         public string ItemId
@@ -60,6 +92,24 @@ namespace ExpandNullforge.Authoring
         public bool ConsumeOnTravel
         {
             get { return consumeOnTravel; }
+        }
+
+        /// <summary>How the empty offering slot shows what belongs in it.</summary>
+        public Portals.DimensionPortalOfferingLook SlotLook
+        {
+            get { return slotLook; }
+        }
+
+        /// <summary>The author's own hint art, when the look asks for one.</summary>
+        public Sprite SlotSprite
+        {
+            get { return slotSprite; }
+        }
+
+        /// <summary>How faint the hint is. 0 keeps the game's own dimming.</summary>
+        public float SlotDimness
+        {
+            get { return Mathf.Clamp01(slotDimness); }
         }
     }
 
@@ -142,8 +192,17 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private bool craftable = true;
         [Tooltip("Object id/name of the crafting station (e.g. WoodenWorkBench). Empty = Wooden Workbench.")]
         [SerializeField] private string craftingStationObjectId = string.Empty;
-        [Tooltip("V1 only: the placed portal can be found/spawned in the vanilla world.")]
+        [Tooltip("V1 only: the game grows a one-tile clearing holding this portal in the Overworld, " +
+                 "so a player can find one without crafting it.")]
         [SerializeField] private bool generatedInWorld;
+        [Tooltip("Which of the game's own Overworld biomes the portal may be found in. Only the " +
+                 "game's biome names work here: the Overworld never samples a custom biome, so a " +
+                 "custom name could never match anything.")]
+        [SerializeField] private string[] worldBiomeNames = new string[0];
+        [Tooltip("How many of these the game may grow in one world.")]
+        [SerializeField] private int worldMaxOccurrences = 1;
+        [Tooltip("How far from the Core the nearest one may be, in tiles.")]
+        [SerializeField] private int worldMinDistanceFromCore;
         [Tooltip("Can be dropped by mobs/bosses (writes into their loot table).")]
         [SerializeField] private bool droppable;
         [SerializeField] private DimensionPortalDropTarget[] dropTargets = new DimensionPortalDropTarget[0];
@@ -164,6 +223,23 @@ namespace ExpandNullforge.Authoring
         public string CraftingStationObjectId => craftingStationObjectId ?? string.Empty;
 
         public bool GeneratedInWorld => generatedInWorld;
+
+        /// <summary>
+        /// The game's own Overworld biomes this portal may be found in.
+        /// </summary>
+        /// <remarks>
+        /// Names, not ids, and vanilla names only. The game's scene picker compares the sampled
+        /// biome against this list by exact value with no wildcard, and the Overworld sampler only
+        /// ever produces the game's own biomes — so a custom biome named here would register
+        /// cleanly and then never match a single cell.
+        /// </remarks>
+        public string[] WorldBiomeNames => worldBiomeNames ?? new string[0];
+
+        /// <summary>How many the game may grow per world. Below one is treated as one.</summary>
+        public int WorldMaxOccurrences => worldMaxOccurrences < 1 ? 1 : worldMaxOccurrences;
+
+        /// <summary>How far from the Core the nearest one may be, in tiles.</summary>
+        public int WorldMinDistanceFromCore => worldMinDistanceFromCore < 0 ? 0 : worldMinDistanceFromCore;
 
         public bool Droppable => droppable;
 
@@ -203,6 +279,25 @@ namespace ExpandNullforge.Authoring
             dropTargets = CopyDropTargets(newDropTargets);
             portalItemObjectId = newPortalItemObjectId ?? string.Empty;
             itemPortalDurationSeconds = Mathf.Max(1f, newItemPortalDurationSeconds);
+        }
+
+        /// <summary>
+        /// Sets where in the game's own world the placed portal may be found.
+        /// </summary>
+        /// <remarks>
+        /// Separate from <see cref="ConfigureVersionSettings"/> so turning the find-it-in-the-world
+        /// toggle on or off never disturbs the crafting and drop settings beside it.
+        /// </remarks>
+        public void ConfigureWorldSpawn(
+            bool newGeneratedInWorld,
+            IReadOnlyList<string> newWorldBiomeNames,
+            int newWorldMaxOccurrences,
+            int newWorldMinDistanceFromCore)
+        {
+            generatedInWorld = newGeneratedInWorld;
+            worldBiomeNames = CopyNames(newWorldBiomeNames);
+            worldMaxOccurrences = Mathf.Max(1, newWorldMaxOccurrences);
+            worldMinDistanceFromCore = Mathf.Max(0, newWorldMinDistanceFromCore);
         }
 
         /// <summary>Enables/disables this version. At least one of V1/V2 must stay enabled (caller-enforced).</summary>
@@ -425,6 +520,22 @@ namespace ExpandNullforge.Authoring
             for (int i = 0; i < source.Count; i++)
             {
                 copy[i] = source[i];
+            }
+
+            return copy;
+        }
+
+        private static string[] CopyNames(IReadOnlyList<string> source)
+        {
+            if (source == null || source.Count == 0)
+            {
+                return new string[0];
+            }
+
+            string[] copy = new string[source.Count];
+            for (int i = 0; i < source.Count; i++)
+            {
+                copy[i] = source[i] ?? string.Empty;
             }
 
             return copy;

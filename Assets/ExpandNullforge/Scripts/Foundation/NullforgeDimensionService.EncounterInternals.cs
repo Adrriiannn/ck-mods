@@ -50,17 +50,6 @@ namespace ExpandNullforge.Foundation
         }
       }
 
-      if (!string.IsNullOrEmpty(encounter.SpawnRuleId))
-      {
-        DimensionSpawnRule spawnRule;
-        if (spawnRules.TryGetValue(encounter.SpawnRuleId, out spawnRule) &&
-            !string.Equals(spawnRule.DimensionId, encounter.DimensionId, StringComparison.Ordinal))
-        {
-          result = DimensionOperationResult.Failed("encounter-spawn-rule-dimension-mismatch", "The encounter spawn rule belongs to another dimension.");
-          return false;
-        }
-      }
-
       if (!string.IsNullOrEmpty(encounter.MarkerId))
       {
         DimensionMapMarker marker;
@@ -172,7 +161,6 @@ namespace ExpandNullforge.Foundation
              string.Equals(a.DimensionId, b.DimensionId, StringComparison.Ordinal) &&
              string.Equals(a.ZoneId, b.ZoneId, StringComparison.Ordinal) &&
              string.Equals(a.SceneId, b.SceneId, StringComparison.Ordinal) &&
-             string.Equals(a.SpawnRuleId, b.SpawnRuleId, StringComparison.Ordinal) &&
              string.Equals(a.MarkerId, b.MarkerId, StringComparison.Ordinal) &&
              string.Equals(a.DefeatFlagId, b.DefeatFlagId, StringComparison.Ordinal) &&
              a.Kind == b.Kind &&

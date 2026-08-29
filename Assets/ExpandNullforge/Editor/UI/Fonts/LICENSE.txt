@@ -1,0 +1,25 @@
+Fonts bundled with the Dimensions API editor UI
+================================================
+
+All three families are licensed under the SIL Open Font License, Version 1.1,
+which permits bundling and redistribution with this framework.
+
+  Bricolage Grotesque  (c) The Bricolage Grotesque Project Authors
+      https://github.com/ateliertriay/bricolage
+      Used for: titles, the wordmark, and stage names.
+
+  Hanken Grotesk       (c) The Hanken Grotesk Project Authors
+      https://github.com/marcologous/Hanken-Grotesk
+      Used for: body text and every control label.
+
+  Spline Sans Mono     (c) The Spline Sans Mono Project Authors
+      https://github.com/SorkinType/SplineSansMono
+      Used for: ids, counts, coordinates, and anything exact.
+
+The full OFL text is available at https://openfontlicense.org/.
+
+Under the OFL these files may be used, studied, modified and redistributed
+freely, provided they are not sold by themselves and that any derivative fonts
+carry a different name. They are bundled so the editor renders identically on
+every machine rather than falling back to whatever the operating system
+happens to provide.

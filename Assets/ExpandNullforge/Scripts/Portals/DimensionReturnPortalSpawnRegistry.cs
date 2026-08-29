@@ -20,6 +20,12 @@ namespace ExpandNullforge.Portals
     public readonly bool Interactable;
     public readonly string DisplayName;
 
+    /// <summary>
+    /// The portal only spawns once its dimension's victory arms it — the Arena bundle.
+    /// False keeps today's always-on guarantee, which is what every existing definition gets.
+    /// </summary>
+    public readonly bool ArmedByVictory;
+
     public DimensionReturnPortalSpawnDefinition(
         string portalId,
         string sourceDimensionId,
@@ -32,7 +38,8 @@ namespace ExpandNullforge.Portals
         bool requireGeneratedAreaOnUse,
         bool allowFallbackPositionOnUse,
         string displayName,
-        bool interactable = true)
+        bool interactable = true,
+        bool armedByVictory = false)
     {
       PortalId = portalId ?? string.Empty;
       SourceDimensionId = sourceDimensionId ?? string.Empty;
@@ -46,6 +53,7 @@ namespace ExpandNullforge.Portals
       AllowFallbackPositionOnUse = allowFallbackPositionOnUse;
       Interactable = interactable;
       DisplayName = string.IsNullOrEmpty(displayName) ? PortalId : displayName;
+      ArmedByVictory = armedByVictory;
     }
 
     public bool IsValid
@@ -109,6 +117,52 @@ namespace ExpandNullforge.Portals
 
       definition = Definitions[index];
       return true;
+    }
+
+    /// <summary>Whether any return portal leads out of this dimension.</summary>
+    public static bool HasDefinitionForSource(string dimensionId)
+    {
+      for (int i = 0; i < Definitions.Count; i++)
+      {
+        if (string.Equals(Definitions[i].SourceDimensionId, dimensionId, StringComparison.Ordinal))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // ---- victory arming (Arena) ----
+
+    private static readonly HashSet<string> ArmedPortalIds =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Lets a victory-armed portal spawn. Session state; the flag store persists it.</summary>
+    public static void Arm(string portalId)
+    {
+      if (!string.IsNullOrEmpty(portalId))
+      {
+        ArmedPortalIds.Add(portalId);
+      }
+    }
+
+    public static void Disarm(string portalId)
+    {
+      if (!string.IsNullOrEmpty(portalId))
+      {
+        ArmedPortalIds.Remove(portalId);
+      }
+    }
+
+    public static bool IsArmed(string portalId)
+    {
+      return !string.IsNullOrEmpty(portalId) && ArmedPortalIds.Contains(portalId);
+    }
+
+    public static void DisarmAll()
+    {
+      ArmedPortalIds.Clear();
     }
   }
 }

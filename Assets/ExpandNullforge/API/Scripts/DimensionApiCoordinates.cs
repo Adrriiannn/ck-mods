@@ -7,6 +7,13 @@ namespace ExpandNullforge.Api
     /// Convenience helpers for mods that want to be dimension-aware without
     /// depending on the concrete ExpandNullforge runtime implementation.
     /// </summary>
+    /// <remarks>
+    /// NOTHING IN THIS FRAMEWORK CALLS ANY OF THESE. The whole class has no reference outside its
+    /// own file: it exists for consumer mods, and the framework reaches the service directly. That
+    /// makes it look dead to every reference check, so the note is here rather than being
+    /// rediscovered — these are kept on purpose, and removing one is a breaking change for a
+    /// consumer, not a tidy-up.
+    /// </remarks>
     public static class DimensionApiCoordinates
     {
         public static bool TryGetContextForAbsolute(

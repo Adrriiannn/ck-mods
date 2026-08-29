@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using ExpandNullforge.Api;
 
@@ -19,57 +19,6 @@ namespace ExpandNullforge.Foundation
     private void AddMapLayerInternal(DimensionMapLayerDefinition layer)
     {
       mapLayers[layer.LayerId] = layer;
-    }
-
-    private void AddZoneDefinitionInternal(DimensionZoneDefinition zone)
-    {
-      zoneDefinitions[zone.ZoneId] = zone;
-    }
-
-    private void AddEnvironmentProfileInternal(DimensionEnvironmentProfile profile)
-    {
-      environmentProfiles[profile.ProfileId] = profile;
-    }
-
-    private void AddBiomeInternal(DimensionBiomeDefinition biome)
-    {
-      biomes[biome.BiomeId] = biome;
-    }
-
-    private void AddSceneTemplateInternal(DimensionSceneTemplateDefinition template)
-    {
-      sceneTemplates[template.TemplateId] = template;
-    }
-
-    private void AddSceneInternal(DimensionSceneDefinition scene)
-    {
-      scenes[scene.SceneId] = scene;
-    }
-
-    private void AddResourceNodeInternal(DimensionResourceNodeDefinition node)
-    {
-      resourceNodes[node.NodeId] = node;
-    }
-
-    private void AddSpawnRuleInternal(DimensionSpawnRule rule)
-    {
-      spawnRules[rule.RuleId] = rule;
-    }
-
-    private static void AddContentReadinessRequirement(
-        List<DimensionContentReadinessRequirement> requirements,
-        DimensionContentRecordKind recordKind,
-        string recordId,
-        string displayName)
-    {
-      requirements.Add(
-          new DimensionContentReadinessRequirement(
-              recordKind,
-              recordId,
-              displayName,
-              true,
-              BuiltInFrameworkContentPack.ContentPackId,
-              true));
     }
 
     private void CheckContentReadinessRequirement(
@@ -186,6 +135,11 @@ namespace ExpandNullforge.Foundation
 
       travelRequirementEvaluators[BuiltInProgressFlagRequirementEvaluatorId] =
           new ProgressFlagTravelRequirementEvaluator(this);
+
+      // Item requirements are answered from the portal's own offering slots. Registered here so
+      // an item-gated portal can never again refuse travel for want of an evaluator.
+      travelRequirementEvaluators[Portals.DimensionPortalOfferingRequirementEvaluator.EvaluatorId] =
+          new Portals.DimensionPortalOfferingRequirementEvaluator();
       travelRequirementEvaluatorOrderDirty = true;
     }
 
@@ -207,6 +161,10 @@ namespace ExpandNullforge.Foundation
           DimensionContentRecordKind.TravelRequirementEvaluator,
           BuiltInProgressFlagRequirementEvaluatorId,
           "Built-in progress-flag travel requirement evaluator");
+      BindBuiltInContentOwnership(
+          DimensionContentRecordKind.TravelRequirementEvaluator,
+          Portals.DimensionPortalOfferingRequirementEvaluator.EvaluatorId,
+          "Built-in portal-offering travel requirement evaluator");
     }
 
     private void BindBuiltInContentOwnership(

@@ -41,49 +41,100 @@ namespace ExpandNullforge.Tilesets
             public int Age;
         }
 
-        private static readonly Dictionary<int2, PendingSubMap> Pending = new Dictionary<int2, PendingSubMap>();
+        /// <summary>
+        /// Pending records, bucketed by world.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE WORLD KEY IS NOT OPTIONAL. The capture and restore systems are installed into BOTH the
+        /// server and the client world, because both deserialize submaps and both hit the same gate.
+        /// A host runs the two side by side and they see the SAME submap positions. Keyed by position
+        /// alone, that is three separate bugs sharing one dictionary:
+        /// </para>
+        /// <list type="bullet">
+        /// <item>the second world's capture overwrites the first world's record for that position;</item>
+        /// <item><see cref="TryClaim"/> REMOVES what it returns, so whichever restore runs first
+        /// consumes the record and the other world silently keeps none of its custom tiles — and
+        /// which one wins is whatever order the two worlds happen to tick in;</item>
+        /// <item>ageing ran once per world per frame, so records expired in half the intended passes.</item>
+        /// </list>
+        /// <para>
+        /// Bucketing by <c>World.SequenceNumber</c> (unique per world instance and never reused) makes
+        /// each world's rescue completely independent, which is what it always meant to be.
+        /// </para>
+        /// </remarks>
+        private static readonly Dictionary<ulong, Dictionary<int2, PendingSubMap>> PendingByWorld =
+            new Dictionary<ulong, Dictionary<int2, PendingSubMap>>();
 
-        internal static bool HasPending
+        private static ulong KeyOf(World world)
         {
-            get { return Pending.Count > 0; }
+            // A null world would mean a system ticked without one, which cannot happen; bucket 0 keeps
+            // that case self-consistent rather than throwing during world teardown.
+            return world != null ? world.SequenceNumber : 0UL;
+        }
+
+        internal static bool HasPendingFor(World world)
+        {
+            Dictionary<int2, PendingSubMap> bucket;
+            return PendingByWorld.TryGetValue(KeyOf(world), out bucket) && bucket.Count > 0;
         }
 
         /// <summary>Remembers one submap's custom layers, replacing any earlier record for it.</summary>
-        internal static void Record(int2 position, List<SubMapLayer> layers)
+        internal static void Record(World world, int2 position, List<SubMapLayer> layers)
         {
             if (layers == null || layers.Count == 0)
             {
                 return;
             }
 
-            Pending[position] = new PendingSubMap { Layers = layers, Age = 0 };
+            ulong key = KeyOf(world);
+            Dictionary<int2, PendingSubMap> bucket;
+            if (!PendingByWorld.TryGetValue(key, out bucket))
+            {
+                bucket = new Dictionary<int2, PendingSubMap>();
+                PendingByWorld[key] = bucket;
+            }
+
+            bucket[position] = new PendingSubMap { Layers = layers, Age = 0 };
         }
 
         /// <summary>Claims a submap's record, removing it. False when nothing was held for it.</summary>
-        internal static bool TryClaim(int2 position, out List<SubMapLayer> layers)
+        internal static bool TryClaim(World world, int2 position, out List<SubMapLayer> layers)
         {
-            PendingSubMap pending;
-            if (!Pending.TryGetValue(position, out pending))
+            layers = null;
+
+            Dictionary<int2, PendingSubMap> bucket;
+            if (!PendingByWorld.TryGetValue(KeyOf(world), out bucket))
             {
-                layers = null;
                 return false;
             }
 
-            Pending.Remove(position);
+            PendingSubMap pending;
+            if (!bucket.TryGetValue(position, out pending))
+            {
+                return false;
+            }
+
+            bucket.Remove(position);
             layers = pending.Layers;
             return true;
         }
 
-        /// <summary>Ages every unclaimed record and discards the ones whose submap never came back.</summary>
-        internal static void AgePending()
+        /// <summary>
+        /// Ages one world's unclaimed records and discards the ones whose submap never came back.
+        /// Empties its bucket too, so a world torn down without a <see cref="Clear"/> cannot leak one.
+        /// </summary>
+        internal static void AgePending(World world)
         {
-            if (Pending.Count == 0)
+            ulong key = KeyOf(world);
+            Dictionary<int2, PendingSubMap> bucket;
+            if (!PendingByWorld.TryGetValue(key, out bucket) || bucket.Count == 0)
             {
                 return;
             }
 
             List<int2> expired = null;
-            foreach (KeyValuePair<int2, PendingSubMap> entry in Pending)
+            foreach (KeyValuePair<int2, PendingSubMap> entry in bucket)
             {
                 entry.Value.Age++;
                 if (entry.Value.Age < MaxPassesPending)
@@ -106,25 +157,85 @@ namespace ExpandNullforge.Tilesets
 
             for (int i = 0; i < expired.Count; i++)
             {
-                Pending.Remove(expired[i]);
+                bucket.Remove(expired[i]);
+            }
+
+            if (bucket.Count == 0)
+            {
+                PendingByWorld.Remove(key);
             }
         }
 
-        public static void Clear()
+        /// <summary>
+        /// Drops one world's pending records. Takes the world rather than clearing everything: on a
+        /// host the other world is still live, and wiping its records would cost it the very tiles
+        /// this class exists to save.
+        /// </summary>
+        public static void Clear(World world)
         {
-            Pending.Clear();
+            ReportTheBracket(world);
+            PendingByWorld.Remove(KeyOf(world));
         }
 
         /// <summary>
-        /// Places the capture system in the same group as the deserializer, by hand.
+        /// Says how many custom tile layers this world took out of its submaps and how many it put
+        /// back, once, as the world goes away.
         /// </summary>
         /// <remarks>
+        /// THE PAIRING IS THE POINT AND NOTHING USED TO CHECK IT. Capture and restore each printed
+        /// a line per submap — unbounded, on a streaming path — and a session could show a hundred
+        /// captures and ninety restores with nobody in a position to notice. Counting instead costs
+        /// one dictionary increment per submap and turns the two tallies into one line that can
+        /// disagree with itself out loud.
+        /// </remarks>
+        private static void ReportTheBracket(World world)
+        {
+            int captured = DimensionLog.CountOf(DimensionLogChannels.Tileset, "captured");
+            int restored = DimensionLog.CountOf(DimensionLogChannels.Tileset, "restored");
+            if (captured == 0 && restored == 0)
+            {
+                return;
+            }
+
+            string tally = DimensionLog.DrainCounts(DimensionLogChannels.Tileset);
+            if (captured != restored)
+            {
+                DimensionLog.Problem(
+                    DimensionLogChannels.Tileset,
+                    world,
+                    "custom tile layers were taken out of submaps and not all of them were put " +
+                    "back (" + tally + "). Every layer in the difference is a patch of custom " +
+                    "terrain that will be gone the next time this world loads.");
+                return;
+            }
+
+            DimensionLog.Milestone(
+                DimensionLogChannels.Tileset,
+                world,
+                "carried custom tile layers across the deserializer (" + tally + ").");
+        }
+
+        /// <summary>
+        /// Places the capture system in the same group as the deserializer, by hand, and confirms the
+        /// other half of the bracket exists.
+        /// </summary>
+        /// <remarks>
+        /// <para>
         /// Its <c>[UpdateBefore(DeserializeComponentsSystem)]</c> attribute is silently dropped every
         /// run — the game logs "Ignoring invalid [UpdateBeforeAttribute] … can only order systems that
         /// are members of the same ComponentSystemGroup instance", because a mod's systems are not
         /// created into <c>SerializationSystemGroup</c>. Ordering then falls to whatever the default
         /// happens to be, which has worked so far purely by luck. The warning names this remedy itself:
         /// add the system to the group's update list directly, then re-sort so the attribute applies.
+        /// </para>
+        /// <para>
+        /// The restore half needs no such repair, and that is worth stating because it looks like it
+        /// should: <c>SerializationSystemGroup</c> is itself <c>[UpdateInGroup(SimulationSystemGroup)]</c>,
+        /// so it and the restore system are members of the SAME group instance and the
+        /// <c>[UpdateAfter]</c> between them is valid. Only its existence is checked here — a bracket
+        /// missing one half captures tiles and never puts them back, which otherwise looks exactly
+        /// like the bug this class fixes.
+        /// </para>
         /// </remarks>
         public static void EnsureSystemOrdering(World world)
         {
@@ -138,8 +249,8 @@ namespace ExpandNullforge.Tilesets
                 world.GetExistingSystemManaged<DimensionCustomTileCaptureSystem>();
             if (group == null || capture == null)
             {
-                Debug.LogWarning(
-                    "[NF_TILESET] Could not place the tile-capture system before the deserializer in " +
+                DimensionLog.Problem(DimensionLogChannels.Tileset, null, 
+                    "Could not place the tile-capture system before the deserializer in " +
                     world.Name + " (group " + (group == null ? "missing" : "ok") +
                     ", system " + (capture == null ? "missing" : "ok") +
                     "). Custom tiles may not survive a reload in this world.");
@@ -148,8 +259,19 @@ namespace ExpandNullforge.Tilesets
 
             group.AddSystemToUpdateList(capture);
             group.SortSystems();
-            Debug.Log(
-                "[NF_TILESET] Tile-capture system ordered before the deserializer in " + world.Name + ".");
+
+            if (world.GetExistingSystemManaged<DimensionCustomTileRestoreSystem>() == null)
+            {
+                DimensionLog.Fatal(DimensionLogChannels.Tileset, null, 
+                    "The tile-restore system is missing in " + world.Name +
+                    " while capture is running. Captured layers would be held and never put back, so " +
+                    "custom tiles will not survive a reload in this world.");
+                return;
+            }
+
+            // Nothing is said here on purpose. This point states an intention — the bracket has
+            // been arranged — and a tester cannot act on an intention. What matters is whether the
+            // two halves agree, which is what Clear reports when the world goes away.
         }
     }
 
@@ -200,10 +322,13 @@ namespace ExpandNullforge.Tilesets
 
                 if (rescued != null)
                 {
-                    Debug.Log(
-                        "[NF_TILESET] Captured " + rescued.Count +
-                        " custom tile layer(s) before deserialization, submap " + submap.Position + ".");
-                    DimensionCustomTileRescue.Record(submap.Position, rescued);
+                    // COUNTED, NOT PRINTED. This fires once per submap that carries custom layers,
+                    // for every submap the world streams in, so printing it buries everything else
+                    // in the session. The tally is reported once when the world goes away, beside
+                    // the restore tally, and a mismatch between the two is the failure to spot.
+                    ExpandNullforge.Foundation.DimensionLog.Count(
+                        ExpandNullforge.Foundation.DimensionLogChannels.Tileset, "captured");
+                    DimensionCustomTileRescue.Record(World, submap.Position, rescued);
                 }
             }
 
@@ -230,7 +355,7 @@ namespace ExpandNullforge.Tilesets
 
         protected override void OnUpdate()
         {
-            if (!DimensionCustomTileRescue.HasPending)
+            if (!DimensionCustomTileRescue.HasPendingFor(World))
             {
                 return;
             }
@@ -242,7 +367,7 @@ namespace ExpandNullforge.Tilesets
                 SubMapCD submap = EntityManager.GetComponentData<SubMapCD>(entity);
 
                 List<SubMapLayer> rescued;
-                if (!DimensionCustomTileRescue.TryClaim(submap.index, out rescued))
+                if (!DimensionCustomTileRescue.TryClaim(World, submap.index, out rescued))
                 {
                     continue;
                 }
@@ -266,16 +391,16 @@ namespace ExpandNullforge.Tilesets
 
                 if (restored > 0)
                 {
-                    // Deliberately not verbose-gated: this is the only proof the rescue is working,
-                    // and it fires once per submap rather than per frame.
-                    Debug.Log(
-                        "[NF_TILESET] Restored " + restored +
-                        " custom tile layer(s) the deserializer discarded, submap " + submap.index + ".");
+                    // The other half of the pair. Counted for the same reason, and the two counts
+                    // are the whole point of the bracket: captured without restored means custom
+                    // tiles were taken out of a submap and never put back.
+                    ExpandNullforge.Foundation.DimensionLog.Count(
+                        ExpandNullforge.Foundation.DimensionLogChannels.Tileset, "restored");
                 }
             }
 
             entities.Dispose();
-            DimensionCustomTileRescue.AgePending();
+            DimensionCustomTileRescue.AgePending(World);
         }
 
         private static bool ContainsLayer(DynamicBuffer<SubMapLayerBuffer> buffer, SubMapLayer layer)

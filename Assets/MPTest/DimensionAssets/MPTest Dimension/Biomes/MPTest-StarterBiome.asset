@@ -38,8 +38,15 @@ MonoBehaviour:
   scenePool: []
   resourceNodes: []
   spawnRules: []
-  generationProfile: {fileID: 11400000, guid: 2a562914e760a9c459feb82a510c9641, type: 2}
-  generationPasses: []
+  generationPasses:
+  - {fileID: 11400000, guid: 405a4778f663b1b469ea0cadd4e51d09, type: 2}
   generationTables: []
+  showTitleOnDiscovery: 1
+  overrideTitleColor: 0
+  titleColor: {r: 0.85, g: 0.85, b: 0.85, a: 1}
+  titleIconObjectId: 
+  ambienceSoundKey: 
+  ambienceVolume: 1
+  musicRosterName: 
   notes: Semantic terrain preset applied. Runtime generation will expand these IDs
     into scoped generation tables.

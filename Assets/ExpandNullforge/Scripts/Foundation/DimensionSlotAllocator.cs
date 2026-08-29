@@ -374,7 +374,10 @@ namespace ExpandNullforge.Foundation
           continue;
         }
 
-        if (existing.SpaceKind == DimensionSpaceKind.Overworld)
+        // By ID, never by type: the old type check let ANY dimension claiming the
+        // Overworld kind exempt itself from overlap conflicts — a silent stacking bug
+        // an author could ship without knowing.
+        if (string.Equals(existing.Id, DimensionIds.Overworld, System.StringComparison.Ordinal))
         {
           continue;
         }

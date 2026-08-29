@@ -86,6 +86,179 @@ namespace ExpandNullforge.EditorTools
             return Success(layout, "Added a layout region for " + (string.IsNullOrEmpty(biomeId) ? "the selected layout" : biomeId) + ".");
         }
 
+        /// <summary>
+        /// Adds a radial ring, placed just outside whatever the layout already reaches.
+        /// </summary>
+        /// <remarks>
+        /// Appended beyond the current outermost ring rather than at a fixed radius, because a new ring
+        /// dropped on top of an existing one is invisible on the map — the author sees nothing happen
+        /// and clicks again. Starting outside means the ring you just added is the ring you can see.
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult AddLayoutRing(
+            DimensionLayoutTemplateAsset layout,
+            BiomeTemplateAsset biome)
+        {
+            if (layout == null)
+            {
+                return Failure("Assign or create a layout template before adding rings.");
+            }
+
+            SerializedObject serialized = new SerializedObject(layout);
+            SerializedProperty rings = serialized.FindProperty("radialRings");
+            if (rings == null || !rings.isArray)
+            {
+                return Failure("The layout template does not expose editable radial rings.");
+            }
+
+            int outermost = 0;
+            DimensionLayoutRadialRingDefinition[] existing = layout.RadialRings;
+            for (int i = 0; i < existing.Length; i++)
+            {
+                if (existing[i] != null)
+                {
+                    outermost = Mathf.Max(outermost, existing[i].MaxRadiusTiles);
+                }
+            }
+
+            int index = rings.arraySize;
+            rings.InsertArrayElementAtIndex(index);
+            SerializedProperty element = rings.GetArrayElementAtIndex(index);
+            string biomeId = biome == null ? string.Empty : biome.BiomeId;
+
+            SetRelativeString(element, "ringId", "ring-" + (index + 1).ToString());
+            SetRelativeString(element, "biomeId", biomeId);
+            SetRelativeString(element, "zoneId", biomeId);
+            SetRelativeString(
+                element,
+                "displayName",
+                string.IsNullOrEmpty(biomeId) ? "Ring" : biome.DisplayName + " Ring");
+            SetRelativeInt(element, "minRadiusTiles", outermost);
+            SetRelativeInt(element, "maxRadiusTiles", outermost + 128);
+            SetRelativeBool(element, "limitToAngleRange", false);
+            SetRelativeFloat(element, "startAngleDegrees", 0f);
+            SetRelativeFloat(element, "endAngleDegrees", 360f);
+            SetRelativeInt(element, "priority", index);
+            SetRelativeBool(element, "enabled", true);
+
+            serialized.ApplyModifiedProperties();
+            EditorUtility.SetDirty(layout);
+            SaveAndSelect(layout);
+            return Success(
+                layout,
+                "Added a ring from " + outermost + " to " + (outermost + 128) + " tiles.");
+        }
+
+        /// <summary>
+        /// Deletes one ring or rectangle, addressed the way the Studio reported it.
+        /// </summary>
+        /// <remarks>
+        /// The id carries which array it came from ("ring:2", "region:0") rather than a bare index,
+        /// because both lists are on screen at once in Hybrid mode and an index alone would happily
+        /// delete the wrong one.
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult RemoveLayoutEntry(
+            DimensionLayoutTemplateAsset layout,
+            string entryId)
+        {
+            if (layout == null || string.IsNullOrEmpty(entryId))
+            {
+                return Failure("Nothing to remove.");
+            }
+
+            int separator = entryId.IndexOf(':');
+            if (separator <= 0 || separator >= entryId.Length - 1)
+            {
+                return Failure("Could not work out which layout entry to remove.");
+            }
+
+            string kind = entryId.Substring(0, separator);
+            int index;
+            if (!int.TryParse(entryId.Substring(separator + 1), out index) || index < 0)
+            {
+                return Failure("Could not work out which layout entry to remove.");
+            }
+
+            string propertyName = kind == "ring" ? "radialRings" : "regions";
+            SerializedObject serialized = new SerializedObject(layout);
+            SerializedProperty array = serialized.FindProperty(propertyName);
+            if (array == null || !array.isArray || index >= array.arraySize)
+            {
+                return Failure("That layout entry no longer exists.");
+            }
+
+            array.DeleteArrayElementAtIndex(index);
+            serialized.ApplyModifiedProperties();
+            EditorUtility.SetDirty(layout);
+            SaveAndSelect(layout);
+            return Success(layout, kind == "ring" ? "Removed a ring." : "Removed a rectangle.");
+        }
+
+        /// <summary>
+        /// Records the layout's current shape as a new published version.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// What is stored is the COMPILED region list, produced here by the same compiler the build
+        /// runs. That is the whole point: a save pinned to this version can be regenerated from these
+        /// rectangles even after the author rebuilds the layout out of entirely different rings.
+        /// </para>
+        /// <para>
+        /// A layout that currently compiles to nothing is refused rather than published as an empty
+        /// version — a world pinned to an empty layout would generate no biomes at all, which is a far
+        /// worse outcome than being told to fix the layout first.
+        /// </para>
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult PublishLayoutVersion(
+            DimensionTemplateAsset template,
+            DimensionLayoutTemplateAsset layout)
+        {
+            if (template == null || layout == null)
+            {
+                return Failure("Select a Dimension Asset with a layout before publishing.");
+            }
+
+            DimensionCompiledGenerationPlan plan = DimensionTemplateCompiler.Compile(template);
+            if (plan.BiomeRegions == null || plan.BiomeRegions.Count == 0)
+            {
+                return Failure(
+                    "This layout does not currently produce any biome regions, so there is nothing to " +
+                    "publish. Fix the problems listed under the map first.");
+            }
+
+            DimensionLayoutArchivedRegion[] archived =
+                new DimensionLayoutArchivedRegion[plan.BiomeRegions.Count];
+            for (int i = 0; i < plan.BiomeRegions.Count; i++)
+            {
+                DimensionCompiledBiomeRegion region = plan.BiomeRegions[i];
+                archived[i] = new DimensionLayoutArchivedRegion(
+                    region.SourceTemplateId,
+                    region.BiomeId,
+                    region.ZoneId,
+                    region.DisplayName,
+                    region.LocalBounds,
+                    region.Priority);
+            }
+
+            Undo.RecordObject(layout, "Publish layout version");
+
+            string error;
+            if (!layout.TryPublishVersion(
+                    archived,
+                    System.DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                    string.Empty,
+                    out error))
+            {
+                return Failure(error);
+            }
+
+            EditorUtility.SetDirty(layout);
+            SaveAndSelect(layout);
+            return Success(
+                layout,
+                "Published layout v" + layout.LayoutVersion + " with " + archived.Length +
+                " regions. Worlds generated from now on remember this version.");
+        }
+
         public static DimensionFrameworkAuthoringAssetActionResult CreatePortalAccessRule(
             DimensionTemplateAsset template)
         {
@@ -128,6 +301,60 @@ namespace ExpandNullforge.EditorTools
             return Success(rule, "Created a placed-portal access rule.");
         }
 
+        /// <summary>
+        /// Makes sure a dimension has a rule for one kind of portal, and returns the rule that
+        /// owns it either way.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The repair button behind the Portal Studio's Access card, and deliberately NOT an "add
+        /// a rule" list operation. A dimension has exactly one effective rule per kind, because the
+        /// generator takes the first enabled match; a second rule of the same kind produces a
+        /// service record with no portal in the world and nothing else. So this heals a gap and
+        /// refuses to widen one: if a rule of that kind already exists it is handed back untouched,
+        /// disabled or not.
+        /// </para>
+        /// <para>
+        /// The defaults come from the same starter factory that seeds a brand-new dimension, so a
+        /// repaired portal behaves exactly like a fresh one.
+        /// </para>
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult EnsurePortalAccessRule(
+            DimensionTemplateAsset template,
+            DimensionPortalAccessKind accessKind)
+        {
+            if (template == null)
+            {
+                return Failure("Open a dimension before preparing its portal.");
+            }
+
+            DimensionPortalAccessRuleAsset[] rules = template.PortalAccessRules;
+            for (int i = 0; rules != null && i < rules.Length; i++)
+            {
+                if (rules[i] != null && rules[i].AccessKind == accessKind)
+                {
+                    return Success(rules[i], "This portal already has its rule.");
+                }
+            }
+
+            DimensionPortalAccessRuleAsset created = DimensionTemplateStarterFactory
+                .CreatePortalAccessRule(accessKind, template.DimensionId, template.DisplayName);
+            if (created == null)
+            {
+                return Failure("This portal's rule could not be prepared.");
+            }
+
+            DimensionPortalAccessRuleAsset saved = SaveNewAsset(
+                template,
+                "Portals",
+                string.IsNullOrEmpty(created.name) ? "PortalAccessRule" : created.name,
+                created);
+            AppendObjectReference(template, "portalAccessRules", saved);
+            EditorUtility.SetDirty(saved);
+            AssetDatabase.SaveAssets();
+            return Success(saved, "Prepared this portal's rule.");
+        }
+
         public static DimensionFrameworkAuthoringAssetActionResult CreateBiome(
             DimensionTemplateAsset template,
             BiomeTemplateAsset source)
@@ -151,9 +378,13 @@ namespace ExpandNullforge.EditorTools
             biome.ApplyFallbackLocalBounds(
                 new Vector2Int(-64 + index * 128, -64),
                 new Vector2Int(64 + index * 128, 64));
+            // Ground and Walls start EMPTY. They used to be pre-filled with ids of the shape
+            // "<mod>:GroundBiome1Block", which no block a modder can make ever produces — a
+            // generated block's id is "<mod>:<block name>.ground.block" — so a new biome opened
+            // with two entries that could never resolve, and the world built dirt while the page
+            // showed a full list. An empty list says "you have not picked yet", which is true.
             biome.ApplySemanticTerrainPreset(
-                new[] { ResolveScopedId(template, "GroundBiome" + index.ToString() + "Block") },
-                new[] { ResolveScopedId(template, "WallBiome" + index.ToString() + "Block") },
+                new string[0],
                 new string[0],
                 new string[0],
                 source == null);
@@ -221,40 +452,6 @@ namespace ExpandNullforge.EditorTools
             return Success(scene, biome == null ? "Created a global scene." : "Created a biome scene.");
         }
 
-        public static DimensionFrameworkAuthoringAssetActionResult CreateResourceNode(
-            DimensionTemplateAsset template,
-            BiomeTemplateAsset biome)
-        {
-            if (template == null)
-            {
-                return Failure("Select a Dimension Asset before adding a resource node.");
-            }
-
-            int index = CountResourceNodes(template, biome) + 1;
-            string nodeId = ResolveScopedId(template, "ResourceNode" + index.ToString());
-            ResourceNodeTemplateAsset node =
-                CreateAsset<ResourceNodeTemplateAsset>(
-                    template,
-                    "Resources",
-                    "ResourceNode" + index.ToString());
-            string zoneId = biome == null ? string.Empty : biome.BiomeId;
-            node.ConfigureIdentity(
-                nodeId,
-                "Resource Node " + index.ToString(),
-                zoneId,
-                ResolveScopedId(template, "Resource" + index.ToString()),
-                DimensionResourceNodeKind.Custom,
-                string.Empty,
-                string.Empty,
-                1,
-                index,
-                true);
-            node.ApplyLocalBounds(new Vector2Int(-32, -32), new Vector2Int(32, 32));
-            AppendObjectReference(biome == null ? (Object)template : biome, biome == null ? "globalResourceNodes" : "resourceNodes", node);
-            SaveAndSelect(node);
-            return Success(node, biome == null ? "Created a global resource node." : "Created a biome resource node.");
-        }
-
         public static DimensionFrameworkAuthoringAssetActionResult CreateItem(
             DimensionTemplateAsset template,
             DimensionItemKind kind)
@@ -277,30 +474,6 @@ namespace ExpandNullforge.EditorTools
             AppendObjectReference(template, "globalItems", item);
             SaveAndSelect(item);
             return Success(item, "Created an item definition.");
-        }
-
-        public static DimensionFrameworkAuthoringAssetActionResult CreateTileset(
-            DimensionTemplateAsset template)
-        {
-            if (template == null)
-            {
-                return Failure("Select a Dimension Asset before adding a tileset.");
-            }
-
-            int index = template.Tilesets.Length + 1;
-            DimensionTilesetAsset tileset =
-                CreateAsset<DimensionTilesetAsset>(
-                    template,
-                    "Tilesets",
-                    "Tileset" + index.ToString());
-            // The modder edits only the friendly block name; the mod prefix is stamped once here so
-            // the identity ("{mod}:{name}") is self-contained on the asset at runtime.
-            SetSerializedString(tileset, "blockName", "New Block " + index.ToString());
-            SetSerializedString(tileset, "modPrefix", ResolveModPrefix(template));
-            SetSerializedBool(tileset, "enabled", true);
-            AppendObjectReference(template, "tilesets", tileset);
-            SaveAndSelect(tileset);
-            return Success(tileset, "Created a tileset definition.");
         }
 
         /// <summary>
@@ -388,7 +561,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             string folder = ResolveSectionFolder(template, "Tilesets");
-            EnsureFolder(folder);
+            DimensionAssetFolders.Ensure(folder);
             string sheetPath = AssetDatabase.GenerateUniqueAssetPath(
                 folder + "/" + SanitizeAssetName(request.BlockName) + "Sheet.png");
             Texture2D sheet = EditorTools.Generation.DimensionTilesetPixelIo.SaveImageOrderPng(
@@ -526,25 +699,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             return Failure(error ?? "Could not generate the tileset data.");
-        }
-
-        private static void EnableAllTilesetStates(DimensionTilesetAsset tileset)
-        {
-            SerializedObject serialized = new SerializedObject(tileset);
-            SerializedProperty layers = serialized.FindProperty("layers");
-            layers.ClearArray();
-            int i = 0;
-            foreach (DimensionTilesetState state in DimensionTilesetStateCatalog.All)
-            {
-                layers.InsertArrayElementAtIndex(i);
-                SerializedProperty element = layers.GetArrayElementAtIndex(i);
-                element.FindPropertyRelative("key").stringValue = state.Key;
-                element.FindPropertyRelative("enabled").boolValue = true;
-                element.FindPropertyRelative("texture").objectReferenceValue = null;
-                i++;
-            }
-
-            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         public static DimensionFrameworkAuthoringAssetActionResult DeleteTileset(
@@ -729,6 +883,305 @@ namespace ExpandNullforge.EditorTools
             return Success(workbench, "Created a workbench definition.");
         }
 
+        /// <summary>
+        /// Creates a chest, stash or display stand.
+        /// </summary>
+        /// <remarks>
+        /// These four creators exist because the assets and the generators both did, and there was
+        /// no way to reach either from the window — a creator could only make one by right-clicking
+        /// in the Project view and hand-dragging it into the template, which is exactly the
+        /// technical detour this framework is for avoiding.
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult CreateContainer(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a container.");
+            }
+
+            int index = template.GlobalContainers.Length + 1;
+            DimensionContainerAsset container =
+                CreateAsset<DimensionContainerAsset>(template, "Resources", "Container" + index.ToString());
+            SetSerializedString(container, "containerId", ResolveScopedId(template, "Container" + index.ToString()));
+            SetSerializedString(container, "displayName", "Container " + index.ToString());
+            SetSerializedBool(container, "enabled", true);
+            AppendObjectReference(template, "globalContainers", container);
+            SaveAndSelect(container);
+            return Success(container, "Created a container definition.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateDungeon(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a dungeon.");
+            }
+
+            int index = template.GlobalDungeons.Length + 1;
+            DimensionDungeonAsset dungeon =
+                CreateAsset<DimensionDungeonAsset>(template, "Scenes", "Dungeon" + index.ToString());
+            SetSerializedString(dungeon, "dungeonId", ResolveScopedId(template, "Dungeon" + index.ToString()));
+            SetSerializedString(dungeon, "displayName", "Dungeon " + index.ToString());
+            SetSerializedBool(dungeon, "enabled", true);
+            AppendObjectReference(template, "globalDungeons", dungeon);
+            SaveAndSelect(dungeon);
+            return Success(dungeon, "Created a dungeon.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateGenerationPass(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a generation pass.");
+            }
+
+            int index = template.GlobalGenerationPasses.Length + 1;
+            GenerationPassTemplateAsset pass =
+                CreateAsset<GenerationPassTemplateAsset>(
+                    template, "Generation", "GenerationPass" + index.ToString());
+            SetSerializedString(pass, "passId", ResolveScopedId(template, "Pass" + index.ToString()));
+            SetSerializedString(pass, "displayName", "Pass " + index.ToString());
+            SetSerializedBool(pass, "enabled", true);
+            AppendObjectReference(template, "globalGenerationPasses", pass);
+            SaveAndSelect(pass);
+            return Success(pass, "Created a generation pass.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateNamedArea(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a named area.");
+            }
+
+            int index = template.NamedAreas.Length + 1;
+            DimensionNamedAreaAsset area =
+                CreateAsset<DimensionNamedAreaAsset>(template, "Biomes", "NamedArea" + index.ToString());
+            SetSerializedString(area, "areaId", ResolveScopedId(template, "NamedArea" + index.ToString()));
+            SetSerializedString(area, "displayName", "Named Area " + index.ToString());
+            SetSerializedBool(area, "enabled", true);
+            AppendObjectReference(template, "namedAreas", area);
+            SaveAndSelect(area);
+            return Success(area, "Created a named area.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateRoomFilling(
+            DimensionTemplateAsset template,
+            DimensionDungeonAsset dungeon)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a room filling.");
+            }
+
+            // With a dungeon in hand the filling attaches itself. Without one — which is what the
+            // page's create button can offer, since it hands over the dimension rather than the
+            // selection — attach it anyway when there is only one dungeon it could belong to. A
+            // filling that belongs to nothing is a file the creator has to find and drag before it
+            // has any effect, and nothing on screen said so.
+            if (dungeon == null)
+            {
+                DimensionDungeonAsset[] dungeons = template.GlobalDungeons;
+                int found = 0;
+                for (int i = 0; i < dungeons.Length; i++)
+                {
+                    if (dungeons[i] != null)
+                    {
+                        found++;
+                        dungeon = dungeons[i];
+                    }
+                }
+
+                if (found != 1)
+                {
+                    dungeon = null;
+                }
+            }
+
+            string stem = dungeon == null ? "RoomFilling" : NormalizeIdToken(dungeon.DungeonId, "Asset") + "Filling";
+            int index = (dungeon == null ? 0 : dungeon.RoomFillings.Length) + 1;
+            DimensionRoomFillingAsset filling =
+                CreateAsset<DimensionRoomFillingAsset>(template, "Scenes", stem + index.ToString());
+            SetSerializedString(filling, "fillingId",
+                ResolveScopedId(
+                    template,
+                    (dungeon == null ? "filling" : dungeon.DungeonId + "-filling") + index.ToString()));
+            SetSerializedString(filling, "displayName", "Room Filling " + index.ToString());
+            SetSerializedBool(filling, "enabled", true);
+            if (dungeon != null)
+            {
+                AppendObjectReference(dungeon, "roomFillings", filling);
+            }
+
+            SaveAndSelect(filling);
+            return Success(
+                filling,
+                dungeon == null
+                    ? "Created a room filling. Open a dungeon and add it under Room Fillings, then " +
+                      "open it there to say what it places."
+                    : "Created a room filling on '" + dungeon.DisplayName +
+                      "'. Open it under that dungeon's Room Fillings to say what it places.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreatePlant(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a plant.");
+            }
+
+            int index = template.GlobalPlants.Length + 1;
+            DimensionPlantAsset plant =
+                CreateAsset<DimensionPlantAsset>(template, "Resources", "Plant" + index.ToString());
+            SetSerializedString(plant, "plantId", ResolveScopedId(template, "Plant" + index.ToString()));
+            SetSerializedString(plant, "displayName", "Plant " + index.ToString());
+            SetSerializedBool(plant, "enabled", true);
+            AppendObjectReference(template, "globalPlants", plant);
+            SaveAndSelect(plant);
+            return Success(plant, "Created a plant. Generating emits its seed, its plant and its ripe plant.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateWorldObject(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding an object.");
+            }
+
+            int index = template.GlobalWorldObjects.Length + 1;
+            DimensionWorldObjectAsset worldObject =
+                CreateAsset<DimensionWorldObjectAsset>(template, "Resources", "Object" + index.ToString());
+            SetSerializedString(worldObject, "objectIdentifier", ResolveScopedId(template, "Object" + index.ToString()));
+            SetSerializedString(worldObject, "displayName", "Object " + index.ToString());
+            SetSerializedBool(worldObject, "enabled", true);
+            AppendObjectReference(template, "globalWorldObjects", worldObject);
+            SaveAndSelect(worldObject);
+            return Success(worldObject, "Created a placed object definition.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateVehicle(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a vehicle.");
+            }
+
+            int index = template.GlobalVehicles.Length + 1;
+            DimensionVehicleAsset vehicle =
+                CreateAsset<DimensionVehicleAsset>(template, "Resources", "Vehicle" + index.ToString());
+            SetSerializedString(vehicle, "vehicleId", ResolveScopedId(template, "Vehicle" + index.ToString()));
+            SetSerializedString(vehicle, "displayName", "Vehicle " + index.ToString());
+            SetSerializedBool(vehicle, "enabled", true);
+            AppendObjectReference(template, "globalVehicles", vehicle);
+            SaveAndSelect(vehicle);
+            return Success(vehicle, "Created a vehicle definition.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateProjectile(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a projectile.");
+            }
+
+            int index = template.GlobalProjectiles.Length + 1;
+            DimensionProjectileAsset projectile =
+                CreateAsset<DimensionProjectileAsset>(template, "Resources", "Projectile" + index.ToString());
+            SetSerializedString(projectile, "projectileId", ResolveScopedId(template, "Projectile" + index.ToString()));
+            SetSerializedString(projectile, "displayName", "Projectile " + index.ToString());
+            SetSerializedBool(projectile, "enabled", true);
+            AppendObjectReference(template, "globalProjectiles", projectile);
+            SaveAndSelect(projectile);
+            return Success(projectile, "Created a projectile. Name it from a weapon or a creature to fire it.");
+        }
+
+        public static DimensionFrameworkAuthoringAssetActionResult CreateExplosion(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding an explosion.");
+            }
+
+            int index = template.GlobalExplosions.Length + 1;
+            DimensionExplosionAsset explosion =
+                CreateAsset<DimensionExplosionAsset>(template, "Resources", "Explosion" + index.ToString());
+            SetSerializedString(explosion, "explosionId", ResolveScopedId(template, "Explosion" + index.ToString()));
+            SetSerializedString(explosion, "displayName", "Explosion " + index.ToString());
+            SetSerializedBool(explosion, "enabled", true);
+            AppendObjectReference(template, "globalExplosions", explosion);
+            SaveAndSelect(explosion);
+            return Success(explosion, "Created an explosion. Name it from a bomb to make that bomb use it.");
+        }
+
+        /// <summary>
+        /// Creates a stat effect (a condition) and registers it on the dimension.
+        /// </summary>
+        /// <remarks>
+        /// The runtime for these shipped long before this button existed: a registered condition
+        /// claims its number by NAME ordering across the whole set, so the only thing that
+        /// matters here is that the name is scoped and stable from birth. Effects was the one
+        /// tab a creator could browse but never add to — every other kind had a creator, and
+        /// the asset-menu route it relied on is not a door this framework counts.
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult CreateCondition(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding an effect.");
+            }
+
+            int index = template.GlobalConditions.Length + 1;
+            DimensionConditionAsset condition =
+                CreateAsset<DimensionConditionAsset>(template, "Resources", "Effect" + index.ToString());
+            SetSerializedString(condition, "conditionName", ResolveScopedId(template, "Effect" + index.ToString()));
+            SetSerializedString(condition, "displayName", "Effect " + index.ToString());
+            SetSerializedBool(condition, "enabled", true);
+            AppendObjectReference(template, "globalConditions", condition);
+            SaveAndSelect(condition);
+            return Success(condition, "Created an effect. Name it from an item or a food to hand it out.");
+        }
+
+        /// <summary>
+        /// Adds a rule set — the four things a mod changes about the game rather than adds to.
+        /// </summary>
+        /// <remarks>
+        /// The World Rules stage had no way of making one at all: a creator could see the list and
+        /// never add to it, which is how the whole stage sat unreachable while everything under it
+        /// was written and tested. One rule set is usually enough for a mod, but the list stays a
+        /// list because two mods' rule sets merge and a creator may want theirs split by subject.
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult CreateWorldRules(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a rule set.");
+            }
+
+            int index = template.GlobalGameSetups.Length + 1;
+            DimensionGameSetupAsset rules =
+                CreateAsset<DimensionGameSetupAsset>(template, "Resources", "WorldRules" + index.ToString());
+            SetSerializedString(rules, "setupIdentifier", ResolveScopedId(template, "Rules" + index.ToString()));
+            SetSerializedString(rules, "displayName", "World rules " + index.ToString());
+            SetSerializedBool(rules, "enabled", true);
+            AppendObjectReference(template, "globalGameSetups", rules);
+            SaveAndSelect(rules);
+            return Success(
+                rules,
+                "Created a rule set. Switch on the block you want — upgrading, fishing, talents " +
+                "or the player — and nothing else changes.");
+        }
+
         public static DimensionFrameworkAuthoringAssetActionResult CreateLootTable(
             DimensionTemplateAsset template)
         {
@@ -746,34 +1199,6 @@ namespace ExpandNullforge.EditorTools
             AppendObjectReference(template, "globalLootTables", lootTable);
             SaveAndSelect(lootTable);
             return Success(lootTable, "Created a loot table definition.");
-        }
-
-        public static DimensionFrameworkAuthoringAssetActionResult CreateSpawnRule(
-            DimensionTemplateAsset template,
-            BiomeTemplateAsset biome)
-        {
-            if (template == null)
-            {
-                return Failure("Select a Dimension Asset before adding a spawn rule.");
-            }
-
-            int index = CountSpawnRules(template, biome) + 1;
-            SpawnRuleTemplateAsset rule =
-                CreateAsset<SpawnRuleTemplateAsset>(template, "Spawns", "SpawnRule" + index.ToString());
-            string zoneId = biome == null ? string.Empty : biome.BiomeId;
-            rule.ConfigureIdentity(
-                ResolveScopedId(template, "SpawnRule" + index.ToString()),
-                "Spawn Rule " + index.ToString(),
-                zoneId,
-                ResolveScopedId(template, "Mob" + index.ToString()),
-                DimensionSpawnSubjectKind.Mob,
-                1,
-                index,
-                true);
-            rule.ApplyLocalBounds(new Vector2Int(-32, -32), new Vector2Int(32, 32));
-            AppendObjectReference(biome == null ? (Object)template : biome, biome == null ? "globalSpawnRules" : "spawnRules", rule);
-            SaveAndSelect(rule);
-            return Success(rule, biome == null ? "Created a global spawn rule." : "Created a biome spawn rule.");
         }
 
         public static DimensionFrameworkAuthoringAssetActionResult CreateSpawnable(
@@ -894,7 +1319,10 @@ namespace ExpandNullforge.EditorTools
                 // objectId only satisfies the generator's "has a visual" gate so the first generate is
                 // valid; a real icon comes from the creator dragging a sprite into the Icon sprite field.
                 SetSerializedString(item, "objectId", itemId);
-                SetSerializedInt(item, "maxStack", 1);
+                // The migration flag goes first, or the item's own OnValidate would still be
+                // deciding stacking from the old number and would overwrite the line below.
+                SetSerializedBool(item, "stackableWasMigrated", true);
+                SetSerializedBool(item, "stackable", false);
                 SetSerializedBool(item, "enabled", true);
                 AssignDefaultPortalIcons(item);
                 AppendObjectReference(template, "globalItems", item);
@@ -950,7 +1378,8 @@ namespace ExpandNullforge.EditorTools
                 // objectId only satisfies the generator's "has a visual" gate so the first generate
                 // is valid; the real icon is assigned by the creator on the item.
                 SetSerializedString(item, "objectId", itemId);
-                SetSerializedInt(item, "maxStack", 999);
+                SetSerializedBool(item, "stackableWasMigrated", true);
+                SetSerializedBool(item, "stackable", true);
                 SetSerializedBool(item, "enabled", true);
                 // The ground counterpart is hidden infrastructure — vanilla's non-obtainable "Dirt
                 // Ground". It must exist so placement lays ground-then-wall and both tiles drop the one
@@ -976,6 +1405,347 @@ namespace ExpandNullforge.EditorTools
             return Success(
                 lastCreated,
                 "Created " + created + " block item" + (created == 1 ? string.Empty : "s") + ".");
+        }
+
+        // ------------------------------------------------------------------ food ---
+
+        /// <summary>Adds a new kind of dish to the dimension.</summary>
+        public static DimensionFrameworkAuthoringAssetActionResult CreateDish(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before adding a dish.");
+            }
+
+            int index = template.GlobalDishes.Length + 1;
+            string stem = "Dish" + index.ToString();
+            DimensionDishAsset dish = CreateAsset<DimensionDishAsset>(template, "Resources", stem);
+            SetSerializedString(dish, "dishId", ResolveScopedId(template, stem));
+            SetSerializedString(dish, "displayName", "Dish " + index.ToString());
+            SetSerializedBool(dish, "enabled", true);
+            AppendObjectReference(template, "globalDishes", dish);
+            EnsureFoodItems(template);
+            SaveAndSelect(dish);
+            return Success(
+                dish,
+                "Created a dish. Generating emits its ordinary, rare and epic versions.");
+        }
+
+        /// <summary>
+        /// Creates and keeps in step every item a dish or a golden ingredient needs.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A dish is three objects to the game and one asset to a creator, and a golden ingredient
+        /// is a second object that shares almost everything with the first. Both are framework
+        /// bookkeeping rather than decisions, so both are made here and hidden from the item lists —
+        /// the same arrangement a tileset block's ground counterpart already uses.
+        /// </para>
+        /// <para>
+        /// Run before every generate, not only when a dish is created, because the fields it copies
+        /// are edited on the dish and on the ingredient. Without the re-sync a creator could rename
+        /// a dish, generate, and get the old name in game with nothing to explain it.
+        /// </para>
+        /// </remarks>
+        public static DimensionFrameworkAuthoringAssetActionResult EnsureFoodItems(
+            DimensionTemplateAsset template)
+        {
+            if (template == null)
+            {
+                return Failure("Select a Dimension Asset before creating food items.");
+            }
+
+            CompactGlobalItems(template);
+
+            int created = 0;
+            DimensionItemAsset lastCreated = null;
+
+            DimensionDishAsset[] dishes = template.GlobalDishes;
+            for (int i = 0; i < dishes.Length; i++)
+            {
+                DimensionDishAsset dish = dishes[i];
+                if (dish == null || !dish.Enabled || string.IsNullOrEmpty(dish.DishId))
+                {
+                    continue;
+                }
+
+                SyncDishTier(template, dish, 0, ref created, ref lastCreated);
+                SyncDishTier(template, dish, 1, ref created, ref lastCreated);
+                SyncDishTier(template, dish, 2, ref created, ref lastCreated);
+            }
+
+            DimensionItemAsset[] items = template.GlobalItems;
+            for (int i = 0; i < items.Length; i++)
+            {
+                DimensionItemAsset item = items[i];
+                if (item == null || !item.Enabled || string.IsNullOrEmpty(item.ItemId))
+                {
+                    continue;
+                }
+
+                if (item.Cooking.HasAGoldenVersion)
+                {
+                    SyncGoldenIngredient(template, item, ref created, ref lastCreated);
+                }
+            }
+
+            AssetDatabase.SaveAssets();
+            if (created == 0)
+            {
+                return Success(null, "Every dish and golden ingredient already has its items.");
+            }
+
+            return Success(
+                lastCreated,
+                "Created " + created + " food item" + (created == 1 ? string.Empty : "s") + ".");
+        }
+
+        /// <summary>
+        /// One quality of one dish: created if missing, rewritten from the dish either way.
+        /// </summary>
+        /// <remarks>
+        /// The rare and epic ids are the dish's id with "Rare" and "Epic" on the end, and that is
+        /// not a naming habit — the game strips exactly those two suffixes off an object's name
+        /// before looking up a dish's term, which is what lets all three qualities share one name.
+        /// </remarks>
+        private static void SyncDishTier(
+            DimensionTemplateAsset template,
+            DimensionDishAsset dish,
+            int tier,
+            ref int created,
+            ref DimensionItemAsset lastCreated)
+        {
+            string itemId = tier == 0
+                ? dish.DishId
+                : (tier == 1 ? dish.RareItemId : dish.EpicItemId);
+            DimensionItemAsset item = FindGlobalItem(template, itemId);
+            if (item == null)
+            {
+                item = CreateAsset<DimensionItemAsset>(
+                    template, "Resources", NormalizeIdToken(itemId, "Asset"));
+                SetSerializedString(item, "itemId", itemId);
+                AppendObjectReference(template, "globalItems", item);
+                created++;
+                lastCreated = item;
+            }
+
+            SetSerializedString(item, "displayName", dish.DisplayName);
+            SetSerializedString(item, "description", dish.Description);
+            SetSerializedEnum(item, "archetype", (int)DimensionItemArchetype.Consumable);
+            SetSerializedEnum(item, "kind", (int)DimensionItemKind.BaseItem);
+            // A dish stacks, like every other food. The ceiling is the game's own 9999, which every
+            // stackable item shares.
+            SetSerializedBool(item, "stackableWasMigrated", true);
+            SetSerializedBool(item, "stackable", true);
+            SetSerializedBool(item, "enabled", true);
+            // Managed entirely from the dish asset, so it is kept out of the item lists — editing
+            // it there would only be overwritten the next time the dish is synced.
+            SetSerializedBool(item, "hidden", true);
+            SetSerializedString(item, "rarityId", tier == 0 ? "Uncommon" : (tier == 1 ? "Rare" : "Epic"));
+            SetSerializedObjectReference(
+                item,
+                "iconSprite",
+                tier == 0 ? dish.BaseSprite : (tier == 1 ? dish.RareSprite : dish.EpicSprite));
+            // Satisfies the generator's has-a-picture gate so a dish still being drawn generates
+            // and can be walked through in game; the generator warns separately about the missing
+            // sprite, which is the message that actually helps.
+            SetSerializedString(item, "objectId", itemId);
+
+            SetSerializedEnum(item, "cooking.role", (int)DimensionFoodRole.CookedDish);
+            SetSerializedString(item, "cooking.rareVersion", dish.RareItemId);
+            SetSerializedString(item, "cooking.epicVersion", dish.EpicItemId);
+
+            int hunger = tier == 0 ? dish.Hunger : (tier == 1 ? dish.RareHunger : dish.EpicHunger);
+            DimensionItemEffect[] extras = tier == 1
+                ? dish.ExtraOnRare
+                : (tier == 2 ? dish.ExtraOnEpic : new DimensionItemEffect[0]);
+            WriteDishEatenEffects(item, hunger, extras);
+        }
+
+        /// <summary>
+        /// The golden twin of an ingredient: everything the base has, one rarity up, aimed higher.
+        /// </summary>
+        /// <remarks>
+        /// A GOLDEN INGREDIENT OF A MOD'S OWN CANNOT ALWAYS LEAD, and nothing here pretends
+        /// otherwise. The game decides that from two hardcoded id ranges, inside Burst-compiled
+        /// code no mod reaches. What a golden version DOES get is the two halves that are open: it
+        /// aims at the better version of the same dish, and its Rare rarity plus a flower marker is
+        /// what can push a cooked dish up to epic. Against another ingredient it leads half the
+        /// time rather than always, which the combiner window says plainly.
+        /// </remarks>
+        private static void SyncGoldenIngredient(
+            DimensionTemplateAsset template,
+            DimensionItemAsset baseItem,
+            ref int created,
+            ref DimensionItemAsset lastCreated)
+        {
+            string goldenId = DimensionCookingTemplate.GoldenItemIdFor(baseItem.ItemId);
+            DimensionItemAsset item = FindGlobalItem(template, goldenId);
+            if (item == null)
+            {
+                item = CreateAsset<DimensionItemAsset>(
+                    template, "Resources", NormalizeIdToken(goldenId, "Asset"));
+                SetSerializedString(item, "itemId", goldenId);
+                AppendObjectReference(template, "globalItems", item);
+                created++;
+                lastCreated = item;
+            }
+
+            DimensionCookingTemplate cooking = baseItem.Cooking;
+            string name = string.IsNullOrEmpty(cooking.GoldenName)
+                ? "Golden " + baseItem.DisplayName
+                : cooking.GoldenName;
+            SetSerializedString(item, "displayName", name);
+            SetSerializedString(item, "description", baseItem.Description);
+            SetSerializedEnum(item, "archetype", (int)DimensionItemArchetype.Consumable);
+            SetSerializedEnum(item, "kind", (int)baseItem.Kind);
+            SetSerializedBool(item, "stackableWasMigrated", true);
+            SetSerializedBool(item, "stackable", baseItem.Stackable);
+            SetSerializedBool(item, "enabled", true);
+            SetSerializedBool(item, "hidden", true);
+            SetSerializedString(item, "rarityId", "Rare");
+            SetSerializedObjectReference(item, "iconSprite", baseItem.IconSprite);
+            SetSerializedString(item, "objectId", goldenId);
+
+            SetSerializedEnum(item, "cooking.role", (int)DimensionFoodRole.Ingredient);
+            SetSerializedEnum(item, "cooking.ingredientKind", (int)cooking.IngredientKind);
+            SetSerializedBool(item, "cooking.canBeFished", cooking.CanBeFished);
+            SetSerializedBool(item, "cooking.countsAsAFlower", true);
+            SetSerializedBool(
+                item, "cooking.coloursFromItsOwnPicture", cooking.ColoursFromItsOwnPicture);
+            SetSerializedString(item, "cooking.makesDish", ResolveGoldenDish(template, cooking));
+            CopyColour(baseItem, item, "cooking.brightest");
+            CopyColour(baseItem, item, "cooking.bright");
+            CopyColour(baseItem, item, "cooking.dark");
+            CopyColour(baseItem, item, "cooking.darkest");
+            CopyEffectArray(baseItem, item, "cooking.givesRaw");
+            CopyEffectArray(baseItem, item, "cooking.givesCooked");
+        }
+
+        /// <summary>
+        /// Which dish a golden version aims at: the one it was told, or the better version of the
+        /// dish its ordinary form makes.
+        /// </summary>
+        /// <remarks>
+        /// The derivation only works for one of this mod's own dishes, where the better version's
+        /// id is a suffix away. A golden version of an ingredient that makes one of the game's
+        /// dishes has to be told which dish to aim at, because the game's rare tiers are not
+        /// reachable from the ordinary one by name — CookedSoup's rare version is CookedSoupRare,
+        /// which IS a suffix away, so that case works too and only an unusual pairing needs typing.
+        /// </remarks>
+        private static string ResolveGoldenDish(
+            DimensionTemplateAsset template,
+            DimensionCookingTemplate cooking)
+        {
+            if (!string.IsNullOrEmpty(cooking.GoldenMakesDish))
+            {
+                return cooking.GoldenMakesDish;
+            }
+
+            string ordinary = cooking.MakesDish;
+            if (string.IsNullOrEmpty(ordinary))
+            {
+                return string.Empty;
+            }
+
+            return DimensionDishAsset.RareItemIdFor(ordinary);
+        }
+
+        private static void CopyColour(Object from, Object to, string path)
+        {
+            SerializedProperty source = new SerializedObject(from).FindProperty(path);
+            if (source == null)
+            {
+                return;
+            }
+
+            Color value = source.colorValue;
+            SetSerialized(to, path, property => property.colorValue = value);
+        }
+
+        /// <summary>
+        /// Copies a list of effects between two assets, entry by entry.
+        /// </summary>
+        /// <remarks>
+        /// Field by field rather than by copying the array wholesale: Unity's serialized-property
+        /// copy shares the managed instances between the two assets, so editing one afterwards
+        /// would silently edit the other.
+        /// </remarks>
+        private static void CopyEffectArray(Object from, Object to, string path)
+        {
+            SerializedProperty source = new SerializedObject(from).FindProperty(path);
+            SerializedObject targetObject = new SerializedObject(to);
+            SerializedProperty target = targetObject.FindProperty(path);
+            if (source == null || target == null || !source.isArray || !target.isArray)
+            {
+                return;
+            }
+
+            target.arraySize = source.arraySize;
+            for (int i = 0; i < source.arraySize; i++)
+            {
+                SerializedProperty a = source.GetArrayElementAtIndex(i);
+                SerializedProperty b = target.GetArrayElementAtIndex(i);
+                b.FindPropertyRelative("effectId").stringValue =
+                    a.FindPropertyRelative("effectId").stringValue;
+                b.FindPropertyRelative("value").intValue =
+                    a.FindPropertyRelative("value").intValue;
+                b.FindPropertyRelative("valueMultiplier").floatValue =
+                    a.FindPropertyRelative("valueMultiplier").floatValue;
+                b.FindPropertyRelative("seconds").floatValue =
+                    a.FindPropertyRelative("seconds").floatValue;
+            }
+
+            targetObject.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Writes a dish's own hunger and its tier bonuses onto the item, replacing what was there.
+        /// </summary>
+        /// <remarks>
+        /// Replaced rather than appended, because this runs before every generate and appending
+        /// would double the dish's hunger every time somebody pressed the button. Hunger comes
+        /// first so a creator reading the item can see it without hunting.
+        /// </remarks>
+        private static void WriteDishEatenEffects(
+            DimensionItemAsset item,
+            int hunger,
+            DimensionItemEffect[] extras)
+        {
+            SerializedObject serialized = new SerializedObject(item);
+            SerializedProperty list = serialized.FindProperty("effects.whenEaten");
+            if (list == null || !list.isArray)
+            {
+                return;
+            }
+
+            list.arraySize = 1 + extras.Length;
+            WriteEffect(list.GetArrayElementAtIndex(0), "HungerAddition", hunger, 1f, 0f);
+            for (int i = 0; i < extras.Length; i++)
+            {
+                WriteEffect(
+                    list.GetArrayElementAtIndex(i + 1),
+                    extras[i].EffectId,
+                    extras[i].Value,
+                    extras[i].ValueMultiplier,
+                    extras[i].Seconds);
+            }
+
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void WriteEffect(
+            SerializedProperty element,
+            string effectId,
+            int value,
+            float multiplier,
+            float seconds)
+        {
+            element.FindPropertyRelative("effectId").stringValue = effectId ?? string.Empty;
+            element.FindPropertyRelative("value").intValue = value;
+            element.FindPropertyRelative("valueMultiplier").floatValue = multiplier;
+            element.FindPropertyRelative("seconds").floatValue = seconds;
         }
 
         /// <summary>
@@ -1347,10 +2117,27 @@ namespace ExpandNullforge.EditorTools
             string stem)
             where T : ScriptableObject
         {
-            T asset = ScriptableObject.CreateInstance<T>();
+            return SaveNewAsset(template, sectionFolder, stem, ScriptableObject.CreateInstance<T>());
+        }
+
+        /// <summary>
+        /// Puts an object that has already been built onto disk beside its dimension.
+        /// </summary>
+        /// <remarks>
+        /// Split out of <see cref="CreateAsset{T}"/> for the case where the defaults live somewhere
+        /// else — a portal access rule is born fully configured by the starter factory, so the
+        /// alternative would be a second copy of those defaults here.
+        /// </remarks>
+        private static T SaveNewAsset<T>(
+            DimensionTemplateAsset template,
+            string sectionFolder,
+            string stem,
+            T asset)
+            where T : ScriptableObject
+        {
             string folder = ResolveSectionFolder(template, sectionFolder);
-            EnsureFolder(folder);
-            string safeStem = SanitizeFileName(stem);
+            DimensionAssetFolders.Ensure(folder);
+            string safeStem = NormalizeIdToken(stem, "Asset");
             asset.name = safeStem;
             string path = AssetDatabase.GenerateUniqueAssetPath(folder + "/" + safeStem + ".asset");
             AssetDatabase.CreateAsset(asset, path);
@@ -1366,8 +2153,8 @@ namespace ExpandNullforge.EditorTools
         {
             T asset = Object.Instantiate(source);
             string folder = ResolveSectionFolder(template, sectionFolder);
-            EnsureFolder(folder);
-            string safeStem = SanitizeFileName(stem);
+            DimensionAssetFolders.Ensure(folder);
+            string safeStem = NormalizeIdToken(stem, "Asset");
             asset.name = safeStem;
             string path = AssetDatabase.GenerateUniqueAssetPath(folder + "/" + safeStem + ".asset");
             AssetDatabase.CreateAsset(asset, path);
@@ -1379,7 +2166,7 @@ namespace ExpandNullforge.EditorTools
             string sectionFolder)
         {
             string root = ResolveTemplateRootFolder(template);
-            string safeSection = SanitizeFileName(sectionFolder);
+            string safeSection = NormalizeIdToken(sectionFolder, "Asset");
             return string.IsNullOrEmpty(safeSection)
                 ? root
                 : root + "/" + safeSection;
@@ -1540,6 +2327,15 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
+        private static void SetRelativeFloat(SerializedProperty element, string propertyName, float value)
+        {
+            SerializedProperty property = element == null ? null : element.FindPropertyRelative(propertyName);
+            if (property != null)
+            {
+                property.floatValue = value;
+            }
+        }
+
         private static void SetRelativeBool(SerializedProperty element, string propertyName, bool value)
         {
             SerializedProperty property = element == null ? null : element.FindPropertyRelative(propertyName);
@@ -1563,15 +2359,6 @@ namespace ExpandNullforge.EditorTools
             return biome == null ? template.GlobalScenes.Length : biome.ScenePool.Length;
         }
 
-        private static int CountResourceNodes(DimensionTemplateAsset template, BiomeTemplateAsset biome)
-        {
-            return biome == null ? template.GlobalResourceNodes.Length : biome.ResourceNodes.Length;
-        }
-
-        private static int CountSpawnRules(DimensionTemplateAsset template, BiomeTemplateAsset biome)
-        {
-            return biome == null ? template.GlobalSpawnRules.Length : biome.SpawnRules.Length;
-        }
 
         private static string ResolvePrimaryBiomeId(DimensionTemplateAsset template)
         {
@@ -1639,11 +2426,6 @@ namespace ExpandNullforge.EditorTools
             return string.IsNullOrEmpty(result) ? fallback : result;
         }
 
-        private static string SanitizeFileName(string value)
-        {
-            return NormalizeIdToken(value, "Asset");
-        }
-
         private static Color ResolveMapColor(int index)
         {
             Color[] colors =
@@ -1656,33 +2438,6 @@ namespace ExpandNullforge.EditorTools
             };
 
             return colors[Mathf.Abs(index) % colors.Length];
-        }
-
-        private static void EnsureFolder(string folder)
-        {
-            string normalized = DimensionApiModFolderUtility.NormalizeFolder(folder);
-            if (AssetDatabase.IsValidFolder(normalized))
-            {
-                return;
-            }
-
-            string[] parts = normalized.Split('/');
-            string current = "Assets";
-            for (int i = 1; i < parts.Length; i++)
-            {
-                if (string.IsNullOrEmpty(parts[i]))
-                {
-                    continue;
-                }
-
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                {
-                    AssetDatabase.CreateFolder(current, parts[i]);
-                }
-
-                current = next;
-            }
         }
 
         private static void SaveAndSelect(Object asset)

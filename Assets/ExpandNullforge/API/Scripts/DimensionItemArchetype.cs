@@ -52,6 +52,18 @@ namespace ExpandNullforge.Api
         /// <summary>Boss encounter.</summary>
         Boss = 13,
 
+        /// <summary>
+        /// A bomb: an item you place, which goes off and damages what is around it.
+        /// </summary>
+        /// <remarks>
+        /// Core Keeper builds a bomb out of TWO objects, never one — the thing you place, and the
+        /// blast it turns into — and the numbers live on different halves of that pair. How much it
+        /// hurts and how much terrain it breaks are on the bomb; how far the blast reaches is on the
+        /// blast. The framework generates the second object for the author so a bomb stays one
+        /// thing they make.
+        /// </remarks>
+        Explosive = 14,
+
         /// <summary>Creator-defined; the framework validates only the shared basics.</summary>
         Custom = 100
     }
@@ -105,7 +117,12 @@ namespace ExpandNullforge.Api
         Creature = 1 << 12,
 
         /// <summary>Boss-specific arena/encounter hooks.</summary>
-        BossEncounter = 1 << 13
+        BossEncounter = 1 << 13,
+
+        /// <summary>
+        /// ExplosiveAuthoring plus whatever sets the bomb off, and the blast object it names.
+        /// </summary>
+        Explosive = 1 << 14
     }
 
     /// <summary>
@@ -155,11 +172,19 @@ namespace ExpandNullforge.Api
                            DimensionItemAuthoringComponents.Cooldown |
                            DimensionItemAuthoringComponents.SecondaryUse;
 
+                // A TOOL HITS THINGS. Every one of the game's own picks, shovels, hoes, sledges,
+                // drills and seeders carries WeaponDamageAuthoring, and it is not decoration:
+                // LevelEntitiesBufferConverter returns without building a LevelEntitiesBuffer for
+                // anything that has none, QueueHitSystem then never finds a level entity and never
+                // assigns the swing any damage, and InventoryUtility.CanBeRepaired fails on its
+                // first clause. Without it a generated pickaxe mines nothing and can never be
+                // repaired, which is what every framework tool used to do.
                 case DimensionItemArchetype.Tool:
                     return Always |
                            DimensionItemAuthoringComponents.InventoryItem |
                            DimensionItemAuthoringComponents.Durability |
                            DimensionItemAuthoringComponents.Cooldown |
+                           DimensionItemAuthoringComponents.WeaponDamage |
                            DimensionItemAuthoringComponents.SecondaryUse;
 
                 case DimensionItemArchetype.Weapon:
@@ -193,6 +218,17 @@ namespace ExpandNullforge.Api
                            DimensionItemAuthoringComponents.Breakable |
                            DimensionItemAuthoringComponents.Loot |
                            DimensionItemAuthoringComponents.BossEncounter;
+
+                // A bomb is carried, placed, and goes off. It gets health as well, because a bomb
+                // with none cannot be shot, broken, or set off by another blast — chain reactions
+                // are the whole appeal of a pile of bombs and they run through the health pool.
+                // Breakable is deliberately NOT used: that flag also means "drops a loot table",
+                // and vanilla's bombs drop nothing when they go off.
+                case DimensionItemArchetype.Explosive:
+                    return Always |
+                           DimensionItemAuthoringComponents.InventoryItem |
+                           DimensionItemAuthoringComponents.Placement |
+                           DimensionItemAuthoringComponents.Explosive;
 
                 case DimensionItemArchetype.Custom:
                 default:
@@ -239,6 +275,7 @@ namespace ExpandNullforge.Api
                 case DimensionItemArchetype.Creature: return "Creature";
                 case DimensionItemArchetype.Mob: return "Mob";
                 case DimensionItemArchetype.Boss: return "Boss";
+                case DimensionItemArchetype.Explosive: return "Bomb";
                 case DimensionItemArchetype.Custom: return "Custom";
                 default: return archetype.ToString();
             }
@@ -267,6 +304,7 @@ namespace ExpandNullforge.Api
             Append(builder, required, DimensionItemAuthoringComponents.Loot, "Loot");
             Append(builder, required, DimensionItemAuthoringComponents.Creature, "Creature");
             Append(builder, required, DimensionItemAuthoringComponents.BossEncounter, "BossEncounter");
+            Append(builder, required, DimensionItemAuthoringComponents.Explosive, "Explosive");
 
             return builder.Length == 0 ? "no components" : builder.ToString();
         }

@@ -9,9 +9,46 @@ using Unity.Transforms;
 using Unity.Mathematics;
 using Unity.NetCode;
 using UnityEngine;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Portals
 {
+  /// <summary>
+  /// Charges and fires this framework's portals.
+  /// </summary>
+  /// <remarks>
+  /// <para>
+  /// WHY NONE OF THIS IS VANILLA'S <c>PortalCD</c>. Core Keeper's portal component holds exactly one
+  /// field — a float accumulator. No link, no destination, no pair id. Vanilla's "portal network" is
+  /// not a graph at all: it is the global set of entities carrying a <c>MapMarkerCD</c>, and the
+  /// player picks a destination off the map at use time. A portal that leads somewhere specific is a
+  /// concept the vanilla component cannot express, so <c>DimensionPortalCD</c> carries the link
+  /// itself and the charge with it. Reusing <c>PortalCD</c> would have meant storing our link
+  /// somewhere else anyway, and inheriting two traps for nothing:
+  /// </para>
+  /// <list type="bullet">
+  ///   <item><description>
+  ///     <c>PortalSystem</c>'s query is <c>WithAll&lt;CompanionInstantiatedEntityBuffer&gt;</c>. A
+  ///     portal without companion entities never charges — silently, with no error and no log line.
+  ///     Generated portal prefabs strip <c>PortalAuthoring</c> outright, so nothing of ours can fall
+  ///     into that hole.
+  ///   </description></item>
+  ///   <item><description>
+  ///     <c>Portal.Use()</c> runs an unfiltered <c>MapMarkerCD</c> entity query on the main thread on
+  ///     every single interaction — cost proportional to every marker in the world. Our activation
+  ///     path reads one component off the portal that was actually used.
+  ///   </description></item>
+  /// </list>
+  /// <para>
+  /// The same reasoning rules out waypoints: those need <b>both</b> <c>PortalAuthoring</c> and
+  /// <c>WayPointAuthoring</c> (the waypoint converter does not add <c>PortalCD</c> itself) and cap at
+  /// 598 of 600 charge until a player physically stands within half a tile. Nothing here authors one.
+  /// </para>
+  /// <para>
+  /// Where the player lands is handled separately, in <see cref="DimensionArrivalTile"/> — vanilla
+  /// does no walkability check at all on arrival, and ours are placed programmatically.
+  /// </para>
+  /// </remarks>
   [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
   [UpdateInGroup(typeof(SimulationSystemGroup))]
   [UpdateAfter(typeof(DimensionTravelServerRpcSystem))]
@@ -194,7 +231,7 @@ namespace ExpandNullforge.Portals
         if (DimensionFrameworkLog.VerboseRuntimeLogging)
         {
           DimensionFrameworkLog.Verbose(
-              "[ExpandNullforge] Dimension portal activation result. accepted=" +
+              "Dimension portal activation result. accepted=" +
               result.Accepted +
               " code=" +
               result.Code +
@@ -316,11 +353,11 @@ namespace ExpandNullforge.Portals
         RequestId = requestId,
         Accepted = result.Accepted ? (byte)1 : (byte)0,
         Final = isFinal ? (byte)1 : (byte)0,
-        Code = ToFixed64(result.Code),
-        Message = ToFixed128(result.Message),
-        TravelId = ToFixed64(result.TravelId),
-        LoadTicketId = ToFixed64(result.LoadTicketId),
-        TargetDimensionId = ToFixed64(result.TargetDimensionId),
+        Code = DimensionFixedStrings.ToFixed64(result.Code),
+        Message = DimensionFixedStrings.ToFixed128(result.Message),
+        TravelId = DimensionFixedStrings.ToFixed64(result.TravelId),
+        LoadTicketId = DimensionFixedStrings.ToFixed64(result.LoadTicketId),
+        TargetDimensionId = DimensionFixedStrings.ToFixed64(result.TargetDimensionId),
         TargetLocalX = result.TargetLocalPosition.x,
         TargetLocalY = result.TargetLocalPosition.y,
         TargetAbsoluteX = result.TargetAbsolutePosition.x,
@@ -361,44 +398,5 @@ namespace ExpandNullforge.Portals
       nextCooldownCleanupAt = now + 10.0d;
     }
 
-    private static FixedString64Bytes ToFixed64(string value)
-    {
-      FixedString64Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 63);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
-
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = math.min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 }

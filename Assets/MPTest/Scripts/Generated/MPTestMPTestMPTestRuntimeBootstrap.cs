@@ -208,8 +208,8 @@ public sealed class MPTestMPTestMPTestRuntimeBootstrap : IMod
       return;
     }
 
-    DimensionPortalCraftingRegistry.Register(
-        new DimensionPortalCraftingRecipeDefinition(
+    DimensionCraftingRegistry.Register(
+        new DimensionCraftingRecipeDefinition(
             PortalObjectName,
             ObjectID.WoodenWorkBench,
             1,
@@ -261,8 +261,8 @@ public sealed class MPTestMPTestMPTestRuntimeBootstrap : IMod
         "AF_portal_appear",
         "AF_portal_collapse",
         "");
-    DimensionPortalCraftingRegistry.Register(
-        new DimensionPortalCraftingRecipeDefinition(
+    DimensionCraftingRegistry.Register(
+        new DimensionCraftingRecipeDefinition(
             "MPTest:MPTest.wall.block",
             ObjectID.WoodenWorkBench,
             1,

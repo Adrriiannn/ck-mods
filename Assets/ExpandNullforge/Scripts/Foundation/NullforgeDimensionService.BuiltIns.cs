@@ -75,7 +75,7 @@ namespace ExpandNullforge.Foundation
             int2.zero,
             new DimensionBounds(new int2(-1000000000, -1000000000), new int2(1000000000, 1000000000)),
             1,
-            DimensionSpaceKind.Overworld,
+            DimensionType.World,
             StableCoordinateCapabilities
                 | DimensionCapabilityFlags.PlayerTravel
                 | DimensionCapabilityFlags.Respawn

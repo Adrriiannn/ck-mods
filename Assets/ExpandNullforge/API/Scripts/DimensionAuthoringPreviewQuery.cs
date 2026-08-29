@@ -59,33 +59,5 @@ namespace ExpandNullforge.Api
                 string.Empty,
                 false);
         }
-
-        public static DimensionAuthoringPreviewQuery ForContentKind(
-            DimensionAuthoringContentSummaryKind kind)
-        {
-            return new DimensionAuthoringPreviewQuery(
-                false,
-                DimensionAuthoringPreviewLayerKind.PlayableBounds,
-                true,
-                kind,
-                string.Empty,
-                string.Empty,
-                string.Empty,
-                true);
-        }
-
-        public static DimensionAuthoringPreviewQuery ForPreviewLayer(
-            DimensionAuthoringPreviewLayerKind kind)
-        {
-            return new DimensionAuthoringPreviewQuery(
-                true,
-                kind,
-                false,
-                DimensionAuthoringContentSummaryKind.Dimension,
-                string.Empty,
-                string.Empty,
-                string.Empty,
-                true);
-        }
     }
 }

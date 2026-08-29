@@ -20,6 +20,10 @@ MonoBehaviour:
   enabled: 1
   circuitFloor: 0
   rigidSurface: 0
+  surfaceBehaviour: 0
+  hasGroundFog: 0
+  groundFogTint: {r: 0.45, g: 0.6, b: 0.4, a: 0.35}
+  slimeBehaviour: 0
   circuitFloorMaterial: {fileID: 0}
   groundMapColor:
     serializedVersion: 2
@@ -34,9 +38,39 @@ MonoBehaviour:
   - key: surface
     enabled: 1
     texture: {fileID: 0}
+    density: 0.2
   - key: wall
     enabled: 1
     texture: {fileID: 0}
+    density: 0.2
+  - key: grass
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
+  - key: pebbles
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
+  - key: roots
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
+  - key: slime
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
+  - key: tilled
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
+  - key: watered
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
+  - key: flooded
+    enabled: 0
+    texture: {fileID: 0}
+    density: 0.2
   generatedGenLayers: 080000000300000010000000110000000a00000012000000180000000f00000015000000020000002f00000039000000
   generatedGenTextures:
   - {fileID: 2800000, guid: 9852b914b5a9d884a8924309379c49ba, type: 3}

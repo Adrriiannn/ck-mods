@@ -10,10 +10,22 @@ namespace ExpandNullforge.EditorTools
     /// Sound selector for the Portal Studio's sound fields: one flat "Vanilla Sounds" list of
     /// every audio clip in the game's bundles (with in-editor preview) — the designed sfx bank
     /// included, since each of its clips is individually addressable at runtime. Clicking Select
-    /// writes the clip's runtime key straight into the field that opened the picker. Hand-typed
-    /// SfxID names remain valid keys for the one-shot fields; the picker just no longer needs a
-    /// separate catalog for them.
+    /// writes the clip's runtime key straight into the field that opened the picker.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// WHAT THIS WRITES IS A FILE ADDRESS, NOT A SOUND NAME, and the two are not interchangeable.
+    /// A file address is what ambience, music and the portal sounds take. Everything else in the
+    /// framework — a creature's swing, a plant ripening, a horn — takes the name Core Keeper stores
+    /// the sound under, which has its own list and its own Browse button
+    /// (<see cref="DimensionNamePickerWindow"/>). An address pasted into a name field hashes to a
+    /// number no sound answers to and plays as silence with nothing logged.
+    /// </para>
+    /// <para>
+    /// The three sorts of string, and why none of them can stand in for another, are written down
+    /// once in <c>Docs/sound-key-spaces.md</c>.
+    /// </para>
+    /// </remarks>
     internal sealed class DimensionSoundPickerWindow : EditorWindow
     {
         public const string FieldPlacedActivation = "placedActivation";

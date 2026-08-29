@@ -47,31 +47,6 @@ namespace ExpandNullforge.EditorTools
             new LayerRef { Layer = "Swirls", Property = "centerSwirlSpriteAsset", IsSwirl = true }
         };
 
-        [MenuItem("Dimensions API/Validate Selected Portal Assets")]
-        private static void ValidateSelectionMenu()
-        {
-            DimensionTemplateAsset template = Selection.activeObject as DimensionTemplateAsset;
-            if (template == null)
-            {
-                Debug.LogWarning(
-                    "Dimensions API parity: select a Dimension Asset (DimensionTemplateAsset) " +
-                    "in the Project window, then run this again.");
-                return;
-            }
-
-            DimensionPortalVisualProfileAsset profile = template.PortalVisualProfile;
-            if (profile == null)
-            {
-                Debug.LogWarning(
-                    "Dimensions API parity: '" + template.name +
-                    "' has no portal visual profile assigned.", template);
-                return;
-            }
-
-            Validate(template, profile, out string report);
-            Debug.Log(report, template);
-        }
-
         /// <summary>
         /// Produces a per-layer parity report for the portal profile and returns the raw
         /// findings. <paramref name="report"/> is a human-readable summary.

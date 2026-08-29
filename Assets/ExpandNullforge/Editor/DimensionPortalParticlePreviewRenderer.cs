@@ -14,10 +14,19 @@ namespace ExpandNullforge.EditorTools
     /// Renders the extracted vanilla GatherEnergy particle system at Core Keeper's native
     /// portal resolution. The completed 48 x 48 image is point-scaled by Portal Studio, so
     /// the 32 x 32 source billboard resolves to its real 1-2 pixel in-game footprint instead
-    /// of exposing the source circle at editor zoom.
+    /// of exposing the source circle at editor zoom. A renderer constructed with
+    /// <c>readyBurst</c> drives the one-shot DeathBlink activation burst through the same
+    /// pipeline instead of the persistent swirl.
     /// </summary>
     internal sealed class DimensionPortalParticlePreviewRenderer : IDisposable
     {
+        private readonly bool readyBurst;
+
+        internal DimensionPortalParticlePreviewRenderer(bool readyBurst = false)
+        {
+            this.readyBurst = readyBurst;
+        }
+
         private const int NativePixels = DimensionPortalVisualContract.CanonicalFramePixels;
         private const float MaximumIncrementalStep = 0.75f;
         private const float PreviewCameraDistance = 10.0f;
@@ -55,12 +64,20 @@ namespace ExpandNullforge.EditorTools
         private string failedError = string.Empty;
         private readonly List<Material> ownedPreviewMaterials = new List<Material>(4);
         private Material additiveCompositeMaterial;
-        private ParticleSystemRenderer rootParticleRenderer;
-        private Material particlePreviewMaterial;
-        private Material trailPreviewMaterial;
-        private Mesh bakedParticleMesh;
-        private Mesh bakedTrailMesh;
         private CommandBuffer particleRenderCommands;
+
+        /// <summary>One drawable emitter of the preview subtree, with its own baked meshes.</summary>
+        private struct BakedEmitter
+        {
+            public ParticleSystem System;
+            public ParticleSystemRenderer Renderer;
+            public Mesh ParticleMesh;
+            public Mesh TrailMesh;
+            public Material ParticleMaterial;
+            public Material TrailMaterial;
+        }
+
+        private readonly List<BakedEmitter> bakedEmitters = new List<BakedEmitter>(4);
 
         internal bool TryRender(
             DimensionPortalVisualProfileAsset profile,
@@ -262,8 +279,11 @@ namespace ExpandNullforge.EditorTools
                 hideFlags = HideFlags.HideAndDontSave
             };
             SceneManager.MoveGameObjectToScene(previewHost, previewScene);
-            particleRoot =
-                DimensionRuntimeConsumerBootstrapUtility.CreatePortalPersistentParticlePreview(
+            particleRoot = readyBurst
+                ? DimensionRuntimeConsumerBootstrapUtility.CreatePortalReadyBurstParticlePreview(
+                    previewHost.transform,
+                    profile)
+                : DimensionRuntimeConsumerBootstrapUtility.CreatePortalPersistentParticlePreview(
                     previewHost.transform,
                     profile);
             if (particleRoot == null)
@@ -273,25 +293,30 @@ namespace ExpandNullforge.EditorTools
             }
 
             particleRoot.hideFlags = HideFlags.HideAndDontSave;
-            particleRoot.transform.localPosition = Vector3.zero;
+            // The ready-burst root keeps its authored pixel offset; only the persistent swirl
+            // is re-anchored to the canvas origin.
+            if (!readyBurst)
+            {
+                particleRoot.transform.localPosition = Vector3.zero;
+            }
             particleRoot.SetActive(true);
             DimensionRuntimeConsumerBootstrapUtility.ConfigurePortalPersistentParticlePreviewMaterials(
                 particleRoot,
                 profile,
-                ownedPreviewMaterials);
+                ownedPreviewMaterials,
+                readyBurst);
             rootParticleSystem = particleRoot.GetComponent<ParticleSystem>();
             if (rootParticleSystem == null)
             {
                 throw new InvalidOperationException(
                     "The extracted GatherEnergy root has no ParticleSystem component.");
             }
-            rootParticleRenderer = rootParticleSystem.GetComponent<ParticleSystemRenderer>();
-            if (rootParticleRenderer == null)
+            PrepareManualRenderResources();
+            if (bakedEmitters.Count == 0)
             {
                 throw new InvalidOperationException(
-                    "The extracted GatherEnergy root has no ParticleSystemRenderer component.");
+                    "The configured GatherEnergy preview has no drawable particle emitter.");
             }
-            PrepareManualRenderResources();
 
             configuredProfile = profile;
             configuredFleckHash = fleckHash;
@@ -427,12 +452,45 @@ namespace ExpandNullforge.EditorTools
 
         private void PrepareManualRenderResources()
         {
-            if (rootParticleSystem == null || rootParticleRenderer == null)
+            if (rootParticleSystem == null)
             {
                 return;
             }
 
-            Material[] sourceMaterials = rootParticleRenderer.sharedMaterials;
+            // Every live emitter in the subtree is baked, not just the root. The ready burst
+            // lives entirely in the DeathBlink child, and the persistent swirl disables that
+            // same child — whichever survives, this walk finds it.
+            ParticleSystemRenderer[] renderers =
+                particleRoot.GetComponentsInChildren<ParticleSystemRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                ParticleSystemRenderer renderer = renderers[i];
+                if (renderer == null || !renderer.enabled)
+                {
+                    continue;
+                }
+
+                ParticleSystem system = renderer.GetComponent<ParticleSystem>();
+                if (system == null || !system.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                bakedEmitters.Add(CreateBakedEmitter(system, renderer, i));
+            }
+
+            particleRenderCommands = new CommandBuffer
+            {
+                name = "Portal Studio GatherEnergy"
+            };
+        }
+
+        private BakedEmitter CreateBakedEmitter(
+            ParticleSystem system,
+            ParticleSystemRenderer renderer,
+            int index)
+        {
+            Material[] sourceMaterials = renderer.sharedMaterials;
             Material sourceParticle = sourceMaterials != null && sourceMaterials.Length > 0
                 ? sourceMaterials[0]
                 : null;
@@ -441,7 +499,7 @@ namespace ExpandNullforge.EditorTools
                 : sourceParticle;
 
             ParticleSystem.TextureSheetAnimationModule textureSheet =
-                rootParticleSystem.textureSheetAnimation;
+                system.textureSheetAnimation;
             Texture particleTexture = null;
             if (textureSheet.enabled && textureSheet.spriteCount > 0)
             {
@@ -456,31 +514,32 @@ namespace ExpandNullforge.EditorTools
                 particleTexture = sourceParticle.mainTexture;
             }
 
-            particlePreviewMaterial = CreateManualRenderMaterial(
-                sourceParticle,
-                particleTexture,
-                "PortalStudioGatherEnergyParticles");
-            trailPreviewMaterial = CreateManualRenderMaterial(
-                sourceTrail,
-                particleTexture,
-                "PortalStudioGatherEnergyTrails");
-
-            bakedParticleMesh = new Mesh
+            BakedEmitter emitter = new BakedEmitter
             {
-                name = "PortalStudioGatherEnergyParticleMesh",
-                hideFlags = HideFlags.HideAndDontSave
+                System = system,
+                Renderer = renderer,
+                ParticleMaterial = CreateManualRenderMaterial(
+                    sourceParticle,
+                    particleTexture,
+                    "PortalStudioParticles" + index),
+                TrailMaterial = CreateManualRenderMaterial(
+                    sourceTrail,
+                    particleTexture,
+                    "PortalStudioTrails" + index),
+                ParticleMesh = new Mesh
+                {
+                    name = "PortalStudioParticleMesh" + index,
+                    hideFlags = HideFlags.HideAndDontSave
+                },
+                TrailMesh = new Mesh
+                {
+                    name = "PortalStudioTrailMesh" + index,
+                    hideFlags = HideFlags.HideAndDontSave
+                }
             };
-            bakedParticleMesh.MarkDynamic();
-            bakedTrailMesh = new Mesh
-            {
-                name = "PortalStudioGatherEnergyTrailMesh",
-                hideFlags = HideFlags.HideAndDontSave
-            };
-            bakedTrailMesh.MarkDynamic();
-            particleRenderCommands = new CommandBuffer
-            {
-                name = "Portal Studio GatherEnergy"
-            };
+            emitter.ParticleMesh.MarkDynamic();
+            emitter.TrailMesh.MarkDynamic();
+            return emitter;
         }
 
         private Material CreateManualRenderMaterial(
@@ -511,30 +570,11 @@ namespace ExpandNullforge.EditorTools
             if (previewCamera == null ||
                 previewTarget == null ||
                 rootParticleSystem == null ||
-                rootParticleRenderer == null ||
-                bakedParticleMesh == null ||
+                bakedEmitters.Count == 0 ||
                 particleRenderCommands == null)
             {
                 throw new InvalidOperationException(
                     "The Portal Studio GatherEnergy mesh renderer is unavailable.");
-            }
-
-            bakedParticleMesh.Clear(false);
-            rootParticleRenderer.BakeMesh(
-                bakedParticleMesh,
-                previewCamera,
-                ParticleSystemBakeMeshOptions.BakeRotationAndScale |
-                ParticleSystemBakeMeshOptions.BakePosition);
-
-            bakedTrailMesh.Clear(false);
-            ParticleSystem.TrailModule trails = rootParticleSystem.trails;
-            if (trails.enabled)
-            {
-                rootParticleRenderer.BakeTrailsMesh(
-                    bakedTrailMesh,
-                    previewCamera,
-                    ParticleSystemBakeMeshOptions.BakeRotationAndScale |
-                    ParticleSystemBakeMeshOptions.BakePosition);
             }
 
             particleRenderCommands.Clear();
@@ -546,16 +586,50 @@ namespace ExpandNullforge.EditorTools
                 previewCamera.worldToCameraMatrix,
                 GL.GetGPUProjectionMatrix(previewCamera.projectionMatrix, true));
 
-            // Additive composition is order-independent, but drawing the tapered trail first
-            // leaves the particle head as the final primitive just like ParticleSystemRenderer.
-            DrawBakedMesh(
-                particleRenderCommands,
-                bakedTrailMesh,
-                trailPreviewMaterial);
-            DrawBakedMesh(
-                particleRenderCommands,
-                bakedParticleMesh,
-                particlePreviewMaterial);
+            for (int i = 0; i < bakedEmitters.Count; i++)
+            {
+                BakedEmitter emitter = bakedEmitters[i];
+                if (emitter.System == null ||
+                    emitter.Renderer == null ||
+                    emitter.ParticleMesh == null)
+                {
+                    continue;
+                }
+
+                emitter.ParticleMesh.Clear(false);
+                // Baking a system holding no particles throws rather than producing an empty
+                // mesh, so an emitter that has not fired yet is simply skipped this frame.
+                if (emitter.System.particleCount > 0)
+                {
+                    emitter.Renderer.BakeMesh(
+                        emitter.ParticleMesh,
+                        previewCamera,
+                        ParticleSystemBakeMeshOptions.BakeRotationAndScale |
+                        ParticleSystemBakeMeshOptions.BakePosition);
+                }
+
+                emitter.TrailMesh.Clear(false);
+                ParticleSystem.TrailModule trails = emitter.System.trails;
+                if (trails.enabled && emitter.System.particleCount > 0)
+                {
+                    emitter.Renderer.BakeTrailsMesh(
+                        emitter.TrailMesh,
+                        previewCamera,
+                        ParticleSystemBakeMeshOptions.BakeRotationAndScale |
+                        ParticleSystemBakeMeshOptions.BakePosition);
+                }
+
+                // Additive composition is order-independent, but drawing the tapered trail
+                // first leaves the head as the final primitive, like ParticleSystemRenderer.
+                DrawBakedMesh(
+                    particleRenderCommands,
+                    emitter.TrailMesh,
+                    emitter.TrailMaterial);
+                DrawBakedMesh(
+                    particleRenderCommands,
+                    emitter.ParticleMesh,
+                    emitter.ParticleMaterial);
+            }
 
             Graphics.ExecuteCommandBuffer(particleRenderCommands);
         }
@@ -585,15 +659,45 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
-        private static int ComputeFleckConfigurationHash(
+        private int ComputeFleckConfigurationHash(
             DimensionPortalVisualProfileAsset profile)
         {
             unchecked
             {
                 int hash = 17;
-                // Vanilla mode deliberately preserves every GatherEnergy module and source
-                // texture. Only the authored swirl tint can change its rendered result.
+                if (!readyBurst)
+                {
+                    // Vanilla mode deliberately preserves every GatherEnergy module and source
+                    // texture. Only the authored swirl tint can change its rendered result.
+                    hash = hash * 31 + profile.CenterParticleTint.GetHashCode();
+                    return hash;
+                }
+
+                // Every authored ready-burst control is baked into the clone at construction
+                // time, so any change must rebuild the preview subtree.
+                hash = hash * 31 + profile.PlayReadyFlash.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashFollowsCenterPalette.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashTint.GetHashCode();
                 hash = hash * 31 + profile.CenterParticleTint.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashOffsetPixels.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashScale.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashRotationDegrees.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashEmissionMultiplier.GetHashCode();
+                hash = hash * 31 + profile.ReadyFlashSizeMultiplier.GetHashCode();
+                Sprite[] sprites = profile.ReadyFlashSprites;
+                hash = hash * 31 + (sprites == null ? 0 : sprites.Length);
+                if (sprites != null)
+                {
+                    for (int i = 0; i < sprites.Length; i++)
+                    {
+                        hash = hash * 31 +
+                               (sprites[i] == null ? 0 : sprites[i].GetInstanceID());
+                    }
+                }
+
+                hash = hash * 31 + (profile.ReadyFlashTexture == null
+                    ? 0
+                    : profile.ReadyFlashTexture.GetInstanceID());
                 return hash;
             }
         }
@@ -621,7 +725,7 @@ namespace ExpandNullforge.EditorTools
         private void DestroyPreview()
         {
             rootParticleSystem = null;
-            rootParticleRenderer = null;
+
             particleRoot = null;
             if (previewCamera != null)
             {
@@ -667,18 +771,19 @@ namespace ExpandNullforge.EditorTools
                 }
             }
             ownedPreviewMaterials.Clear();
-            particlePreviewMaterial = null;
-            trailPreviewMaterial = null;
-            if (bakedParticleMesh != null)
+            for (int i = 0; i < bakedEmitters.Count; i++)
             {
-                Object.DestroyImmediate(bakedParticleMesh);
-                bakedParticleMesh = null;
+                BakedEmitter emitter = bakedEmitters[i];
+                if (emitter.ParticleMesh != null)
+                {
+                    Object.DestroyImmediate(emitter.ParticleMesh);
+                }
+                if (emitter.TrailMesh != null)
+                {
+                    Object.DestroyImmediate(emitter.TrailMesh);
+                }
             }
-            if (bakedTrailMesh != null)
-            {
-                Object.DestroyImmediate(bakedTrailMesh);
-                bakedTrailMesh = null;
-            }
+            bakedEmitters.Clear();
             if (particleRenderCommands != null)
             {
                 particleRenderCommands.Dispose();

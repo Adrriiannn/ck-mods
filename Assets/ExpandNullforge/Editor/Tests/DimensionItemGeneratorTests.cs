@@ -87,7 +87,9 @@ namespace ExpandNullforge.EditorTools
                 serialized =>
                 {
                     serialized.FindProperty("damageAmount").intValue = 17;
-                    serialized.FindProperty("durabilityPoints").intValue = 250;
+                    serialized.FindProperty("cooldownSeconds").floatValue = 0.4f;
+                    serialized.FindProperty("whatItIs").intValue =
+                        (int)DimensionWhatItIs.MeleeWeapon;
                 });
 
             DimensionItemGenerationReport report =
@@ -100,16 +102,17 @@ namespace ExpandNullforge.EditorTools
             // Damage is a plain authored field and does persist.
             Assert.That(prefab.GetComponent<WeaponDamageAuthoring>().damage, Is.EqualTo(17));
 
-            // Durability is different: DurabilityAuthoring resets its value fields on import
-            // (proven - a written 250 reads back as the SDK default of 1), because Core Keeper
-            // derives durability from the item type and durabilityMultiplier. So the framework
-            // guarantees only that a weapon carries the component; the value is an in-game
-            // concern and the generator warns that the authored value was not baked.
+            // CONTRACT CHANGED, deliberately. This used to assert that the generator WARNED an
+            // authored durability had not been baked. It had not been baked because the object went
+            // out typed NonUsable, which matches no case in the game's formula, so the formula
+            // returned the initialAmount of 1 it was handed. With the item saying what it is, the
+            // same formula gives 350 for an ordinary sword, and the warning has no reason to exist.
             Assert.That(prefab.GetComponent<DurabilityAuthoring>(), Is.Not.Null);
             Assert.That(
-                report.Warnings,
-                Has.Some.Contains("durability").IgnoreCase,
-                "The creator should be told their durability value was not applied.");
+                prefab.GetComponent<DurabilityAuthoring>().maxDurability,
+                Is.EqualTo(350),
+                "A melee weapon's durability is the game's 350 times the multiplier, scaled by its "
+                + "swing time.");
         }
 
         [Test]
@@ -401,7 +404,8 @@ namespace ExpandNullforge.EditorTools
             serialized.FindProperty("itemId").stringValue = itemId;
             serialized.FindProperty("displayName").stringValue = itemId;
             serialized.FindProperty("iconId").stringValue = "icon:" + itemId;
-            serialized.FindProperty("maxStack").intValue = 99;
+            serialized.FindProperty("stackableWasMigrated").boolValue = true;
+            serialized.FindProperty("stackable").boolValue = true;
             serialized.FindProperty("enabled").boolValue = true;
             SetArchetypeProperty(serialized, archetype);
             configure?.Invoke(serialized);

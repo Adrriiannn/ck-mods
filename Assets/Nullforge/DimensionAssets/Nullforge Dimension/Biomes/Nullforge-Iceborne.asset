@@ -38,8 +38,8 @@ MonoBehaviour:
   scenePool: []
   resourceNodes: []
   spawnRules: []
-  generationProfile: {fileID: 11400000, guid: 9414bd5bb38e4104792c9378f58d0195, type: 2}
-  generationPasses: []
+  generationPasses:
+  - {fileID: 11400000, guid: d4c5a56b7c3efbf40b9d321fd453aa83, type: 2}
   generationTables: []
   notes: Semantic terrain preset applied. Runtime generation will expand these IDs
     into scoped generation tables.

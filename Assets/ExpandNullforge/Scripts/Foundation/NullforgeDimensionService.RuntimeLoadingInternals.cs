@@ -233,7 +233,7 @@ namespace ExpandNullforge.Foundation
           continue;
         }
 
-        RepairRuntimeLoadAnchor(record.Anchor);
+        KeepOutOfTheSaveAndAlwaysLoaded(record.Anchor);
 
         bool allSubMapsObserved = AreRequiredSubMapsObserved(record);
         if (allSubMapsObserved)
@@ -344,7 +344,7 @@ namespace ExpandNullforge.Foundation
           continue;
         }
 
-        RepairRuntimeLoadAnchor(record.Anchor);
+        KeepOutOfTheSaveAndAlwaysLoaded(record.Anchor);
       }
     }
 
@@ -398,7 +398,7 @@ namespace ExpandNullforge.Foundation
             continue;
           }
 
-          RepairRuntimeSimulationRegion(entity);
+          KeepOutOfTheSaveAndAlwaysLoaded(entity);
           runtimeSimulationRegionAnchors[keyRegion.Key] = entity;
         }
       }
@@ -663,7 +663,15 @@ namespace ExpandNullforge.Foundation
       staleSimulationRegionKeys.Clear();
     }
 
-    private void RepairRuntimeSimulationRegion(Entity entity)
+    /// <summary>
+    /// Takes an entity out of the save and stops the world unloading it.
+    /// </summary>
+    /// <remarks>
+    /// The load anchor and the simulation region both need exactly this and nothing else, which
+    /// is why one method answers for both. It was written twice, a hundred lines apart in this
+    /// same file, under two names that read as two different repairs.
+    /// </remarks>
+    private void KeepOutOfTheSaveAndAlwaysLoaded(Entity entity)
     {
       if (!IsServerWorldAvailable() || entity == Entity.Null || !serverWorld.EntityManager.Exists(entity))
       {
@@ -767,30 +775,6 @@ namespace ExpandNullforge.Foundation
       component.SubMapsObservedAt = record.SubMapsObservedAt;
       component.ImmediateLoadEnabled = record.ImmediateLoadEnabled ? (byte)1 : (byte)0;
       serverWorld.EntityManager.SetComponentData(record.Anchor, component);
-    }
-
-    private void RepairRuntimeLoadAnchor(Entity entity)
-    {
-      if (!IsServerWorldAvailable() || entity == Entity.Null || !serverWorld.EntityManager.Exists(entity))
-      {
-        return;
-      }
-
-      EntityManager entityManager = serverWorld.EntityManager;
-      if (entityManager.HasComponent<BlockSaveCD>(entity))
-      {
-        entityManager.RemoveComponent<BlockSaveCD>(entity);
-      }
-
-      if (!entityManager.HasComponent<DontSerializeCD>(entity))
-      {
-        entityManager.AddComponent<DontSerializeCD>(entity);
-      }
-
-      if (!entityManager.HasComponent<DontDisableCD>(entity))
-      {
-        entityManager.AddComponent<DontDisableCD>(entity);
-      }
     }
 
     private void UpdateLoadTicket(RuntimeLoadRecord record)

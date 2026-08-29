@@ -1,0 +1,11 @@
+# Which of the game's components can be borrowed whole, and what each is called to an author.
+# component<TAB>kind<TAB>the phrase after the creature's name
+MeleeAttackStateAuthoring	Melee	its close-up swing
+RangeAttackStateAuthoring	Ranged	its ranged shot
+ChaseStateAuthoring	Chase	the way it chases
+RandomWalkStateAuthoring	Wander	the way it wanders
+CustomAttackSoundAuthoring	Sounds	the sounds it makes fighting
+ChargeAttackStateAuthoring	Charge	the way it charges
+JumpAttackStateAuthoring	Jump	its leaping attack
+ExplodeStateAuthoring	Explode	the way it explodes
+RayAttackStateAuthoring	Ray	its sweeping ray

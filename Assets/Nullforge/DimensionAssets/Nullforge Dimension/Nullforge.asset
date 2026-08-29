@@ -43,8 +43,18 @@ MonoBehaviour:
   globalRecipes: []
   globalWorkbenches: []
   globalLootTables: []
+  globalDungeons: []
+  globalQuests: []
+  globalContainers: []
+  globalPlants: []
+  globalWorldObjects: []
+  globalVehicles: []
+  globalProjectiles: []
+  globalExplosions: []
   globalAnimals: []
   globalCritters: []
+  globalGameSetups: []
+  globalConditions: []
   globalMobs: []
   globalBosses: []
   globalSpawnRules: []
@@ -57,7 +67,8 @@ MonoBehaviour:
   portalActivationChargeSeconds: 30
   portalVisualProfile: {fileID: 11400000, guid: 603c03de4cf35db4f96193b503a543f4,
     type: 2}
-  itemPortalVisualProfile: {fileID: 0}
+  itemPortalVisualProfile: {fileID: 11400000, guid: 7add6aacabea1f5439eb0e1c58b637a0,
+    type: 2}
   placedPortalActivationSound: 
   instantPortalSoundMode: 0
   instantPortalActivationSound: AF_portal_appear

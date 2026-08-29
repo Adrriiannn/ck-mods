@@ -1,0 +1,94 @@
+AFPestElectricEntity	Electric Pest
+AffixArcaneBeamEntity	Arcane Beam
+AggressiveSlimeBlobEntity	Aggressive Slime Blob
+AmoebaBombEntity	Amoeba Bomb
+AncientGolemEntity	Ancient Golem
+BatMinionEntity	Summoned Bat
+BigLarvaEntity	Big Larva
+BigLarvaFromHiveEggEntity	Big Larva (from a hive egg)
+BombScarabEntity	Bomb Scarab
+CavelingAssassinEntity	Caveling Assassin
+CavelingBruteEntity	Caveling Brute
+CavelingEntity	Caveling
+CavelingGardenerEntity	Caveling Gardener
+CavelingHunterEntity	Caveling Hunter
+CavelingScholarEntity	Caveling Scholar
+CavelingShamanEntity	Caveling Shaman
+CavelingSkirmisherEntity	Caveling Skirmisher
+CavelingSpearmanEntity	Caveling Spearman
+CicadaEnemyEntity	Cicada
+CicadaEnemyNatureEntity	Nature Cicada
+CicadaNymphEntity	Cicada Nymph
+CoreBossEntity	The Core (boss)
+CoreBossOrbEntity	The Core's orb
+CrabEnemyEntity	Crab
+DesertBruteEntity	Desert Brute
+ExplosiveBarrelEntity	Explosive Barrel
+FlamethrowerTurretEntity	Flamethrower Turret
+GalaxiteTurretBackwardEntity	Galaxite Turret (facing back)
+GalaxiteTurretForwardEntity	Galaxite Turret (facing front)
+GalaxiteTurretLeftEntity	Galaxite Turret (facing left)
+GalaxiteTurretRightEntity	Galaxite Turret (facing right)
+GhostCavelingEntity	Ghost Caveling
+GhostScholarEntity	Ghost Scholar
+GoldenBombScarabEntity	Golden Bomb Scarab
+HiveBigLarvaEntity	Hive Big Larva
+HiveLarvaEntity	Hive Larva
+HiveLarvaFromBossEggEntity	Hive Larva (from a boss egg)
+HydraBossDesertEntity	Desert Hydra
+HydraBossIceShardEntity	Hydra's ice shard
+HydraBossNatureEntity	Nature Hydra
+HydraBossSeaEntity	Sea Hydra
+HydraBossVoidEntity	Void Hydra
+InfectedCavelingEntity	Infected Caveling
+LarvaEntity	Larva
+LavaButterflyEntity	Lava Butterfly
+LavaSlimeBlobEntity	Lava Slime Blob
+LavaSlimeBossEntity	Lava Slime Boss
+MimiteEntity	Mimite
+MinionFireMiteEntity	Summoned Fire Mite
+MinionMeleeEntity	Summoned Fighter
+MinionPickaxeEntity	Summoned Miner
+MinionPoisonEntity	Summoned Poison Minion
+MoldTentacleEntity	Mold Tentacle
+MushroomBruteEntity	Mushroom Brute
+MushroomEnemyEntity	Mushroom
+OctopusBossEntity	Octopus Boss
+OctopusTentacleEntity	Octopus tentacle
+OrbitalTurretEntity	Orbital Turret
+PetBunnyEntity	Pet Bunny
+PetCatEntity	Pet Cat
+PetDogEntity	Pet Dog
+PetElectricEntity	Electric Pet
+PetLavaSlimeBlobEntity	Pet Lava Slime
+PetPoisonSlimeBlobEntity	Pet Poison Slime
+PetPrinceSlimeBlobEntity	Pet Prince Slime
+PetSlimeBlobEntity	Pet Slime
+PetSlipperySlimeBlobEntity	Pet Slippery Slime
+PetTardigradeEntity	Pet Tardigrade
+PoisonSlimeBlobEntity	Poison Slime Blob
+PoisonSlimeBlobNoLootEntity	Poison Slime Blob (drops nothing)
+RobotBossEntity	Robot Boss
+RobotMinerEntity	Robot Miner
+RobotSwarmerEntity	Robot Swarmer
+RoyalSlimeBlobEntity	Royal Slime Blob
+ScarabBossBombScarabEntity	Scarab Boss's bomb scarab
+ScarabBossEntity	Scarab Boss
+ShamanBossEntity	Shaman Boss
+SlimeBlobEntity	Slime Blob
+SlipperySlimeBlobEntity	Slippery Slime Blob
+SlipperySlimeBossEntity	Slippery Slime Boss
+SmallTentacleEntity	Small Tentacle
+SulfurBudEntity	Sulfur Bud
+TempleTurretBackwardEntity	Temple Turret (facing back)
+TempleTurretForwardEntity	Temple Turret (facing front)
+TempleTurretLeftEntity	Temple Turret (facing left)
+TempleTurretRightEntity	Temple Turret (facing right)
+VoidCavelingBruteEntity	Void Caveling Brute
+VoidCavelingMinerEntity	Void Caveling Miner
+VoidCavelingShamanEntity	Void Caveling Shaman
+VoidLarvaEntity	Void Larva
+WallDesertExplosiveBlockEntity	Desert explosive block
+WallExplosiveBlockEntity	Explosive block
+WallForestExplosiveBlockEntity	Forest explosive block
+WallNaturalExplosiveBlockEntity	Natural explosive block

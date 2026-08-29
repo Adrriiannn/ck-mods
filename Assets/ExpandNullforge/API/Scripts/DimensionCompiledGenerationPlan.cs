@@ -14,8 +14,6 @@ namespace ExpandNullforge.Api
         public readonly int CoordinateShellPaddingTiles;
         public readonly IReadOnlyList<DimensionCompiledBiomeRegion> BiomeRegions;
         public readonly IReadOnlyList<DimensionCompiledScenePlacement> ScenePlacements;
-        public readonly IReadOnlyList<DimensionResourceNodeDefinition> ResourceNodes;
-        public readonly IReadOnlyList<DimensionSpawnRule> SpawnRules;
         public readonly IReadOnlyList<DimensionGenerationPassDefinition> GenerationPasses;
         public readonly IReadOnlyList<DimensionAuthoringIssue> Issues;
 
@@ -30,8 +28,6 @@ namespace ExpandNullforge.Api
             int coordinateShellPaddingTiles,
             IReadOnlyList<DimensionCompiledBiomeRegion> biomeRegions,
             IReadOnlyList<DimensionCompiledScenePlacement> scenePlacements,
-            IReadOnlyList<DimensionResourceNodeDefinition> resourceNodes,
-            IReadOnlyList<DimensionSpawnRule> spawnRules,
             IReadOnlyList<DimensionGenerationPassDefinition> generationPasses,
             IReadOnlyList<DimensionAuthoringIssue> issues)
         {
@@ -45,8 +41,6 @@ namespace ExpandNullforge.Api
             CoordinateShellPaddingTiles = coordinateShellPaddingTiles;
             BiomeRegions = biomeRegions;
             ScenePlacements = scenePlacements;
-            ResourceNodes = resourceNodes;
-            SpawnRules = spawnRules;
             GenerationPasses = generationPasses;
             Issues = issues;
         }

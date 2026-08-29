@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceLocations;
+using ExpandNullforge.Foundation;
 
 namespace ExpandNullforge.Portals
 {
@@ -52,6 +53,21 @@ namespace ExpandNullforge.Portals
     /// Every portal sound is deliberately short-ranged (<see cref="RangeTiles"/>): portals sit
     /// in bases and would otherwise serenade the whole server.
     /// </summary>
+    /// <remarks>
+    /// WHY LOOPS USE OUR OWN AudioSource RATHER THAN AudioManager — AND MUST KEEP DOING SO.
+    /// Core Keeper plays SfxIDs from one pooled set of audio sources: <c>AudioManager</c> builds
+    /// <c>new PoolSystem(..., initialSize: 50, maxSize: -1, ...)</c>, and a negative maxSize means
+    /// <c>initialSize * 2</c> — so the whole game shares <b>100</b> sources. When the pool is empty
+    /// <c>PoolSystem.GetPoolObject</c> returns a default struct, <c>AudioManager.PlayAudioClip</c>
+    /// hands back null, and the sound simply never plays; the only trace is a "max capacity (100)
+    /// exceeded" warning. A held loop occupies its slot for as long as it runs, so routing ambience
+    /// through <c>AudioManager</c> would let a room full of portals quietly starve VANILLA sounds —
+    /// a bug that would present as "the game randomly goes quiet near my base".
+    /// Our loops therefore live on plain <see cref="AudioSource"/> components we create and own,
+    /// borrowing only the game's mixer groups so the player's volume sliders still apply. The single
+    /// call into <c>AudioManager.Sfx</c> is a one-shot: <c>loop</c> defaults to false and
+    /// <c>freeAudioSourceAfterItStoppedPlaying</c> to true, so it returns its slot.
+    /// </remarks>
     public static class DimensionPortalSoundRegistry
     {
         /// <summary>How far (in tiles) portal sounds carry. Beyond this they are silent.</summary>
@@ -363,8 +379,8 @@ namespace ExpandNullforge.Portals
             }
 
             entry.LoggedFailure = true;
-            Debug.LogWarning(
-                "[ExpandNullforge] Portal sound key '" + soundKey +
+            DimensionLog.Problem(DimensionLogChannels.Portal, null, 
+                "Portal sound key '" + soundKey +
                 "' is neither an SfxID name nor a resolvable audio clip key; it stays silent. " +
                 "Copy keys from Dimensions API ▸ Sound Library.");
         }

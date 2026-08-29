@@ -1,6 +1,7 @@
 using System;
 using Unity.Collections;
 using Unity.Entities;
+using ExpandNullforge.Core;
 
 namespace ExpandNullforge.Portals
 {
@@ -56,7 +57,7 @@ namespace ExpandNullforge.Portals
 
           if (!string.IsNullOrEmpty(reason))
           {
-            existing.Reason = ToFixed128(reason);
+            existing.Reason = DimensionFixedStrings.ToFixed128(reason);
           }
 
           activations[i] = existing;
@@ -72,7 +73,7 @@ namespace ExpandNullforge.Portals
         SourceConnection = sourceConnection,
         RequestId = requestId,
         RequestedAt = world.Time.ElapsedTime,
-        Reason = ToFixed128(reason)
+        Reason = DimensionFixedStrings.ToFixed128(reason)
       });
 
       pendingActivationCount++;
@@ -106,24 +107,5 @@ namespace ExpandNullforge.Portals
       return nextRequestId;
     }
 
-    private static FixedString128Bytes ToFixed128(string value)
-    {
-      FixedString128Bytes result = default;
-      if (string.IsNullOrEmpty(value))
-      {
-        return result;
-      }
-
-      int count = Math.Min(value.Length, 127);
-      for (int i = 0; i < count; i++)
-      {
-        if (!char.IsControl(value[i]))
-        {
-          result.Append(value[i]);
-        }
-      }
-
-      return result;
-    }
   }
 }

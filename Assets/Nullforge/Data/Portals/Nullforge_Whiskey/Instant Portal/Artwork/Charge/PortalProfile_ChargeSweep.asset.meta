@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: 92e812949264d5840b399e4c4232abe2
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: ExpandNullforge.PortalArtwork:{"schemaVersion":1,"owner":"Dimensions
+    API","profileGuid":"7add6aacabea1f5439eb0e1c58b637a0","layer":"charge","sourceAssetGuid":"3eb82ccfd72f4cea956bdf52272b713e","sourceAddressLow":7016284293423569344,"sourceAddressHigh":7926038299096422560,"managedAssetGuid":"92e812949264d5840b399e4c4232abe2","managedAddressLow":4897473498445244081,"managedAddressHigh":6598117232925981791,"palette":[{"r":0.0784313753247261,"g":0.16862745583057404,"b":0.3607843220233917,"a":1.0},{"r":0.0784313753247261,"g":0.24313725531101228,"b":0.6705882549285889,"a":1.0},{"r":0.08627451211214066,"g":0.364705890417099,"b":0.8509804010391235,"a":1.0},{"r":0.0941176488995552,"g":0.5215686559677124,"b":0.8470588326454163,"a":1.0},{"r":0.09803921729326248,"g":0.7411764860153198,"b":0.7764706015586853,"a":1.0}],"directTextureOverride":false}
+  assetBundleName: 
+  assetBundleVariant: 

@@ -65,6 +65,15 @@ namespace ExpandNullforge.EditorTools
             // Chunk data owns the placed tile; the entity is transient and must not be serialized.
             Ensure<DontSerializeAuthoring>(root);
 
+            // WITHOUT THIS A CUSTOM BLOCK IS COMPLETELY SILENT AND THROWS NOTHING. It is not a
+            // query but a converter-chain gate: the game wraps ALL of its tile audio and ALL of its
+            // puffs — its own defaults included — inside a check for this component, so a block
+            // without it has no hit sound, no break sound, no dust and no debris. Every one of the
+            // game's own blocks and ores carries it. The two sound tables and the puff list are
+            // left at their defaults, which is what makes the game fall back to its own; a block
+            // that wants its own sounds is a separate answer nobody has been asked for yet.
+            Ensure<TileEffectAuthoring>(root);
+
             HealthAuthoring health = Ensure<HealthAuthoring>(root);
             health.maxHealth = isWall ? WallMaxHealth : GroundMaxHealth;
             // No AreaLevelAuthoring on the object, so keep health off the level curve.
@@ -90,24 +99,20 @@ namespace ExpandNullforge.EditorTools
             spawnOnDeath.spawnChance = isWall ? 0.5f : 1.0f;
             spawnOnDeath.clearOtherTiles = !isWall;
 
-            if (isWall)
-            {
-                Ensure<MineableAuthoring>(root);
-            }
-            else
-            {
-                Ensure<DiggableAuthoring>(root);
-            }
+            // Exactly one of these, and the other actively removed: a prefab that somehow carried
+            // both would be mineable AND diggable, which is not a state vanilla ever produces.
+            Set<MineableAuthoring>(root, isWall);
+            Set<DiggableAuthoring>(root, !isWall);
 
-            if (tileset.RigidSurface)
-            {
-                // The marker Core Keeper's own square-looking blocks carry. It adds
-                // IgnoreVertexOffsetsCD, which ShaderTexturesSystem writes into the global
-                // IgnoreVertexOffsetTex — a world-window mask the tile shader samples to decide where
-                // to skip its noise displacement. This, not any per-layer flag, is how vanilla exempts
-                // something from the wobble.
-                Ensure<IgnoreVertexOffsetsAuthoring>(root);
-            }
+            // The marker Core Keeper's own square-looking blocks carry. It adds
+            // IgnoreVertexOffsetsCD, which ShaderTexturesSystem writes into the global
+            // IgnoreVertexOffsetTex — a world-window mask the tile shader samples to decide where
+            // to skip its noise displacement. This, not any per-layer flag, is how vanilla exempts
+            // something from the wobble.
+            //
+            // Set rather than Ensure because turning the toggle OFF has to take the marker away.
+            // It used to only ever be added, so a block that was once rigid stayed rigid forever.
+            Set<IgnoreVertexOffsetsAuthoring>(root, tileset.RigidSurface);
 
             ConfigurePlacement(root, tileset, isWall);
         }
@@ -149,6 +154,48 @@ namespace ExpandNullforge.EditorTools
             }
 
             return component;
+        }
+
+        /// <summary>
+        /// Makes the prefab's state match <paramref name="wanted"/> — adding the component when it
+        /// should be there and REMOVING it when it should not.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// WHY THIS EXISTS RATHER THAN A BARE <see cref="Ensure{T}"/>. Generation updates prefabs in
+        /// place, so anything an earlier run added survives until something takes it away. With
+        /// add-only helpers the framework can grant a capability but never revoke one: switching
+        /// "rigid surface" off and regenerating left <c>IgnoreVertexOffsetsAuthoring</c> exactly
+        /// where it was, and the block kept rendering rigid while the dashboard said it should not.
+        /// The toggle appeared broken; what was actually broken is that the generator was not
+        /// authoritative over the state it owns.
+        /// </para>
+        /// <para>
+        /// Any component the framework attaches CONDITIONALLY has to go through here. An add-only
+        /// call is safe only for components that are unconditionally part of every block.
+        /// </para>
+        /// </remarks>
+        private static void Set<T>(GameObject root, bool wanted) where T : Component
+        {
+            T component = root.GetComponent<T>();
+            if (wanted)
+            {
+                if (component == null)
+                {
+                    root.AddComponent<T>();
+                }
+
+                return;
+            }
+
+            if (component != null)
+            {
+                // Routed through the one dependency-aware removal, which says so in the console
+                // when a RequireComponent blocks it. It used to destroy the component outright:
+                // harmless while nothing a block carries is required by anything else on it, and a
+                // silent stale value the first time one is.
+                DimensionObjectSpine.TryRemoveComponent<T>(root);
+            }
         }
     }
 }

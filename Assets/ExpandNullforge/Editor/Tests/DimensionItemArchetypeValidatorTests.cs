@@ -39,7 +39,8 @@ namespace ExpandNullforge.EditorTools
                 i.FindProperty("itemId").stringValue = "mod:copper_dust";
                 i.FindProperty("displayName").stringValue = "Copper Dust";
                 i.FindProperty("iconId").stringValue = "icon:copper_dust";
-                i.FindProperty("maxStack").intValue = 999;
+                i.FindProperty("stackableWasMigrated").boolValue = true;
+                i.FindProperty("stackable").boolValue = true;
             });
 
             Assert.That(DimensionItemArchetypeValidator.CanGenerate(item), Is.True, Describe(item));
@@ -60,28 +61,43 @@ namespace ExpandNullforge.EditorTools
         }
 
         [Test]
-        public void Weapon_RequiresDamageAndDurability()
+        public void Weapon_RequiresDamage_AndADurabilityMultiplierThatIsNotZero()
         {
             DimensionItemAsset item = MakeItem(DimensionItemArchetype.Weapon, i =>
             {
                 i.FindProperty("itemId").stringValue = "mod:blade";
                 i.FindProperty("displayName").stringValue = "Blade";
                 i.FindProperty("iconId").stringValue = "icon:blade";
-                i.FindProperty("maxStack").intValue = 1;
+                i.FindProperty("stackableWasMigrated").boolValue = true;
+                i.FindProperty("stackable").boolValue = false;
             });
 
+            // CONTRACT CHANGED, deliberately. This used to also require durabilityPoints, which was
+            // a contradiction: the validator refused to generate without a number the generator then
+            // told the author it had discarded, because the game recomputes durability from the item
+            // type times durabilityMultiplier. Equipment could not be made without filling in a
+            // field that did nothing.
             List<string> errors = FieldsWithErrors(item);
             Assert.That(errors, Does.Contain("damageAmount"));
-            Assert.That(errors, Does.Contain("durabilityPoints"));
+            Assert.That(
+                errors,
+                Does.Not.Contain("durabilityPoints"),
+                "a number the generator throws away must not block generation");
             Assert.That(DimensionItemArchetypeValidator.CanGenerate(item), Is.False);
 
-            // Filling them in clears the blockers.
+            // Damage alone clears it: the durability multiplier already defaults to 1.
             SerializedObject serialized = new SerializedObject(item);
             serialized.Update();
             serialized.FindProperty("damageAmount").intValue = 12;
-            serialized.FindProperty("durabilityPoints").intValue = 300;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             Assert.That(DimensionItemArchetypeValidator.CanGenerate(item), Is.True, Describe(item));
+
+            // A zero multiplier is the real failure, and it does block.
+            serialized = new SerializedObject(item);
+            serialized.Update();
+            serialized.FindProperty("durabilityMultiplier").floatValue = 0f;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            Assert.That(FieldsWithErrors(item), Does.Contain("durabilityMultiplier"));
         }
 
         [Test]

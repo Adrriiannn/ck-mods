@@ -37,10 +37,26 @@ namespace ExpandNullforge.Foundation
             get { return Resolved.Count; }
         }
 
+        /// <summary>How many times <see cref="Declare"/> has been called with something in it.</summary>
+        /// <remarks>
+        /// The mod entry watches this so its one-shot "did my items register?" report waits until
+        /// declarations have stopped arriving. <c>ApplyManifests</c> emits the <c>Declare</c> call
+        /// behind a service gate that retries across frames, so a report fired the first frame a
+        /// world exists can easily run BEFORE anything has been declared — and then the ledger is
+        /// never read at all.
+        /// </remarks>
+        public static int DeclarationVersion { get; private set; }
+
         /// <summary>Declared item ids that have not resolved yet.</summary>
+        /// <remarks>
+        /// Counted, not subtracted. <c>Resolved</c> is filled by every <see cref="TryResolve"/> call
+        /// whether or not the id was ever declared, so <c>Declared.Count - Resolved.Count</c> goes
+        /// negative the moment anything resolves an undeclared name — and then
+        /// <see cref="IsComplete"/> answers true while declared items are genuinely missing.
+        /// </remarks>
         public static int PendingCount
         {
-            get { return Declared.Count - Resolved.Count; }
+            get { return GetPending().Count; }
         }
 
         /// <summary>True when every declared item has resolved.</summary>
@@ -61,12 +77,19 @@ namespace ExpandNullforge.Foundation
             }
 
             string owner = string.IsNullOrEmpty(contentPackId) ? "<unknown>" : contentPackId;
+            bool declaredAnything = false;
             foreach (string itemId in itemIds)
             {
                 if (!string.IsNullOrEmpty(itemId))
                 {
                     Declared[itemId] = owner;
+                    declaredAnything = true;
                 }
+            }
+
+            if (declaredAnything)
+            {
+                DeclarationVersion++;
             }
         }
 
@@ -144,10 +167,15 @@ namespace ExpandNullforge.Foundation
                 }
 
                 Declared.TryGetValue(itemId, out string owner);
+                // Said without a component name in it. This line reaches a person who has never
+                // opened Unity, and "check that its ObjectAuthoring name matches the item id" is
+                // not something they can act on — the generator writes that name, so if it is
+                // wrong the answer is always to generate again.
                 DimensionFrameworkLog.Warning(
-                    "[ExpandNullforge] Item '" + itemId + "' declared by '" + owner +
-                    "' never registered with the game. Check that its prefab was generated into " +
-                    "the mod folder and that its ObjectAuthoring name matches the item id.");
+                    "'" + owner + "' expects an item called '" + itemId +
+                    "', and nothing in this world answers to it. Either that item is switched off " +
+                    "in the dashboard, or it was renamed after this was built. Switch it back on, " +
+                    "or fix the name, and generate again.");
             }
         }
 
@@ -156,17 +184,34 @@ namespace ExpandNullforge.Foundation
             Resolved.Clear();
             Declared.Clear();
             LoggedMissing.Clear();
+            DeclarationVersion = 0;
+
+            // The stand-in lookup goes with everything else. Leaving it behind meant a test that
+            // installed one and then called Clear left a fake resolver wired into a static that
+            // production code reads.
+            resolverOverride = null;
         }
 
+#if UNITY_INCLUDE_TESTS
         /// <summary>
         /// Replaces the game lookup. Tests use this because they cannot register real objects;
         /// passing null restores the real PugMod lookup.
         /// </summary>
+        /// <remarks>
+        /// Compiled only where tests are, so a shipped build has no way to replace the lookup the
+        /// whole framework resolves names through.
+        /// </remarks>
         internal static void SetResolverForTesting(Func<string, ObjectID> resolver)
         {
             resolverOverride = resolver;
         }
+#endif
 
+        /// <remarks>
+        /// Routed through the framework's one resolver so a VANILLA name answers here too. Asking
+        /// <c>API.Authoring</c> alone means every one of the game's own names comes back as
+        /// <c>None</c> outside a loaded game, and reads as "never registered".
+        /// </remarks>
         private static ObjectID ResolveFromGame(string itemId)
         {
             if (resolverOverride != null)
@@ -174,12 +219,7 @@ namespace ExpandNullforge.Foundation
                 return resolverOverride(itemId);
             }
 
-            if (API.Authoring == null)
-            {
-                return ObjectID.None;
-            }
-
-            return API.Authoring.GetObjectID(itemId);
+            return DimensionObjectNames.Resolve(itemId);
         }
     }
 }

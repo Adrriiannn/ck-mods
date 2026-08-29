@@ -146,5 +146,17 @@ namespace ExpandNullforge.Tilesets
         public string key = string.Empty;
         public bool enabled;
         public Texture2D texture;
+
+        /// <summary>
+        /// For a scattered overlay (grass, pebbles, roots, slime): how much of the block's ground it
+        /// covers, 0 to 1. Ignored by states the world drives itself, such as tilled or watered soil.
+        /// </summary>
+        /// <remarks>
+        /// Defaults to a light dusting rather than zero. Ticking "grass tufts" and getting a bare
+        /// world would read as the feature being broken, so the default has to be visible; a fifth of
+        /// the ground is enough to read as decorated without looking like a lawn.
+        /// </remarks>
+        [Range(0f, 1f)]
+        public float density = 0.2f;
     }
 }

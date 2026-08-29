@@ -9,7 +9,10 @@ namespace ExpandNullforge.Api
         EnvironmentProfile = 4,
         BiomePalette = 5,
         BiomePaletteEntry = 6,
-        BiomeGenerationProfile = 7,
+        // 7 was BiomeGenerationProfile, the separate asset that held a biome's generation passes.
+        // Its passes were folded into the biome itself, so there is nothing left to summarise. The
+        // number stays retired rather than reused, so an old saved preview cannot come back as a
+        // different kind of record.
         GenerationPass = 8,
         GenerationTable = 9,
         GenerationTableEntry = 10,
