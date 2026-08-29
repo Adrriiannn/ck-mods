@@ -25,6 +25,15 @@ namespace ExpandNullforge.Portals
     [HarmonyPatch(typeof(EquipmentSlot), "UpdateEquipment")]
     internal static class DimensionItemPortalUseHook
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         [HarmonyPostfix]
         private static void AfterUpdateEquipment(
             bool secondInteractHeld,
@@ -32,6 +41,8 @@ namespace ExpandNullforge.Portals
             in EquipmentUpdateSharedData equipmentUpdateSharedData,
             in LookupEquipmentUpdateData equipmentUpdateLookupData)
         {
+            Fired++;
+
             // Right-click only, and only on the authoritative server tick.
             if (!secondInteractHeld || !equipmentUpdateSharedData.isServer)
             {
@@ -107,10 +118,21 @@ namespace ExpandNullforge.Portals
     [HarmonyPatch(typeof(EquipmentUpdateSystem), "OnUpdate")]
     internal static class DimensionEquipmentUpdateForceJobCompletePatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         [HarmonyPostfix]
         [HarmonyPriority(Priority.High)]
         private static void Postfix(ref SystemState state)
         {
+            Fired++;
+
             state.Dependency.Complete();
         }
     }

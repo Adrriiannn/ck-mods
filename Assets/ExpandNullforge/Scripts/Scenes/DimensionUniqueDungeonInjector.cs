@@ -117,6 +117,15 @@ namespace ExpandNullforge.Scenes
     [HarmonyPatch(typeof(SpawnUniqueDungeonInitSystem), "OnStartRunning")]
     public static class DimensionUniqueDungeonInjector
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         private static readonly HashSet<string> InjectedWorlds =
             new HashSet<string>(System.StringComparer.Ordinal);
 
@@ -127,6 +136,8 @@ namespace ExpandNullforge.Scenes
 
         private static void Prefix(SpawnUniqueDungeonInitSystem __instance)
         {
+            Fired++;
+
             if (DimensionUniqueDungeonRegistry.All.Count == 0)
             {
                 return;

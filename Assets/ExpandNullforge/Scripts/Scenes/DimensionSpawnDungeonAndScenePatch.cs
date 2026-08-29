@@ -33,10 +33,21 @@ namespace ExpandNullforge.Scenes
     [HarmonyPatch(typeof(SpawnDungeonAndSceneSystem), "OnStartRunning")]
     internal static class DimensionSpawnDungeonAndScenePatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         private static void Before(ref SystemState state)
         {
+            Fired++;
+
             DimensionCustomSceneTableInjector.TryInject(state.World);
 
             // Dungeons after scenes, and it has to be this way round: a dungeon's rooms are named

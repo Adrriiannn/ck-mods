@@ -206,9 +206,13 @@ namespace ExpandNullforge.EditorTools
         {
             DimensionFrameworkAuthoringAssetActionResult result =
                 DimensionFrameworkAuthoringAssetUtility.EnsurePortalAccessRule(template, kind);
-            if (!result.Executed)
+            if (report != null)
             {
-                Debug.LogWarning("[ExpandNullforge] " + result.Message);
+                // Both outcomes, not only the failure. A creator who clicks "Build the rule" and
+                // is told nothing cannot tell a rule that was made from a click that missed.
+                report(
+                    result.Message,
+                    result.Executed ? MessageType.Info : MessageType.Warning);
             }
 
             DimensionPortalAppearanceStudio studio = Studio;

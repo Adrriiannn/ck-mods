@@ -35,6 +35,13 @@ namespace ExpandNullforge.EditorTools
     /// script was written outside the two folders it named.
     /// </para>
     /// <para>
+    /// AND IT SCANS THE CONSUMER'S MOD TOO. <see cref="ScanConsumers"/> walks every folder this
+    /// framework has generated runtime C# into, by the same rules. The generated bootstrap is an
+    /// <c>IMod</c> in the CREATOR's assembly, security-checked exactly the way ours is, and until
+    /// that was scanned a violation there reached them as "Compilation failed" with no line number
+    /// and nothing asserting otherwise anywhere.
+    /// </para>
+    /// <para>
     /// WHAT IT READS IS SOURCE TEXT, and the sandbox reads compiled IL. The two agree for code
     /// written the ordinary way and part company where a name never appears in the file: a reference
     /// introduced by a source generator, or an extension method whose defining namespace is never
@@ -87,6 +94,21 @@ namespace ExpandNullforge.EditorTools
 
         /// <summary>The filename prefix every consumer-bootstrap emitter partial shares.</summary>
         public const string GeneratedSourceEmitterPrefix = "DimensionRuntimeConsumerBootstrapUtility";
+
+        /// <summary>
+        /// The folder, relative to a consumer's mod root, that generated runtime C# is written to.
+        /// </summary>
+        /// <remarks>
+        /// <c>DimensionRuntimeConsumerBootstrapUtility.EnsureGeneratedRuntime</c> writes
+        /// <c>modRoot + "/Scripts/Generated"</c>, and the class it writes there is always named
+        /// <c>…RuntimeBootstrap</c>. Those two facts are how a consumer mod is recognised on disk
+        /// without asking Unity, which is what lets this run in a plain console as well as in the
+        /// editor.
+        /// </remarks>
+        public const string GeneratedConsumerScriptFolder = "Scripts/Generated";
+
+        /// <summary>The filename ending every generated consumer bootstrap shares.</summary>
+        public const string GeneratedConsumerScriptSuffix = "RuntimeBootstrap.cs";
 
         /// <summary>
         /// One reading of <c>SandboxDenyList.txt</c>.
@@ -357,23 +379,35 @@ namespace ExpandNullforge.EditorTools
         /// </remarks>
         public static List<string> ShippedSourceFiles(string rootPath)
         {
-            List<string> shipped = new List<string>();
             if (string.IsNullOrEmpty(rootPath))
             {
-                return shipped;
+                return new List<string>();
             }
 
-            string root = Path.Combine(rootPath, ShippedRoot);
-            if (!Directory.Exists(root))
+            return ShippedSourceFilesUnder(Path.Combine(rootPath, ShippedRoot));
+        }
+
+        /// <summary>
+        /// The same walk, over any one folder rather than over the framework's own.
+        /// </summary>
+        /// <remarks>
+        /// Split out so a consumer's mod folder gets the identical treatment: the same asmdef
+        /// reading, the same nearest-match rule, the same silence on an unreadable folder. A second
+        /// walk written beside it would be the way the two end up disagreeing about what ships.
+        /// </remarks>
+        public static List<string> ShippedSourceFilesUnder(string folder)
+        {
+            List<string> shipped = new List<string>();
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
             {
                 return shipped;
             }
 
-            List<string> editorOnly = EditorOnlyFolders(root);
+            List<string> editorOnly = EditorOnlyFolders(folder);
             string[] files;
             try
             {
-                files = Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
+                files = Directory.GetFiles(folder, "*.cs", SearchOption.AllDirectories);
             }
             catch (Exception)
             {
@@ -389,6 +423,239 @@ namespace ExpandNullforge.EditorTools
             }
 
             return shipped;
+        }
+
+        /// <summary>
+        /// The mod folders under <paramref name="assetsPath"/> that this framework has generated
+        /// runtime C# into.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// WHY THE CONSUMER IS SCANNED AT ALL. The generated bootstrap is an <c>IMod</c> compiled
+        /// into the CONSUMER's assembly, not into ours, and the game security-checks that assembly
+        /// exactly the way it checks this one. Everything the framework's own scan is for applies
+        /// to it word for word, and until this existed nothing asserted it: a denied reference in
+        /// a creator's mod folder reached them as "Compilation failed" with no line number.
+        /// </para>
+        /// <para>
+        /// FOUND, NOT LISTED. A creator names their own mod folder, so no constant here could name
+        /// it. What is constant is where the generator puts its output —
+        /// <c>&lt;modRoot&gt;/Scripts/Generated/…RuntimeBootstrap.cs</c> — so that is what is
+        /// looked for, and the mod root is the folder two above it. The framework's own folder is
+        /// excluded: the generator refuses to write into it, and its scan is the other one.
+        /// </para>
+        /// </remarks>
+        public static List<string> ConsumerModRoots(string assetsPath)
+        {
+            List<string> roots = new List<string>();
+            if (string.IsNullOrEmpty(assetsPath) || !Directory.Exists(assetsPath))
+            {
+                return roots;
+            }
+
+            string[] bootstraps;
+            try
+            {
+                bootstraps = Directory.GetFiles(
+                    assetsPath, "*" + GeneratedConsumerScriptSuffix, SearchOption.AllDirectories);
+            }
+            catch (Exception)
+            {
+                return roots;
+            }
+
+            string frameworkRoot = Path.Combine(assetsPath, ShippedRoot);
+            string[] parts = GeneratedConsumerScriptFolder.Split('/');
+            for (int i = 0; i < bootstraps.Length; i++)
+            {
+                string folder = Path.GetDirectoryName(bootstraps[i]);
+                string root = folder;
+                bool matches = true;
+                for (int p = parts.Length - 1; p >= 0 && matches; p--)
+                {
+                    matches = root != null &&
+                        string.Equals(
+                            Path.GetFileName(root), parts[p], StringComparison.OrdinalIgnoreCase);
+                    if (matches)
+                    {
+                        root = Path.GetDirectoryName(root);
+                    }
+                }
+
+                if (!matches || string.IsNullOrEmpty(root) || IsWithin(root, frameworkRoot))
+                {
+                    continue;
+                }
+
+                if (!roots.Contains(root))
+                {
+                    roots.Add(root);
+                }
+            }
+
+            return roots;
+        }
+
+        /// <summary>
+        /// Says why a run that found <paramref name="rootCount"/> consumer mods checked nothing, or
+        /// null when it found at least one.
+        /// </summary>
+        /// <remarks>
+        /// Same shape as <see cref="ShipSetProblem"/>, and for the same reason: zero consumers and
+        /// zero denied references look identical to a loop, and the one that reads as a clean run
+        /// is the one that checked nothing. A project with no generated dimension in it is a real
+        /// state, which is why this returns a sentence explaining that rather than pretending a
+        /// violation was found.
+        /// </remarks>
+        public static string ConsumerSetProblem(string assetsPath, int rootCount)
+        {
+            if (rootCount > 0)
+            {
+                return null;
+            }
+
+            return "No generated consumer mod was found under " + assetsPath + ", so the C# this " +
+                   "framework writes into somebody else's project was not checked against the " +
+                   "sandbox. A consumer mod is recognised by " + GeneratedConsumerScriptFolder +
+                   "/*" + GeneratedConsumerScriptSuffix + " inside it. Open a Dimension Asset and " +
+                   "generate its runtime output, or move this check to a project that has one.";
+        }
+
+        /// <summary>
+        /// Scans every generated consumer mod's shipped sources against the deny list.
+        /// </summary>
+        /// <remarks>
+        /// This reads the file on disk, which is the generator's actual output — stricter than
+        /// <see cref="ScanGeneratedSources"/>, which can only read the literals the emitters are
+        /// built from and never sees a name assembled at run time. The two are worth having
+        /// together: the emitter scan runs in a project that has never generated anything, and this
+        /// one runs on what was really written.
+        /// </remarks>
+        public static List<Finding> ScanConsumers(string assetsPath, DenyList denyList)
+        {
+            List<Finding> findings = new List<Finding>();
+            if (string.IsNullOrEmpty(assetsPath) || denyList == null)
+            {
+                return findings;
+            }
+
+            List<string> roots = ConsumerModRoots(assetsPath);
+            for (int i = 0; i < roots.Count; i++)
+            {
+                List<string> files = ShippedSourceFilesUnder(roots[i]);
+                if (files.Count == 0)
+                {
+                    // The bootstrap that identified this folder is itself a shipped file, so an
+                    // empty set here means the mod's asmdef marks it Editor-only — in which case
+                    // its IMod never loads, and saying so is more use than reporting it clean.
+                    findings.Add(new Finding(
+                        roots[i],
+                        0,
+                        "the consumer's ship set",
+                        "This mod holds a generated runtime bootstrap and yet nothing in it is " +
+                        "compiled into an assembly the game loads, so nothing was checked. Check " +
+                        "that its .asmdef does not say \"includePlatforms\": [\"Editor\"]."));
+                    continue;
+                }
+
+                for (int f = 0; f < files.Count; f++)
+                {
+                    ScanFile(files[f], denyList, findings);
+                }
+            }
+
+            return findings;
+        }
+
+        /// <summary>
+        /// The name of the assembly a consumer mod's shipped code is compiled into, or empty when
+        /// its nearest asmdef is Editor-only or unreadable.
+        /// </summary>
+        /// <remarks>
+        /// Read from the asmdef rather than from the folder name, because Unity names the assembly
+        /// from the asmdef and the two need not match.
+        /// </remarks>
+        public static string ShippedAssemblyNameOf(string modRoot)
+        {
+            if (string.IsNullOrEmpty(modRoot))
+            {
+                return string.Empty;
+            }
+
+            string[] asmdefs;
+            try
+            {
+                asmdefs = Directory.GetFiles(modRoot, "*.asmdef", SearchOption.TopDirectoryOnly);
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+
+            for (int i = 0; i < asmdefs.Length; i++)
+            {
+                string text;
+                try
+                {
+                    text = System.IO.File.ReadAllText(asmdefs[i]);
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+
+                if (SaysEditorOnly(text))
+                {
+                    continue;
+                }
+
+                string name = NameIn(text);
+                if (!string.IsNullOrEmpty(name))
+                {
+                    return name;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>An asmdef's <c>name</c>, which is what Unity calls the assembly it builds.</summary>
+        private static string NameIn(string asmdef)
+        {
+            int at = asmdef.IndexOf("\"name\"", StringComparison.Ordinal);
+            if (at < 0)
+            {
+                return string.Empty;
+            }
+
+            int colon = asmdef.IndexOf(':', at);
+            int open = colon < 0 ? -1 : asmdef.IndexOf('"', colon);
+            int close = open < 0 ? -1 : asmdef.IndexOf('"', open + 1);
+            if (open < 0 || close < 0)
+            {
+                return string.Empty;
+            }
+
+            return asmdef.Substring(open + 1, close - open - 1);
+        }
+
+        /// <summary>Whether one folder is <paramref name="ancestor"/> or sits inside it.</summary>
+        private static bool IsWithin(string folder, string ancestor)
+        {
+            if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(ancestor))
+            {
+                return false;
+            }
+
+            if (folder.Length < ancestor.Length ||
+                !folder.StartsWith(ancestor, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return folder.Length == ancestor.Length ||
+                folder[ancestor.Length] == Path.DirectorySeparatorChar ||
+                folder[ancestor.Length] == Path.AltDirectorySeparatorChar;
         }
 
         /// <summary>
@@ -466,12 +733,7 @@ namespace ExpandNullforge.EditorTools
 
             for (int i = 0; i < editorOnly.Count; i++)
             {
-                string candidate = editorOnly[i];
-                if (folder.Length >= candidate.Length &&
-                    folder.StartsWith(candidate, StringComparison.OrdinalIgnoreCase) &&
-                    (folder.Length == candidate.Length ||
-                     folder[candidate.Length] == Path.DirectorySeparatorChar ||
-                     folder[candidate.Length] == Path.AltDirectorySeparatorChar))
+                if (IsWithin(folder, editorOnly[i]))
                 {
                     return false;
                 }

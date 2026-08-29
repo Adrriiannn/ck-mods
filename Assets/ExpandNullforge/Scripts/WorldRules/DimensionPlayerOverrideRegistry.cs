@@ -170,11 +170,22 @@ namespace ExpandNullforge.WorldRules
     [HarmonyPatch(typeof(PlayerAuthoringConverter), "Convert")]
     internal static class DimensionPlayerAuthoringConverterPatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         [HarmonyPrefix]
         private static void Prefix(
             PlayerAuthoring authoring,
             out DimensionPlayerOverrideRegistry.PlayerMovementBackup __state)
         {
+            Fired++;
+
             __state = default(DimensionPlayerOverrideRegistry.PlayerMovementBackup);
             if (authoring == null ||
                 !DimensionPlayerOverrideRegistry.OverridesMovement ||
@@ -191,6 +202,8 @@ namespace ExpandNullforge.WorldRules
             PlayerAuthoring authoring,
             DimensionPlayerOverrideRegistry.PlayerMovementBackup __state)
         {
+            Fired++;
+
             DimensionPlayerOverrideRegistry.RestoreMovement(authoring, __state);
         }
     }
@@ -201,11 +214,22 @@ namespace ExpandNullforge.WorldRules
     [HarmonyPatch(typeof(PlayerAimPositionConverter), "Convert")]
     internal static class DimensionPlayerAimPositionConverterPatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         [HarmonyPrefix]
         private static void Prefix(
             PlayerAimPositionAuthoring authoring,
             out Unity.Mathematics.float3 __state)
         {
+            Fired++;
+
             __state = default(Unity.Mathematics.float3);
             if (authoring == null ||
                 !DimensionPlayerOverrideRegistry.OverridesAim ||
@@ -224,6 +248,8 @@ namespace ExpandNullforge.WorldRules
             PlayerAimPositionAuthoring authoring,
             Unity.Mathematics.float3 __state)
         {
+            Fired++;
+
             if (authoring == null ||
                 !DimensionPlayerOverrideRegistry.OverridesAim ||
                 !DimensionPlayerOverrideRegistry.IsTheGamesPlayer(authoring))

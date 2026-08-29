@@ -33,10 +33,49 @@ namespace ExpandNullforge.EditorTools
         private bool allowRuntimeMutation;
         private DimensionTemplateCustomizerPreparedCommand preparedCommand;
         private bool autoUseProjectSelection = true;
-        private string lastEditorActionMessage = string.Empty;
-        private MessageType lastEditorActionType = MessageType.Info;
+        private string lastEditorActionMessageValue = string.Empty;
+        private MessageType lastEditorActionTypeValue = MessageType.Info;
         private string displayedEditorActionMessage = string.Empty;
         private MessageType displayedEditorActionType = MessageType.Info;
+
+        /// <summary>
+        /// What the last thing the creator did actually did, and how it went.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// TWENTY-ONE PLACES WRITE THIS AND FOR A LONG TIME NOTHING READ IT. The only reader was
+        /// the original panel's header, and that panel became unreachable, so "Created X",
+        /// "validation found 3 blockers" and "the portal's look could not be pushed into the
+        /// prefab" were all worked out and then thrown away — on the creator's first click.
+        /// <see cref="RefreshActionFeedback"/> puts them back on screen, in the shell.
+        /// </para>
+        /// <para>
+        /// A PROPERTY RATHER THAN A FIELD, keeping the field's own name, so that the twenty-one
+        /// places that publish a message stay exactly as they were and there is still only one
+        /// place that knows the strip exists. Renaming them would have been twenty-one chances to
+        /// miss one, and a missed one is a message that silently goes nowhere again.
+        /// </para>
+        /// </remarks>
+        private string lastEditorActionMessage
+        {
+            get { return lastEditorActionMessageValue; }
+            set
+            {
+                lastEditorActionMessageValue = value;
+                RefreshActionFeedback();
+            }
+        }
+
+        /// <summary>Whether that message is news, a warning, or a failure.</summary>
+        private MessageType lastEditorActionType
+        {
+            get { return lastEditorActionTypeValue; }
+            set
+            {
+                lastEditorActionTypeValue = value;
+                RefreshActionFeedback();
+            }
+        }
         private Object lastGeneratedManifestAsset;
         private bool portalVisualProfileSetupQueued;
         private DimensionPortalAppearanceStudio portalAppearanceStudio;
@@ -3830,6 +3869,7 @@ namespace ExpandNullforge.EditorTools
             // the two halves are both known, so it is the only place the typo can be caught.
             WarnAboutDropsFromNowhere(drops);
             WarnAboutIdsThatShadowTheGame();
+            WarnAboutPortalCostsFromNowhere(outputFolder);
 
             // And the same shape of silence for names: an object built by a generator nobody
             // remembered to give a name to reaches the player showing its own key. Every generator
@@ -4288,6 +4328,86 @@ namespace ExpandNullforge.EditorTools
                     "mod that types '" + local + "' — a recipe ingredient, a drop, a shot, a trader's " +
                     "stock — means the GAME'S '" + local + "', not yours. Rename yours if you meant " +
                     "to point at it.");
+            }
+        }
+
+        /// <summary>
+        /// Warns when a portal asks for an item nothing answers to.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THIS ONE SHIPS A DOOR THAT CAN NEVER OPEN. The item a portal asks for is typed into a
+        /// text box and was checked nowhere: not while authoring, not at generate, not at run time.
+        /// A misspelling generates cleanly, the portal is built, the slot is drawn, and no item in
+        /// the game will ever go into it — with nothing said anywhere.
+        /// </para>
+        /// <para>
+        /// Asked through <see cref="DimensionObjectBinder"/>, which is the one predicate in the
+        /// framework that can tell the game's own names, this mod's own names and a typo apart, and
+        /// which the generators and the bootstrap emitter already decide references with. Asking it
+        /// here is what keeps this answer and theirs the same answer.
+        /// </para>
+        /// </remarks>
+        private void WarnAboutPortalCostsFromNowhere(string outputFolder)
+        {
+            DimensionPortalAccessRuleAsset[] rules = selectedTemplate == null
+                ? null
+                : selectedTemplate.PortalAccessRules;
+            if (rules == null || rules.Length == 0)
+            {
+                return;
+            }
+
+            DimensionObjectBinder binder = new DimensionObjectBinder(
+                DimensionNamingContext.ForOutputFolder(
+                    outputFolder, OwnedObjectIds(), SwitchedOffObjectIds()));
+
+            for (int i = 0; i < rules.Length; i++)
+            {
+                DimensionPortalAccessRuleAsset rule = rules[i];
+                if (rule == null || !rule.Enabled)
+                {
+                    continue;
+                }
+
+                string which = string.IsNullOrEmpty(rule.DisplayName)
+                    ? (string.IsNullOrEmpty(rule.RuleId) ? rule.name : rule.RuleId)
+                    : rule.DisplayName;
+
+                DimensionPortalRequiredItemTemplate[] items = rule.RequiredItems;
+                for (int n = 0; n < items.Length; n++)
+                {
+                    string itemId = items[n].ItemId;
+                    if (string.IsNullOrEmpty(itemId))
+                    {
+                        Debug.LogWarning(
+                            "[Dimensions API] The portal '" + which + "' has an offering slot with " +
+                            "no item in it, so nothing can ever be put there and the portal stays " +
+                            "shut. Name the item, or take the slot out.");
+                        continue;
+                    }
+
+                    ObjectID baked;
+                    if (binder.TryBind(itemId, out baked))
+                    {
+                        continue;
+                    }
+
+                    string switchedOff = binder.ExplainIfSwitchedOff(
+                        "The portal '" + which + "' asks for", itemId);
+                    if (switchedOff != null)
+                    {
+                        Debug.LogWarning("[Dimensions API] " + switchedOff);
+                        continue;
+                    }
+
+                    Debug.LogWarning(
+                        "[Dimensions API] The portal '" + which + "' asks for '" + itemId +
+                        "', and nothing in the game or in this mod is called that. The portal is " +
+                        "still built and its slot is still drawn, and no item will ever go into " +
+                        "it, so no player can open the door — check the spelling against the " +
+                        "item you meant.");
+                }
             }
         }
 

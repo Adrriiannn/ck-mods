@@ -32,6 +32,37 @@ public sealed class ExpandNullforgeModEntry : IMod
 
   /// <summary>Whether Burst has already been switched off for the equipment update.</summary>
   private static bool burstArmedForContent;
+
+  /// <summary>The worlds handed to the Burst disabler, by name.</summary>
+  /// <remarks>
+  /// PER WORLD, BECAUSE THE FAILURE IS PER WORLD. <c>BurstDisabler.AddWorld</c> takes one world at
+  /// a time, and it is the server's placements that get corrected away when the server was missed.
+  /// The process-wide latch above answers "did anything ever arm", which on a host goes true the
+  /// moment the client arms — so an audit built on it could not see a server that was skipped.
+  /// Names rather than references so a destroyed world cannot be held alive by a diagnostic.
+  /// </remarks>
+  private static readonly System.Collections.Generic.HashSet<string> burstArmedWorldNames =
+      new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+
+  /// <summary>
+  /// Whether Burst was switched off for the equipment update. Read by the self-audit.
+  /// </summary>
+  /// <remarks>
+  /// Only this file knows whether the arming call was made. A world with custom tilesets or portal
+  /// items on the placement path and no arming is the case where every custom block placement is
+  /// silently rejected by the game, so the audit has to be able to ask.
+  /// </remarks>
+  internal static bool BurstArmedForContent
+  {
+    get { return burstArmedForContent; }
+  }
+
+  /// <summary>Whether this particular world was handed to the Burst disabler.</summary>
+  internal static bool WasBurstArmedFor(World world)
+  {
+    return world != null && world.IsCreated && burstArmedWorldNames.Contains(world.Name);
+  }
+
   private DimensionReturnPortalSpawnSystem returnPortalSpawnSystem;
   private double nextReturnPortalSpawnerWakeProbeAt;
   private bool serverWorldPersistenceInitialized;
@@ -133,6 +164,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     {
       DimensionLog.ResetAll();
       DimensionLogConfig.Reset();
+      ExpandNullforge.Diagnostics.DimensionSelfAudit.Reset();
       updateDisabled = false;
       initThrew = false;
     }
@@ -240,6 +272,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     // The mod loader clears its own world handles on reload, so a stale latch here would leave a
     // reloaded mod believing Burst was already switched off when it no longer is.
     burstArmedForContent = false;
+    burstArmedWorldNames.Clear();
 
     // Same reasoning: a reloaded mod must re-answer "did my items register?" rather than
     // inherit the previous session's silence.
@@ -247,6 +280,9 @@ public sealed class ExpandNullforgeModEntry : IMod
     lastSeenDeclarationVersion = -1;
     framesSinceLastDeclaration = 0;
     ExpandNullforge.Foundation.DimensionItemObjectRegistry.Clear();
+    // Same reason as the line above: a reloaded mod re-declares what it generated, and rows kept
+    // from the previous session would make the world-load check walk objects that no longer exist.
+    ExpandNullforge.Foundation.DimensionGeneratedObjectLedger.Clear();
     ExpandNullforge.Foundation.DimensionObjectLinkRegistry.Clear();
     ExpandNullforge.Foundation.DimensionObjectNames.ClearWarnings();
 
@@ -317,11 +353,16 @@ public sealed class ExpandNullforgeModEntry : IMod
 
   private void UpdateInner()
   {
-    // A mod whose build produced two asset bundles loses every DataBlock in the second one, because
-    // the engine keys the DataBlock loader by mod rather than by bundle. Nothing at authoring time
-    // can see that — bundles are a build output — so it is checked here, once, against the loaded
-    // mod list. Self-latching; costs one null check per frame afterwards.
-    ExpandNullforge.Foundation.DimensionModBundleDiagnostics.ReportMultiBundleModsOnce();
+    // THE BUNDLE CHECK MOVED INTO THE AUDIT. It used to be asked here, every frame, self-latching;
+    // it is a once-per-session question and the audit is where once-per-session questions are
+    // asked, so the per-frame call is gone and DimensionSelfAudit makes it on the first world.
+
+    // THE AUDIT KEEPS ITS OWN WAIT rather than riding the item report's latch below, because that
+    // latch closes once per SESSION and the audit has to run once per WORLD: quit to the menu,
+    // fix something, come back, and the second world needs auditing too. Both waits are the same
+    // length and this call is first, so on the frame content goes quiet the audit's line lands
+    // above the item report's.
+    ExpandNullforge.Diagnostics.DimensionSelfAudit.Update();
 
     // The item registry knows which declared items never registered with the game, and until
     // now nobody ever asked it: every item id a content pack declared was recorded and the
@@ -469,6 +510,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     BurstDisabler.DisableBurstForSystem<EquipmentUpdateSystem>();
     BurstDisabler.AddWorld(world);
     burstArmedForContent = true;
+    burstArmedWorldNames.Add(world.Name);
     DimensionLog.Milestone(
         DimensionLogChannels.Tileset,
         world,
@@ -527,9 +569,9 @@ public sealed class ExpandNullforgeModEntry : IMod
     registeredServerWorld = world;
     serverWorldPersistenceInitialized = false;
     EnsureBurstDisabledForWorld(world);
-    // Created before the ordering call below, which looks the capture system up with
-    // GetExistingSystemManaged and only WARNS when it is missing — so on auto-creation
-    // the failure mode is custom tiles silently not surviving a reload.
+    // Looked up before the ordering call below, which finds the capture system with
+    // GetExistingSystemManaged and only WARNS when it is missing. World creation has already
+    // made both of these; these two lines return what it made, and cost nothing if it did not.
     world.GetOrCreateSystemManaged<ExpandNullforge.Tilesets.DimensionCustomTileCaptureSystem>();
     world.GetOrCreateSystemManaged<ExpandNullforge.Tilesets.DimensionCustomTileRestoreSystem>();
     ExpandNullforge.Tilesets.DimensionCustomTileRescue.EnsureSystemOrdering(world);
@@ -545,10 +587,16 @@ public sealed class ExpandNullforgeModEntry : IMod
     world.GetOrCreateSystemManaged<DimensionPortalActivationSystem>();
     world.GetOrCreateSystemManaged<DimensionItemPortalSpawnSystem>();
 
-    // Explicit creation is the liveness guarantee for every framework system — auto-creation
-    // of mod-assembly systems is exactly the kind of thing that works on one loader version
-    // and silently stops on the next, and a system that never runs fails without a log line.
-    // The boss phase system had precisely that gap: written, tested, referenced by nothing.
+    // WHAT THESE CALLS ARE AND ARE NOT. They are not what makes a system run. The game builds
+    // its worlds after this mod is in memory, and world creation sweeps the loaded assemblies
+    // and puts every system it finds into the group its [UpdateInGroup] names — every one of
+    // these thirty-one is scheduled that way, and GetOrCreateSystemManaged schedules nothing.
+    // They are kept for two reasons that are still worth their line each: several of them hand
+    // back a reference this file needs (the return-portal spawner below is created disabled and
+    // woken on demand), and where the sweep ever failed to reach this assembly the system would
+    // at least exist, which the world-load check reports as "exists but is in no update list" —
+    // a named failure instead of a missing type. Adding one here does NOT make a new system
+    // live; the attributes on the class do that.
     world.GetOrCreateSystemManaged<ExpandNullforge.Zones.DimensionBossPhaseSystem>();
     world.GetOrCreateSystemManaged<ExpandNullforge.Creatures.DimensionBossMarkerHydrationSystem>();
     world.GetOrCreateSystemManaged<ExpandNullforge.Creatures.DimensionSummonHydrationSystem>();
@@ -562,9 +610,8 @@ public sealed class ExpandNullforgeModEntry : IMod
     // passed, and this line was never written — so the system that reads the registry never
     // ticked and no kill ever paid out. Server only; the buffers it writes are the server's.
     world.GetOrCreateSystemManaged<ExpandNullforge.Skills.DimensionSkillXpSystem>();
-    // This was relying on ECS auto-creation, which is precisely what the note above says
-    // never to trust: the offering system is what consumes what a player puts into a portal's
-    // window, so a load order that skipped it would take the items and open nothing.
+    // The offering system consumes what a player puts into a portal's window. Named here beside
+    // the rest so the one list of what this framework runs on the server is complete.
     world.GetOrCreateSystemManaged<ExpandNullforge.Portals.DimensionPortalOfferingSystem>();
     world.GetOrCreateSystemManaged<ExpandNullforge.Zones.DimensionAmbientSpawnGateSystem>();
     world.GetOrCreateSystemManaged<ExpandNullforge.Arenas.DimensionArenaResetSystem>();
@@ -582,8 +629,8 @@ public sealed class ExpandNullforgeModEntry : IMod
     // Cooking reads ingredient names off the prefab, and a name only becomes an ObjectID once
     // the world exists. Without this the pot refuses every custom ingredient.
     world.GetOrCreateSystemManaged<ExpandNullforge.Food.DimensionFoodIngredientHydrationSystem>();
-    // The damage half of tile hazards (burn/poison/drench conditions); presentation was
-    // wired, this half rode auto-creation roulette.
+    // The damage half of tile hazards (burn/poison/drench conditions); the presentation half
+    // is elsewhere, and this is the line that names this half in the server list.
     world.GetOrCreateSystemManaged<ExpandNullforge.Tilesets.DimensionHazardConditionSystem>();
     // Fires scene-authored triggered tiles — traps, pressure plates. The system sat fully
     // written with no creation call and no registrations; the scene placement pass now arms
@@ -601,6 +648,11 @@ public sealed class ExpandNullforgeModEntry : IMod
     DimensionService.SetServerWorld(world);
     RegisterFrameworkGenerationProviders();
     TryInitializeServerWorldPersistence();
+
+    // Armed, not run: the generated bootstrap registers content across frames behind a service
+    // gate with its own retry, so an audit at this point reads empty registries and reports
+    // failures that are not there. It runs from Update once declarations have gone quiet.
+    ExpandNullforge.Diagnostics.DimensionSelfAudit.Arm(world, false);
     DimensionLog.Milestone(
         DimensionLogChannels.World,
         world,
@@ -714,13 +766,12 @@ public sealed class ExpandNullforgeModEntry : IMod
 
     registeredClientWorld = world;
     EnsureBurstDisabledForWorld(world);
-    // Created before the ordering call below, which looks the capture system up with
-    // GetExistingSystemManaged and only WARNS when it is missing — so on auto-creation
-    // the failure mode is custom tiles silently not surviving a reload. These two sat
-    // BELOW the early return above and so had never once run on a client.
-    world.GetOrCreateSystemManaged<ExpandNullforge.Tilesets.DimensionCustomTileCaptureSystem>();
-    world.GetOrCreateSystemManaged<ExpandNullforge.Tilesets.DimensionCustomTileRestoreSystem>();
-    ExpandNullforge.Tilesets.DimensionCustomTileRescue.EnsureSystemOrdering(world);
+    // The tile capture and restore systems are NOT created here any more. They are declared
+    // [WorldSystemFilter(ServerSimulation)], because everything that touches a serialized
+    // submap is server-side; creating them in a client world made two systems that queried and
+    // returned every frame, and made EnsureSystemOrdering ask a client group to order the
+    // capture system before a deserializer that does not exist in a client world — which is
+    // where the engine's "Ignoring invalid [UpdateBefore]" line came from.
     world.GetOrCreateSystemManaged<DimensionTravelClientRpcSystem>();
     world.GetOrCreateSystemManaged<DimensionPlayerContextClientRpcSystem>();
     world.GetOrCreateSystemManaged<DimensionPortalMapMarkerScopeSystem>();
@@ -733,7 +784,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     // The client resolves ingredient names too: the pot's preview slot and the cook book work
     // off client-side lookups, so without this they would disagree with what the pot produces.
     world.GetOrCreateSystemManaged<ExpandNullforge.Food.DimensionFoodIngredientHydrationSystem>();
-    // Declared for both simulations, so it is created in both rather than left to auto-creation.
+    // Declared for both simulations, so it is named in both lists.
     world.GetOrCreateSystemManaged<ExpandNullforge.Portals.DimensionPortalOfferingSystem>();
     // A bomb whose blast is one of the mod's own objects carries a name, not an id, until
     // these run; without them CreateExplosion spawns nothing and returns without a log.
@@ -749,6 +800,9 @@ public sealed class ExpandNullforgeModEntry : IMod
         true,
         "Client world attached; hydrate current dimension context.");
     DimensionCoordinatePresentation.EnsureAttached();
+
+    // Armed, not run — same reason as the server side: the registries are still filling.
+    ExpandNullforge.Diagnostics.DimensionSelfAudit.Arm(world, true);
     DimensionLog.Milestone(
         DimensionLogChannels.World,
         world,
@@ -761,6 +815,7 @@ public sealed class ExpandNullforgeModEntry : IMod
     // again. Every ad-hoc "say this once" store in the framework is process-static, which is why
     // the two most useful tileset lines never appear on a second load today.
     DimensionLog.ResetForWorld(registeredServerWorld);
+    ExpandNullforge.Diagnostics.DimensionSelfAudit.Forget(registeredServerWorld);
     DimensionPortalRecipeInjector.ClearWorldState("server world destroyed");
     DimensionPortalObjectIdCache.Clear();
     // Only this world's records — on a host the client world is still live and still needs its own.
@@ -778,6 +833,7 @@ public sealed class ExpandNullforgeModEntry : IMod
   private void OnClientWorldDestroyed()
   {
     DimensionLog.ResetForWorld(registeredClientWorld);
+    ExpandNullforge.Diagnostics.DimensionSelfAudit.Forget(registeredClientWorld);
     DimensionPortalRecipeInjector.ClearWorldState("client world destroyed");
     // Only this world's records — on a host the server world is still live and still needs its own.
     ExpandNullforge.Tilesets.DimensionCustomTileRescue.Clear(registeredClientWorld);

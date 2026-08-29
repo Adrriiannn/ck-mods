@@ -647,17 +647,24 @@ namespace ExpandNullforge.EditorTests
         // ---- the half that only exists at runtime ----
 
         /// <summary>
-        /// The marker is inert unless something creates the system that reads it.
+        /// Holds the mod entry to naming the system the Defensive marker depends on.
         /// </summary>
         /// <remarks>
-        /// Mod-assembly systems are not created automatically, and a system that is never created
-        /// fails without a log line — this project has shipped that exact gap before (the boss
-        /// phase system was written, tested and referenced by nothing). Defensive is entirely
-        /// dependent on <c>DimensionHoldsFireSystem</c> running: without it the marker sits on the
-        /// prefab, <c>chaseAtDistanceSq</c> keeps its authored value, and every Defensive creature
-        /// in the mod is quietly Hostile. Reading the bootstrap source is the only way to catch
-        /// that from an editor test, and it is the same trick the Burst-budget and Harmony-target
-        /// tests use.
+        /// <para>
+        /// THIS REMARK USED TO SAY MOD SYSTEMS ARE NOT CREATED AUTOMATICALLY. They are: the game
+        /// builds its worlds after the mod assembly is in memory and creates every system it finds
+        /// there, into the group its <c>[UpdateInGroup]</c> names. So a name missing from the mod
+        /// entry is an incomplete list, not a dead feature, and this test is worth keeping for the
+        /// list rather than for the claim it used to make.
+        /// </para>
+        /// <para>
+        /// The stakes are unchanged and worth having written down: without
+        /// <c>DimensionHoldsFireSystem</c> running, the marker sits on the prefab,
+        /// <c>chaseAtDistanceSq</c> keeps its authored value, and every Defensive creature in the
+        /// mod is quietly Hostile. Whether it runs is what <c>DimensionSystemLivenessTests</c>
+        /// checks offline, off the class's own attributes, and what <c>DimensionSelfAudit</c>
+        /// answers in game.
+        /// </para>
         /// </remarks>
         [Test]
         public void TheSystemThatMakesDefensiveRealIsActuallyCreated()

@@ -128,6 +128,18 @@ namespace ExpandNullforge.Zones
             get { return ByCell.Count > 0; }
         }
 
+        /// <summary>How many tiles are armed. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// <c>HasAny</c> answers the question the trigger path asks and nothing else. The audit
+        /// needs the number, because "the system that fires these never ran" only matters when
+        /// somebody armed some, and the count is what turns that line from an accusation into a
+        /// fact the reader can check against their own scenes.
+        /// </remarks>
+        public static int ArmedCellCount
+        {
+            get { return ByCell.Count; }
+        }
+
         /// <summary>
         /// A cell's lookup key.
         /// </summary>

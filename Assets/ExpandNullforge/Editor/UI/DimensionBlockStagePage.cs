@@ -35,6 +35,12 @@ namespace ExpandNullforge.EditorTools
         private readonly System.Action<DimensionItemAsset> openItem;
         private readonly System.Action repaint;
 
+        /// <summary>
+        /// Where this page says something to the creator. Making the glow sheet can fail with a
+        /// sentence explaining why, and that sentence used to go to the Console alone.
+        /// </summary>
+        private readonly System.Action<string, MessageType> report;
+
         private VisualElement root;
         private VisualElement wizardHost;
         private VisualElement columns;
@@ -56,12 +62,14 @@ namespace ExpandNullforge.EditorTools
             DimensionTilesetStudio blockStudio,
             System.Action<DimensionFrameworkAuthoringAssetActionResult> runAssetAction,
             System.Action<DimensionItemAsset> openBlockItem,
-            System.Action repaintWindow)
+            System.Action repaintWindow,
+            System.Action<string, MessageType> reportToCreator)
         {
             studio = blockStudio;
             runAction = runAssetAction;
             openItem = openBlockItem;
             repaint = repaintWindow;
+            report = reportToCreator;
         }
 
         internal VisualElement Build()
@@ -1434,7 +1442,15 @@ namespace ExpandNullforge.EditorTools
             string error;
             if (!Generation.DimensionTilesetEmissiveSheet.TryCreate(selected, out created, out error))
             {
-                Debug.LogWarning("[ExpandNullforge] " + error);
+                if (report != null)
+                {
+                    report(error, MessageType.Warning);
+                }
+                else
+                {
+                    Debug.LogWarning("[ExpandNullforge] " + error);
+                }
+
                 return;
             }
 

@@ -14,8 +14,19 @@ namespace ExpandNullforge.Zones
     [HarmonyPatch(typeof(AmbientSoundsHandler), "Awake")]
     public static class DimensionAmbienceInstallHook
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         private static void Prefix(AmbientSoundsHandler __instance)
         {
+            Fired++;
+
             // A fresh handler means a fresh scene, so what was remembered about the last one is stale.
             DimensionBiomeAtmosphereInstaller.ResetForNewScene();
             DimensionBiomeAtmosphereInstaller.EnsureAmbienceInstalled(__instance);
@@ -41,8 +52,19 @@ namespace ExpandNullforge.Zones
     [HarmonyPatch(typeof(GameMusicHandler), "Start")]
     public static class DimensionBiomeMusicInstallHook
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         private static void Postfix(GameMusicHandler __instance)
         {
+            Fired++;
+
             DimensionBiomeAtmosphereInstaller.EnsureMusicInstalled(__instance);
         }
     }
@@ -65,8 +87,19 @@ namespace ExpandNullforge.Zones
     [HarmonyPatch(typeof(AmbientSoundsHandler.AudioInfo), nameof(AmbientSoundsHandler.AudioInfo.LoadAudioAsset))]
     public static class DimensionAmbienceAssetHook
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         private static bool Prefix(AmbientSoundsHandler.AudioInfo __instance)
         {
+            Fired++;
+
             // False skips the original. Vanilla's own ambience is untouched.
             return !DimensionBiomeAtmosphereInstaller.IsOwned(__instance);
         }

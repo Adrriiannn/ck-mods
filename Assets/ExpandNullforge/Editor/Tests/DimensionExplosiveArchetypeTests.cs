@@ -400,16 +400,25 @@ namespace ExpandNullforge.EditorTests
         // ---- the wiring nothing else can see ----
 
         /// <summary>
-        /// A bomb's blast id is a name until something turns it into a number, and the thing that
-        /// does is a system this project does not create automatically.
+        /// A bomb's blast id is a name until something turns it into a number, and this holds the
+        /// mod entry to naming the system that does.
         /// </summary>
         /// <remarks>
-        /// Mod-assembly systems are not auto-created, and one that is never created fails with no
-        /// log at all. This particular gap is worse than most: an unresolved blast is
-        /// <c>ObjectID.None</c>, and <c>CreateExplosion</c> returns silently when the object it
-        /// spawned has no <c>ExplosionCD</c> (<c>ExplosiveSystem.cs:88-91</c>). Every bomb in the
-        /// mod would fizzle. Reading the bootstrap source is the only way to catch that from an
-        /// editor test, and it is the trick the Defensive-creature and Burst-budget tests use.
+        /// <para>
+        /// WHAT THIS PROVES IS NARROWER THAN IT LOOKS, and the remark here used to say the opposite:
+        /// "mod-assembly systems are not auto-created". They are. The game builds its worlds after
+        /// the mod assembly is in memory and creates every system it finds, into the group its
+        /// <c>[UpdateInGroup]</c> names. So this test is not what keeps the feature alive; it keeps
+        /// the mod entry's list of what the framework runs complete, which is worth something on
+        /// its own and is not the same claim.
+        /// </para>
+        /// <para>
+        /// What does keep it alive is checked in <c>DimensionSystemLivenessTests</c>, off the
+        /// class's own attributes, and in game by <c>DimensionSelfAudit</c>. The stakes are worth
+        /// restating either way: an unresolved blast is <c>ObjectID.None</c>, and
+        /// <c>CreateExplosion</c> returns silently when the object it spawned has no
+        /// <c>ExplosionCD</c> (<c>ExplosiveSystem.cs:88-91</c>), so every bomb in the mod fizzles.
+        /// </para>
         /// </remarks>
         [Test]
         public void TheSystemThatLinksABombToItsBlastIsActuallyCreated()

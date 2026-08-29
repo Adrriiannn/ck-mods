@@ -29,6 +29,9 @@ namespace ExpandNullforge.Authoring
         [Tooltip("Item ids whose prefabs were generated for this dimension. The runtime declares these so it can report any that never registered with the game.")]
         [SerializeField] private string[] generatedItemIds = new string[0];
 
+        [Tooltip("Every object id this dimension owns, not only the items: creatures, bosses, summoning circles, plants, containers, workbenches, world objects. The world-load check reads these so it can tell whether each one carries what the game's own systems ask for.")]
+        [SerializeField] private string[] generatedObjectIds = new string[0];
+
         // Stored as a Newtonsoft.Json string of the flat DimensionTileMapSnapshot. Unity's
         // JsonUtility cannot be used here: in Core Keeper's recompiled-mod runtime it returns an
         // object with empty arrays whenever an element is a mod-defined type, so the palette and
@@ -114,6 +117,28 @@ namespace ExpandNullforge.Authoring
         public void SetGeneratedItemIds(string[] itemIds)
         {
             generatedItemIds = itemIds ?? new string[0];
+        }
+
+        /// <summary>
+        /// Every object id this dimension owns, items included. The world-load check walks these
+        /// prefabs and says which of them are missing a component the game's systems require.
+        /// </summary>
+        /// <remarks>
+        /// Wider than <see cref="GeneratedItemIds"/> on purpose, and used for a different thing.
+        /// The item list is a promise the runtime holds the game to — anything on it that never
+        /// registered is named. This list includes ids that may legitimately never become an
+        /// object, because the generator that builds that kind of thing has not been run since,
+        /// so nothing complains about an id here that the game does not answer to.
+        /// </remarks>
+        public string[] GeneratedObjectIds
+        {
+            get { return generatedObjectIds ?? new string[0]; }
+        }
+
+        /// <summary>Records every object id the run owns. Called by the editor generator.</summary>
+        public void SetGeneratedObjectIds(string[] objectIds)
+        {
+            generatedObjectIds = objectIds ?? new string[0];
         }
 
         public string DisplayName

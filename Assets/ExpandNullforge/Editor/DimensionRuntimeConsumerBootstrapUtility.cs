@@ -6500,6 +6500,14 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("      DimensionItemObjectRegistry.Declare(");
             builder.AppendLine("          manifest.GeneratedFromContentPackId, manifest.GeneratedItemIds);");
             builder.AppendLine();
+            builder.AppendLine("      // Everything else this pack generates an object under — creatures, bosses,");
+            builder.AppendLine("      // summoning circles, plants, containers, workbenches, world objects. Nothing");
+            builder.AppendLine("      // complains about one of these that the game does not answer to; the list is");
+            builder.AppendLine("      // what the world-load check walks to see whether each finished object carries");
+            builder.AppendLine("      // what the game's own systems require of it.");
+            builder.AppendLine("      DimensionGeneratedObjectLedger.Declare(");
+            builder.AppendLine("          manifest.GeneratedFromContentPackId, manifest.GeneratedObjectIds);");
+            builder.AppendLine();
             builder.AppendLine("      // The dimension's painted tile map is registered early in ModObjectLoaded, before");
             builder.AppendLine("      // world generation — not here, which runs too late in the service-gated apply loop.");
             builder.AppendLine();

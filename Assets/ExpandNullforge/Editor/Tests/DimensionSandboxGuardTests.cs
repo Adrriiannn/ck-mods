@@ -63,6 +63,140 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>
+        /// And the mod folder the framework actually wrote that C# into, as it sits on disk.
+        /// </summary>
+        /// <remarks>
+        /// The emitter scan above reads the literals the emitters are built from; this reads the
+        /// file that came out, together with every other runtime script in the creator's mod. The
+        /// generated bootstrap is an <c>IMod</c> in THEIR assembly, and the game security-checks
+        /// that assembly by the same rules — so a denied reference there fails their mod with the
+        /// same unexplained "Compilation failed" ours would have failed with.
+        /// </remarks>
+        [Test]
+        public void TheGeneratedConsumerModsUseNothingTheSandboxDenies()
+        {
+            DimensionSandboxGuard.DenyList denyList =
+                DimensionSandboxGuard.ReadDenyList(Application.dataPath);
+            Assert.That(
+                denyList,
+                Is.Not.Null,
+                "The transcribed deny list is missing, so this test would have proved nothing.");
+
+            List<string> roots = DimensionSandboxGuard.ConsumerModRoots(Application.dataPath);
+            string problem =
+                DimensionSandboxGuard.ConsumerSetProblem(Application.dataPath, roots.Count);
+            Assert.That(problem, Is.Null, problem);
+
+            List<DimensionSandboxGuard.Finding> findings =
+                DimensionSandboxGuard.ScanConsumers(Application.dataPath, denyList);
+
+            Assert.That(
+                findings,
+                Is.Empty,
+                "A generated consumer mod references something the mod sandbox denies, so the " +
+                "game will refuse THAT mod and tell the player only that compilation failed." +
+                Detail(findings));
+        }
+
+        /// <summary>
+        /// A consumer mod is found by where the generator puts its output, and the framework's own
+        /// folder is not mistaken for one.
+        /// </summary>
+        /// <remarks>
+        /// Written against files made for the purpose rather than against the project, because the
+        /// project is expected to be clean and a finder that had stopped finding would look exactly
+        /// the same from the test above.
+        /// </remarks>
+        [Test]
+        public void AConsumerModIsFoundByItsGeneratedBootstrapAndScanned()
+        {
+            string assets = Path.Combine(Path.GetTempPath(), "nf_sandbox_guard_consumer");
+            string generated = Path.Combine(
+                Path.Combine(assets, "TheirMod"),
+                DimensionSandboxGuard.GeneratedConsumerScriptFolder
+                    .Replace('/', Path.DirectorySeparatorChar));
+            string frameworkGenerated = Path.Combine(
+                Path.Combine(assets, DimensionSandboxGuard.ShippedRoot),
+                DimensionSandboxGuard.GeneratedConsumerScriptFolder
+                    .Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(generated);
+            Directory.CreateDirectory(frameworkGenerated);
+
+            DimensionSandboxGuard.DenyList denyList = new DimensionSandboxGuard.DenyList();
+            denyList.Namespaces.Add("System.IO");
+
+            try
+            {
+                File.WriteAllText(
+                    Path.Combine(assets, "TheirMod", "TheirMod.asmdef"),
+                    "{\n  \"name\": \"TheirMod\",\n  \"includePlatforms\": []\n}\n");
+                File.WriteAllText(
+                    Path.Combine(generated, "TheirModWhiskey" + DimensionSandboxGuard.GeneratedConsumerScriptSuffix),
+                    "using System.IO;\npublic class A { }\n");
+
+                // A hand-written runtime script beside the generated one is compiled into the same
+                // assembly and checked with it, so it is scanned too.
+                File.WriteAllText(
+                    Path.Combine(assets, "TheirMod", "Theirs.cs"),
+                    "class B { void M() { System.IO.File.Delete(\"x\"); } }\n");
+
+                // The framework's own folder is the other scan's job, and the generator refuses to
+                // write into it; a file that looks like one there must not turn it into a consumer.
+                File.WriteAllText(
+                    Path.Combine(frameworkGenerated, "Ours" + DimensionSandboxGuard.GeneratedConsumerScriptSuffix),
+                    "using System.IO;\npublic class C { }\n");
+
+                List<string> roots = DimensionSandboxGuard.ConsumerModRoots(assets);
+
+                Assert.That(roots.Count, Is.EqualTo(1), string.Join(", ", roots.ToArray()));
+                Assert.That(roots[0], Does.EndWith("TheirMod"));
+                Assert.That(
+                    DimensionSandboxGuard.ConsumerSetProblem(assets, roots.Count),
+                    Is.Null);
+                Assert.That(
+                    DimensionSandboxGuard.ShippedAssemblyNameOf(roots[0]),
+                    Is.EqualTo("TheirMod"));
+
+                List<DimensionSandboxGuard.Finding> findings =
+                    DimensionSandboxGuard.ScanConsumers(assets, denyList);
+
+                Assert.That(findings.Count, Is.EqualTo(2), Detail(findings));
+                Assert.That(
+                    Has(findings, "Whiskey" + DimensionSandboxGuard.GeneratedConsumerScriptSuffix, "System.IO.*", 1),
+                    Is.True,
+                    Detail(findings));
+                Assert.That(Has(findings, "Theirs.cs", "System.IO.*", 1), Is.True, Detail(findings));
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(assets, true);
+                }
+                catch (IOException)
+                {
+                    // A leftover temp folder is not worth failing a passing test over.
+                }
+            }
+        }
+
+        /// <summary>
+        /// No consumer mod at all is reported, because it reads exactly like a clean result.
+        /// </summary>
+        [Test]
+        public void NoConsumerModFoundIsAProblemAndNotAPass()
+        {
+            string nowhere = Path.Combine(Path.GetTempPath(), "nf_sandbox_guard_no_consumer");
+
+            List<string> roots = DimensionSandboxGuard.ConsumerModRoots(nowhere);
+
+            Assert.That(roots, Is.Empty);
+            Assert.That(
+                DimensionSandboxGuard.ConsumerSetProblem(nowhere, roots.Count),
+                Does.Contain("generated consumer mod"));
+        }
+
+        /// <summary>
         /// The list is read from the transcript beside the docs, so a read that comes back short is
         /// a check that has quietly stopped checking.
         /// </summary>

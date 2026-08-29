@@ -376,7 +376,33 @@ namespace ExpandNullforge.EditorTools
             // find prefabs we generated last time and no longer want. PugMod ships a mod by scanning
             // folders, so an orphan left here still registers an object in game.
             PruneOrphanedItemPrefabs(modRoot, outputFolder, generatedIds, report);
-            RecordGeneratedItemIds(modRoot, generatedIds, report);
+
+            // The whole owned set, qualified the same way the prefabs are named. ownItemIds is the
+            // mod's items plus every other id the template generates an object under — creatures,
+            // bosses, summoning circles, plants, containers, workbenches, world objects — which is
+            // exactly the list the world-load check needs and could not have. It is recorded
+            // beside the item ids rather than instead of them: the item list is the promise the
+            // runtime holds the game to, and this one is only a subject list.
+            List<string> ownedObjectIds = new List<string>();
+            HashSet<string> seenOwnedObjectIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < ownItemIds.Count; i++)
+            {
+                string qualifiedOwned = naming.QualifyGenerated(ownItemIds[i]);
+                if (!string.IsNullOrEmpty(qualifiedOwned) && seenOwnedObjectIds.Add(qualifiedOwned))
+                {
+                    ownedObjectIds.Add(qualifiedOwned);
+                }
+            }
+
+            for (int i = 0; i < generatedIds.Count; i++)
+            {
+                if (seenOwnedObjectIds.Add(generatedIds[i]))
+                {
+                    ownedObjectIds.Add(generatedIds[i]);
+                }
+            }
+
+            RecordGeneratedItemIds(modRoot, generatedIds, ownedObjectIds, report);
             WriteLocalization(modRoot, localizationRows, retiredLocalizationKeys, report);
 
             // Two rows under one key is one name silently winning over another — the table has no
@@ -606,6 +632,7 @@ namespace ExpandNullforge.EditorTools
         private static void RecordGeneratedItemIds(
             string modRoot,
             List<string> generatedIds,
+            List<string> ownedObjectIds,
             DimensionItemGenerationReport report)
         {
             string[] guids = AssetDatabase.IsValidFolder(modRoot)
@@ -635,6 +662,8 @@ namespace ExpandNullforge.EditorTools
                 }
 
                 manifest.SetGeneratedItemIds(generatedIds.ToArray());
+                manifest.SetGeneratedObjectIds(
+                    ownedObjectIds == null ? new string[0] : ownedObjectIds.ToArray());
                 EditorUtility.SetDirty(manifest);
             }
 

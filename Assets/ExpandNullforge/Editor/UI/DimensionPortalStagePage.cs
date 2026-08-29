@@ -34,6 +34,13 @@ namespace ExpandNullforge.EditorTools
         private readonly System.Func<bool, bool> versionEnabled;
         private readonly System.Action<bool> toggleVersionEnabled;
 
+        /// <summary>
+        /// Where this page says something to the creator. Building a portal rule can fail — no
+        /// dimension selected, the asset could not be written — and that answer used to go to the
+        /// Console, where a creator who has not opened it never sees it.
+        /// </summary>
+        private readonly System.Action<string, MessageType> report;
+
         private VisualElement root;
         private VisualElement versionHost;
         private VisualElement listHost;
@@ -95,7 +102,8 @@ namespace ExpandNullforge.EditorTools
             System.Action<int> setVersionTab,
             System.Func<bool, bool> hasVersion,
             System.Func<bool, bool> versionEnabled,
-            System.Action<bool> toggleVersionEnabled)
+            System.Action<bool> toggleVersionEnabled,
+            System.Action<string, MessageType> reportToCreator)
         {
             this.resolveStudio = resolveStudio;
             this.onStudioResult = onStudioResult;
@@ -104,6 +112,7 @@ namespace ExpandNullforge.EditorTools
             this.hasVersion = hasVersion;
             this.versionEnabled = versionEnabled;
             this.toggleVersionEnabled = toggleVersionEnabled;
+            report = reportToCreator;
         }
 
         internal VisualElement Build()

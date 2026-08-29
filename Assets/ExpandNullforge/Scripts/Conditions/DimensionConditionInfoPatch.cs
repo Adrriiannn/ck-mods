@@ -44,6 +44,15 @@ namespace ExpandNullforge.Conditions
     [HarmonyPatch(typeof(ConditionsTable), "GetConditionInfo")]
     internal static class DimensionConditionInfoPatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         /// <summary>
         /// Numbers already complained about, so a buff nobody can explain says so once rather than
         /// thirty-six times a second.
@@ -53,6 +62,8 @@ namespace ExpandNullforge.Conditions
         [HarmonyPrefix]
         private static bool Prefix(ConditionID conditionID, ref ConditionInfo __result)
         {
+            Fired++;
+
             ConditionInfo ours;
             if (!TryAnswer(conditionID, out ours))
             {

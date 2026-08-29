@@ -62,6 +62,44 @@ namespace ExpandNullforge.EditorTools
             "ExpandNullforge.API.dll",
         };
 
+        /// <summary>
+        /// Those two plus every generated consumer mod's assembly, which the game checks the same
+        /// way and by the same rules.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The consumer's names cannot be constants — a creator names their own mod — so they are
+        /// read from the asmdef of each folder this framework has generated a runtime bootstrap
+        /// into. A consumer mod with no asmdef of its own, or one marked Editor-only, contributes
+        /// nothing: Unity builds no shipped assembly for it, so there is nothing to read.
+        /// </para>
+        /// <para>
+        /// Returns file names, not paths, because the caller is the one that knows where the
+        /// project's <c>Library/ScriptAssemblies</c> is.
+        /// </para>
+        /// </remarks>
+        public static List<string> AssembliesToScan(string assetsPath)
+        {
+            List<string> names = new List<string>(ShippedAssemblies);
+            List<string> roots = DimensionSandboxGuard.ConsumerModRoots(assetsPath);
+            for (int i = 0; i < roots.Count; i++)
+            {
+                string assembly = DimensionSandboxGuard.ShippedAssemblyNameOf(roots[i]);
+                if (string.IsNullOrEmpty(assembly))
+                {
+                    continue;
+                }
+
+                string file = assembly + ".dll";
+                if (!names.Contains(file))
+                {
+                    names.Add(file);
+                }
+            }
+
+            return names;
+        }
+
         /// <summary>Reads one built assembly and returns every denied reference in it.</summary>
         /// <remarks>
         /// A file that cannot be read, or is not a managed assembly, comes back as a finding rather

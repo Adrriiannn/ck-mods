@@ -63,6 +63,15 @@ namespace ExpandNullforge.Tilesets
     [HarmonyPatch(typeof(QuadGenerator), nameof(QuadGenerator.HasTileset))]
     internal static class DimensionQuadGeneratorTilesetPatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         /// <summary>
         /// Layers already reported. Keyed by layer rather than by generator instance: the question
         /// worth answering is "which layers restrict themselves", and every custom tileset shares
@@ -74,6 +83,8 @@ namespace ExpandNullforge.Tilesets
         [HarmonyPriority(Priority.Low)]
         private static bool Before(QuadGenerator __instance, int tileset, ref bool __result)
         {
+            Fired++;
+
             // One integer compare rejects every vanilla tileset, which is nearly every call. This
             // method runs per layer per map-layer build, so the early out matters.
             if (!DimensionTilesetRegistry.IsCustomTilesetId(tileset) || __instance == null)

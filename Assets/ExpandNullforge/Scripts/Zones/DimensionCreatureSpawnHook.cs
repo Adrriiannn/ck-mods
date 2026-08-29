@@ -28,11 +28,22 @@ namespace ExpandNullforge.Zones
     [HarmonyPatch(typeof(PugMods.SpawnTable), nameof(PugMods.SpawnTable.Init))]
     public static class DimensionCreatureSpawnHook
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         /// <summary>How many creature spawn rules the last run added.</summary>
         public static int LastAddedCount { get; private set; }
 
         private static void Postfix(EnvironmentSpawnObjectsTable spawnTable)
         {
+            Fired++;
+
             if (spawnTable == null || !DimensionCreatureSpawnRegistry.HasAny)
             {
                 return;

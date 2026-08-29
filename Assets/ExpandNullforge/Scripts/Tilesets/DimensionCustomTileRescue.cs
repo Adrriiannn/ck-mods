@@ -221,12 +221,19 @@ namespace ExpandNullforge.Tilesets
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Its <c>[UpdateBefore(DeserializeComponentsSystem)]</c> attribute is silently dropped every
-        /// run — the game logs "Ignoring invalid [UpdateBeforeAttribute] … can only order systems that
-        /// are members of the same ComponentSystemGroup instance", because a mod's systems are not
-        /// created into <c>SerializationSystemGroup</c>. Ordering then falls to whatever the default
-        /// happens to be, which has worked so far purely by luck. The warning names this remedy itself:
-        /// add the system to the group's update list directly, then re-sort so the attribute applies.
+        /// A MOD'S SYSTEMS ARE CREATED INTO THIS GROUP, and this comment used to say the opposite.
+        /// The game builds its worlds after the mod assembly is in memory and puts every system it
+        /// finds into the group its <c>[UpdateInGroup]</c> names — which is why the engine's
+        /// "Ignoring invalid [UpdateBeforeAttribute]" line can appear at all: that message is only
+        /// emitted while sorting a group's own members. The capture system is already in the group
+        /// before this method runs.
+        /// </para>
+        /// <para>
+        /// SO WHAT THIS CALL IS ACTUALLY FOR IS THE SORT. <c>AddSystemToUpdateList</c> returns
+        /// early without marking the list dirty when the system is already a member, and
+        /// <c>SortSystems</c> then puts the group into run order. The add is kept because it costs
+        /// nothing and covers the case where the sweep did not place the system; the sort is the
+        /// half with an effect.
         /// </para>
         /// <para>
         /// The restore half needs no such repair, and that is worth stating because it looks like it
@@ -279,6 +286,17 @@ namespace ExpandNullforge.Tilesets
     /// Reads custom-tileset layers out of serialized submaps just before the game deserializes them
     /// and throws those layers away. See <see cref="DimensionCustomTileRescue"/>.
     /// </summary>
+    /// <remarks>
+    /// SERVER ONLY, AND IT WAS NOT. With no <c>[WorldSystemFilter]</c> a system falls back to
+    /// local, server and client, so this was created and scheduled in the client world too — where
+    /// there is nothing for it to do, because every system that touches
+    /// <c>SubMapSerializedCD</c> is server-side, <c>DeserializeComponentsSystem</c> included. That
+    /// is the whole reason the engine's "Ignoring invalid [UpdateBefore]" line appeared three times
+    /// a session: on the client the ordering target is not absent from the group, it is absent from
+    /// the world. Saying which world this belongs in fixes the warning, the pointless client-side
+    /// work, and an audit that was certifying a pair of client systems that could never run.
+    /// </remarks>
+    [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     [UpdateInGroup(typeof(SerializationSystemGroup))]
     [UpdateBefore(typeof(DeserializeComponentsSystem))]
     public partial class DimensionCustomTileCaptureSystem : SystemBase
@@ -340,6 +358,12 @@ namespace ExpandNullforge.Tilesets
     /// Puts the captured custom-tileset layers back onto the rebuilt submap. Runs after the command
     /// buffer that creates it has played back. See <see cref="DimensionCustomTileRescue"/>.
     /// </summary>
+    /// <remarks>
+    /// Server only, for the same reason as its other half: the only thing that ever gives it work
+    /// is the capture system, which is server-side, so on a client this was a query and an early
+    /// return every frame for the life of the session.
+    /// </remarks>
+    [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(SerializationSystemGroup))]
     public partial class DimensionCustomTileRestoreSystem : SystemBase

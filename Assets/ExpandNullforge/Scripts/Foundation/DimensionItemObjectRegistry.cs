@@ -37,6 +37,43 @@ namespace ExpandNullforge.Foundation
             get { return Resolved.Count; }
         }
 
+        /// <summary>How many item ids content packs said they expect. Read by the self-audit.</summary>
+        /// <remarks>
+        /// The audit needs the declared side as well as the resolved side, because the two numbers
+        /// answer different questions: 41 declared and 41 resolved is a working pack, 41 declared
+        /// and 0 resolved is a pack whose objects never reached the game, and 0 declared is a
+        /// bootstrap that never ran at all. Reporting only the resolved count cannot tell the last
+        /// two apart, and they have different fixes.
+        /// </remarks>
+        public static int DeclaredCount
+        {
+            get { return Declared.Count; }
+        }
+
+        /// <summary>
+        /// Every declared id that resolved, with the object it resolved to.
+        /// </summary>
+        /// <remarks>
+        /// This is the list the entity audit walks: it is exactly the set of objects this framework
+        /// put into the game, so everything vanilla is excluded before a single component is read.
+        /// It is a copy rather than the live dictionary, because the audit takes a while over each
+        /// entry and resolution can still be happening underneath it.
+        /// </remarks>
+        public static List<KeyValuePair<string, ObjectID>> ResolvedItems()
+        {
+            List<KeyValuePair<string, ObjectID>> items =
+                new List<KeyValuePair<string, ObjectID>>(Resolved.Count);
+            foreach (KeyValuePair<string, ObjectID> pair in Resolved)
+            {
+                if (pair.Value != ObjectID.None)
+                {
+                    items.Add(pair);
+                }
+            }
+
+            return items;
+        }
+
         /// <summary>How many times <see cref="Declare"/> has been called with something in it.</summary>
         /// <remarks>
         /// The mod entry watches this so its one-shot "did my items register?" report waits until

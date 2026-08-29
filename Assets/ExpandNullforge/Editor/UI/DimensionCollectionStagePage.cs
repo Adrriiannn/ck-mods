@@ -342,6 +342,12 @@ namespace ExpandNullforge.EditorTools
                 }
             }
 
+            // A card naming "cooking.role" curates a value INSIDE the top-level "cooking" block.
+            // The block itself is then not in `named`, so it used to be drawn whole down here as
+            // well, and the creator had the same value under two editors on one page with neither
+            // aware of the other.
+            HashSet<string> curatedParents = DimensionCuratedPaths.ParentsOf(named);
+
             Foldout foldout = new Foldout { text = "Everything else", value = false };
             foldout.AddToClassList("dim-everything-else");
 
@@ -354,6 +360,23 @@ namespace ExpandNullforge.EditorTools
                 string path = iterator.propertyPath;
                 if (path == "m_Script" || named.Contains(path) || path.Contains("."))
                 {
+                    continue;
+                }
+
+                // A block with a curated value inside it is opened rather than skipped. Skipping
+                // it would close the double editor and lose the rest of the block with it: the
+                // cooking block holds nineteen values and ten of them have cards, so nine — the
+                // four colours a dish borrows, the golden dish, and the four cross-links — would
+                // have had no editor anywhere. What "Everything else" promises is that nothing on
+                // the asset is unreachable.
+                if (curatedParents.Contains(path))
+                {
+                    shown += AddUncuratedChildren(
+                        iterator.Copy(),
+                        named,
+                        curatedParents,
+                        foldout,
+                        iterator.displayName + ": ");
                     continue;
                 }
 
@@ -371,6 +394,58 @@ namespace ExpandNullforge.EditorTools
             // PropertyField resolves its property through the bound hierarchy above it.
             foldout.Bind(serialized);
             return foldout;
+        }
+
+        /// <summary>
+        /// The values inside one block that no card upstairs already edits.
+        /// </summary>
+        /// <remarks>
+        /// Recursive because a curated path may go deeper than one dot, and a block that holds
+        /// another curated block has to be opened the same way rather than drawn whole. The label
+        /// carries the block's name down with it, so a value that reads as "Brightest" on its own
+        /// arrives as "Cooking: Brightest" and can be told from the four other fields in this fold
+        /// with a colour in them.
+        /// </remarks>
+        private static int AddUncuratedChildren(
+            SerializedProperty parent,
+            HashSet<string> named,
+            HashSet<string> curatedParents,
+            VisualElement into,
+            string labelPrefix)
+        {
+            int shown = 0;
+            SerializedProperty child = parent.Copy();
+            SerializedProperty end = parent.GetEndProperty();
+            bool enterChildren = true;
+            while (child.NextVisible(enterChildren) &&
+                   !SerializedProperty.EqualContents(child, end))
+            {
+                enterChildren = false;
+                string path = child.propertyPath;
+                if (named.Contains(path))
+                {
+                    continue;
+                }
+
+                if (curatedParents.Contains(path))
+                {
+                    shown += AddUncuratedChildren(
+                        child.Copy(),
+                        named,
+                        curatedParents,
+                        into,
+                        labelPrefix + child.displayName + ": ");
+                    continue;
+                }
+
+                PropertyField field =
+                    new PropertyField(child.Copy(), labelPrefix + child.displayName);
+                field.AddToClassList("dim-raw-field");
+                into.Add(field);
+                shown++;
+            }
+
+            return shown;
         }
 
         private void DeferredRefresh()

@@ -37,6 +37,8 @@ namespace ExpandNullforge.EditorTools
         private Label stageMaturityChip;
         private VisualElement diagnosticsRailRow;
         private Label diagnosticsAlertChip;
+        private VisualElement actionFeedback;
+        private Label actionFeedbackLabel;
         private bool showingHome = true;
         private DimensionBiomeStagePage biomePage;
         private VisualElement biomePageRoot;
@@ -84,6 +86,11 @@ namespace ExpandNullforge.EditorTools
             // A window reopened on a dimension it already had should land back in the journey,
             // not send the creator through the front door again.
             ShowHome(selectedTemplate == null);
+
+            // A recompile rebuilds the frame while the last message is still held. Without this
+            // the strip would come back blank and the creator would be told nothing about the
+            // action they had just taken.
+            RefreshActionFeedback();
         }
 
         private VisualElement BuildTitleBar()
@@ -762,6 +769,8 @@ namespace ExpandNullforge.EditorTools
             head.Add(originalPanelToggle);
             content.Add(head);
 
+            content.Add(BuildActionFeedback());
+
             // Biomes has a page of its own because a biome is not a list of fields, it is a
             // place; everything else is built from its description in the catalog. Whatever the
             // catalog does not describe still shows its original panel, so no capability is lost
@@ -778,7 +787,8 @@ namespace ExpandNullforge.EditorTools
                 tilesetStudio,
                 RunAssetAction,
                 FocusBlockItemFromShell,
-                Repaint);
+                Repaint,
+                ReportToCreator);
             blockPageRoot = blockPage.Build();
             content.Add(blockPageRoot);
 
@@ -789,7 +799,8 @@ namespace ExpandNullforge.EditorTools
                 SetPortalVersionTabFromShell,
                 HasPortalVersionForShell,
                 IsPortalVersionEnabledForShell,
-                TogglePortalVersionEnabledFromShell);
+                TogglePortalVersionEnabledFromShell,
+                ReportToCreator);
             portalPageRoot = portalPage.Build();
             content.Add(portalPageRoot);
 
@@ -838,6 +849,98 @@ namespace ExpandNullforge.EditorTools
 
             shell.Add(content);
             return shell;
+        }
+
+        /// <summary>
+        /// The strip under the stage's name where the window tells the creator what just happened.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Built once and hidden, rather than added and removed, so that publishing a message can
+        /// never reorder the page under a creator's cursor. It sits directly beneath the header
+        /// because that is where the eye already is after clicking a button in it, and above the
+        /// body so it never scrolls out of sight with the fields.
+        /// </para>
+        /// <para>
+        /// The message is dismissable and nothing dismisses it on a timer: a warning that
+        /// disappears by itself is a warning the creator can miss entirely.
+        /// </para>
+        /// </remarks>
+        private VisualElement BuildActionFeedback()
+        {
+            actionFeedback = new VisualElement();
+            actionFeedback.AddToClassList("dim-feedback");
+            actionFeedback.style.display = DisplayStyle.None;
+
+            actionFeedbackLabel = new Label(string.Empty);
+            actionFeedbackLabel.AddToClassList("dim-feedback-text");
+            actionFeedback.Add(actionFeedbackLabel);
+
+            Button dismiss = new Button(DismissActionFeedback) { text = "×" };
+            dismiss.AddToClassList("dim-button");
+            dismiss.AddToClassList("dim-button-ghost");
+            dismiss.AddToClassList("dim-feedback-dismiss");
+            dismiss.tooltip = "Put this message away.";
+            actionFeedback.Add(dismiss);
+            return actionFeedback;
+        }
+
+        /// <summary>
+        /// Puts the last published message on screen, or takes the strip away when there is none.
+        /// </summary>
+        /// <remarks>
+        /// Called from the setter of <c>lastEditorActionMessage</c>, so every one of the
+        /// twenty-one places that publish one arrives here without knowing this exists. Guarded on
+        /// the elements being built, because a message can be published while the window is still
+        /// opening and before <c>CreateGUI</c> has run.
+        /// </remarks>
+        private void RefreshActionFeedback()
+        {
+            if (actionFeedback == null || actionFeedbackLabel == null)
+            {
+                return;
+            }
+
+            string message = lastEditorActionMessageValue;
+            if (string.IsNullOrEmpty(message))
+            {
+                actionFeedback.style.display = DisplayStyle.None;
+                return;
+            }
+
+            actionFeedbackLabel.text = message;
+            actionFeedback.RemoveFromClassList("dim-feedback-warn");
+            actionFeedback.RemoveFromClassList("dim-feedback-bad");
+            if (lastEditorActionTypeValue == MessageType.Warning)
+            {
+                actionFeedback.AddToClassList("dim-feedback-warn");
+            }
+            else if (lastEditorActionTypeValue == MessageType.Error)
+            {
+                actionFeedback.AddToClassList("dim-feedback-bad");
+            }
+
+            actionFeedback.style.display = DisplayStyle.Flex;
+        }
+
+        private void DismissActionFeedback()
+        {
+            lastEditorActionMessage = string.Empty;
+        }
+
+        /// <summary>
+        /// A message from a page that has no asset action to report, said in the same strip.
+        /// </summary>
+        /// <remarks>
+        /// Two pages had nowhere to put a failure and wrote it to the Console instead — where a
+        /// creator who has not opened the Console never sees it, and where it looks like a bug in
+        /// the framework rather than an answer to what they just clicked.
+        /// </remarks>
+        private void ReportToCreator(string message, MessageType type)
+        {
+            lastEditorActionMessage = message ?? string.Empty;
+            lastEditorActionType = type;
+            Repaint();
         }
 
         /// <summary>The catalog page for a stage, built once and kept.</summary>

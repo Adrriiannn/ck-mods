@@ -1237,3 +1237,50 @@
 .dim-issue-card .dim-chip-row {
     margin-top: 8px;
 }
+
+/* ------------------------------------------------------------ feedback --- */
+
+/* What just happened, said under the stage's name. Holds still, does not scroll away with
+   the fields, and stays until it is put away. */
+.dim-feedback {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 20px;
+    margin-right: 20px;
+    margin-top: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    padding-left: 12px;
+    padding-right: 6px;
+    border-width: 1px;
+    border-radius: 8px;
+    border-color: rgba(74, 204, 247, 0.32);
+    background-color: rgba(74, 204, 247, 0.07);
+}
+
+.dim-feedback-text {
+    -unity-font-definition: url("Fonts/Hanken-400.ttf");
+    font-size: 12px;
+    color: #cfe6f5;
+    white-space: normal;
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.dim-feedback-warn {
+    border-color: rgba(255, 148, 0, 0.4);
+    background-color: rgba(255, 148, 0, 0.08);
+}
+
+.dim-feedback-bad {
+    border-color: rgba(228, 80, 1, 0.45);
+    background-color: rgba(228, 80, 1, 0.09);
+}
+
+.dim-feedback-dismiss {
+    margin-left: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    flex-shrink: 0;
+}

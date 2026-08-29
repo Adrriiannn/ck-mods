@@ -152,10 +152,11 @@ namespace ExpandNullforge.EditorTools
             }
 
             VisualElement control = chooser == null ? null : chooser(property);
-            if (control == null)
+            if (control == null && !HasFrameworkDrawer(property))
             {
                 control = ControlFor(property);
             }
+
             if (control == null)
             {
                 PropertyField fallback = new PropertyField(property, string.Empty);
@@ -164,6 +165,165 @@ namespace ExpandNullforge.EditorTools
             }
 
             return Field(label, tooltip, control);
+        }
+
+        /// <summary>
+        /// Whether this field carries one of the framework's own marks, which a drawer draws.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A CURATED ROW USED TO BE WORSE THAN AN UNCURATED ONE. <see cref="ControlFor"/> answers a
+        /// string with a plain <c>TextField</c>, an int with an <c>IntegerField</c> and a bool with
+        /// a <c>Toggle</c>, and none of those asks Unity for the field's drawer. So the four
+        /// name pickers — sound, puff, skill, effect — appeared on exactly the fields nobody had
+        /// written a card for, and vanished the moment somebody wrote one. Fourteen hundred sound
+        /// names, and the Browse button was on the row nobody had looked at.
+        /// </para>
+        /// <para>
+        /// WHAT IS ASKED IS "does this framework draw it", not "does anything draw it". The mark
+        /// must be a <see cref="PropertyAttribute"/> from the assembly the authoring marks live in.
+        /// Unity's own <c>[Tooltip]</c> is a <c>PropertyAttribute</c> too and has no drawer, so a
+        /// looser test would have pushed nearly every field on every page through
+        /// <c>PropertyField</c> and changed the look of the whole studio to fix four rows. A new
+        /// mark added beside the four is picked up without touching this.
+        /// </para>
+        /// <para>
+        /// Type drawers need nothing here: an enum, an object reference and anything the switch
+        /// does not know already go through <c>PropertyField</c>, which honours them.
+        /// </para>
+        /// </remarks>
+        private static bool HasFrameworkDrawer(SerializedProperty property)
+        {
+            if (property == null || property.serializedObject == null)
+            {
+                return false;
+            }
+
+            Object target = property.serializedObject.targetObject;
+            if (target == null)
+            {
+                return false;
+            }
+
+            string key = target.GetType().FullName + "|" + property.propertyPath;
+            bool marked;
+            if (frameworkDrawnFields.TryGetValue(key, out marked))
+            {
+                return marked;
+            }
+
+            marked = IsMarked(FieldOf(target.GetType(), property.propertyPath));
+            frameworkDrawnFields[key] = marked;
+            return marked;
+        }
+
+        /// <summary>
+        /// Answers are kept because the question cannot change without a recompile, and every page
+        /// asks it once per field per rebuild.
+        /// </summary>
+        private static readonly Dictionary<string, bool> frameworkDrawnFields =
+            new Dictionary<string, bool>();
+
+        /// <summary>The assembly the authoring marks are declared in.</summary>
+        private static readonly System.Reflection.Assembly AuthoringAssembly =
+            typeof(ExpandNullforge.Authoring.DimensionSoundNameAttribute).Assembly;
+
+        private static bool IsMarked(System.Reflection.FieldInfo field)
+        {
+            if (field == null)
+            {
+                return false;
+            }
+
+            object[] marks = field.GetCustomAttributes(typeof(PropertyAttribute), true);
+            for (int i = 0; i < marks.Length; i++)
+            {
+                if (marks[i].GetType().Assembly == AuthoringAssembly)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The field a serialized path names, walking through blocks and array elements.
+        /// </summary>
+        /// <remarks>
+        /// Unity writes an element of an array as <c>list.Array.data[3]</c>; that middle is folded
+        /// away so the walk is one segment per real field. A path that names nothing — the asset
+        /// changed under the page — comes back null and is treated as unmarked, which is the
+        /// behaviour the page had before any of this.
+        /// </remarks>
+        private static System.Reflection.FieldInfo FieldOf(System.Type type, string propertyPath)
+        {
+            if (type == null || string.IsNullOrEmpty(propertyPath))
+            {
+                return null;
+            }
+
+            string[] segments = propertyPath.Replace(".Array.data[", "[").Split('.');
+            System.Reflection.FieldInfo field = null;
+            for (int i = 0; i < segments.Length; i++)
+            {
+                string name = segments[i];
+                int bracket = name.IndexOf('[');
+                if (bracket >= 0)
+                {
+                    name = name.Substring(0, bracket);
+                }
+
+                field = DeclaredField(type, name);
+                if (field == null)
+                {
+                    return null;
+                }
+
+                type = field.FieldType;
+                if (bracket < 0)
+                {
+                    continue;
+                }
+
+                if (type.IsArray)
+                {
+                    type = type.GetElementType();
+                }
+                else if (type.IsGenericType)
+                {
+                    type = type.GetGenericArguments()[0];
+                }
+            }
+
+            return field;
+        }
+
+        /// <summary>A field by name, on a type or on anything it inherits from.</summary>
+        /// <remarks>
+        /// Serialized fields are private, and a private field is not inherited into
+        /// <c>GetField</c>'s answer, so the base types are walked by hand.
+        /// </remarks>
+        private static System.Reflection.FieldInfo DeclaredField(System.Type type, string name)
+        {
+            const System.Reflection.BindingFlags Flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly;
+
+            while (type != null)
+            {
+                System.Reflection.FieldInfo field = type.GetField(name, Flags);
+                if (field != null)
+                {
+                    return field;
+                }
+
+                type = type.BaseType;
+            }
+
+            return null;
         }
 
         /// <summary>

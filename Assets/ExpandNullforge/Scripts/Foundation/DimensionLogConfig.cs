@@ -53,6 +53,25 @@ namespace ExpandNullforge.Foundation
         /// <summary>Whether the report file is written on every world load.</summary>
         public static bool Report { get; private set; }
 
+        /// <summary>
+        /// Whether the audit checks the mod's own objects against the game's own queries.
+        /// </summary>
+        /// <remarks>
+        /// Separate from <see cref="Audit"/> because it is the only part with a cost that scales
+        /// with how much content is installed: one prefab query and a few thousand component
+        /// lookups per world load. Somebody with a very large pack who has already seen it come
+        /// back clean can turn just this off and keep the rest.
+        /// </remarks>
+        public static bool EntityAudit { get; private set; } = true;
+
+        /// <summary>How many of the mod's objects the entity check looks at before it stops.</summary>
+        /// <remarks>
+        /// Four hundred is above every pack anybody has built with this so far, so the ordinary
+        /// case checks everything. It exists so that a pack ten times that size cannot turn a world
+        /// load into a stall, and when it does stop early the audit says so and names this setting.
+        /// </remarks>
+        public static int EntityAuditBudget { get; private set; } = 400;
+
         /// <summary>Whether any Trace channel at all is on.</summary>
         /// <remarks>
         /// This is what <see cref="DimensionFrameworkLog.VerboseRuntimeLogging"/> answers, so the
@@ -92,6 +111,8 @@ namespace ExpandNullforge.Foundation
             Milestones = true;
             Audit = true;
             Report = false;
+            EntityAudit = true;
+            EntityAuditBudget = 400;
         }
 
         /// <summary>
@@ -189,6 +210,21 @@ namespace ExpandNullforge.Foundation
                     "loads. Off by default because writing it can stall the game briefly.",
                     "report",
                     false).Value;
+
+                EntityAudit = API.Config.Register(
+                    ConfigMod,
+                    ConfigSection,
+                    "Check that the objects this mod put into the game carry everything the " +
+                    "game's own systems ask for before they will look at them.",
+                    "entityAudit",
+                    true).Value;
+
+                EntityAuditBudget = API.Config.Register(
+                    ConfigMod,
+                    ConfigSection,
+                    "How many of this mod's objects that check looks at before it stops.",
+                    "entityAuditBudget",
+                    400).Value;
             }
             catch (Exception)
             {
@@ -232,6 +268,12 @@ namespace ExpandNullforge.Foundation
                     if (string.Equals(arg, "-nfnoaudit", StringComparison.OrdinalIgnoreCase))
                     {
                         Audit = false;
+                        continue;
+                    }
+
+                    if (string.Equals(arg, "-nfnoentityaudit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        EntityAudit = false;
                         continue;
                     }
 

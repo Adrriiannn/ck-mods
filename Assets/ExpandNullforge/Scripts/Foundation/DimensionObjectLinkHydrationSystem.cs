@@ -27,7 +27,9 @@ namespace ExpandNullforge.Foundation
     /// correct in principle and a permanent maintenance hazard in practice: the
     /// <c>[WorldSystemFilter]</c> flags and the <c>GetOrCreateSystemManaged</c> calls in
     /// <c>ExpandNullforgeModEntry</c> have to agree, or an instance is constructed in a world it
-    /// never ticks in — silently, with the liveness test still green. The cost is asymmetric too.
+    /// never ticks in. That disagreement is now caught offline — the liveness guard compares the
+    /// roster's peer column against the filter on each class — but the reasoning below is why there
+    /// is one filter here rather than one per field. The cost is asymmetric too.
     /// Writing a server-only field (a loot buffer) onto the client's own prefab copy is inert; the
     /// client never rolls it. FAILING to write a client-read field is visible — the recipe book, and
     /// a bow whose predicted shot disagrees with the one the server fires. So both worlds, always.

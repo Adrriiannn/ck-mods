@@ -349,20 +349,41 @@ namespace ExpandNullforge.EditorTools
         }
 
         [Test]
-        public void TheCustomTileSystemsAreNoLongerStrandedAfterAReturn()
+        public void TheCustomTileSystemsAreCreatedOnTheServerAndNowhereElse()
         {
-            // Both creation calls sat below an unconditional return inside the "already registered"
-            // early-out, so they had never once run on a client — and the ordering call below them
-            // only WARNS when it cannot find them.
-            string client = MethodBody(File.ReadAllText(ModEntryPath()), "RegisterClientWorld");
-            int returnAt = client.IndexOf("return;", StringComparison.Ordinal);
-            int captureAt = client.IndexOf(
-                "DimensionCustomTileCaptureSystem>()", StringComparison.Ordinal);
+            // WHAT THIS USED TO ASSERT AND WHY IT CHANGED. It checked that the two creation calls
+            // sat below the "already registered" early-out in RegisterClientWorld, because they had
+            // once been stranded above it. Then the deeper fault came out: they should not be in
+            // that method at all. Everything that touches a serialized submap is server-side —
+            // DeserializeComponentsSystem is [WorldSystemFilter(ServerSimulation)] — so a client
+            // copy of either system queries and returns forever, and EnsureSystemOrdering was
+            // asking a client group to order the capture system against a system that world does
+            // not have. Both classes now say ServerSimulation, and the client block must not
+            // contradict them.
+            string entry = File.ReadAllText(ModEntryPath());
+            string server = MethodBody(entry, "RegisterServerWorld");
+            string client = MethodBody(entry, "RegisterClientWorld");
 
-            Assert.That(captureAt, Is.GreaterThan(0), "The capture system is not created at all.");
-            Assert.That(client.IndexOf("}", returnAt, StringComparison.Ordinal),
-                Is.LessThan(captureAt),
-                "The creation call is still inside the early-out block, so it never runs.");
+            Assert.That(
+                server,
+                Does.Contain("DimensionCustomTileCaptureSystem>()"),
+                "The capture system is not looked up in the server block, so EnsureSystemOrdering "
+                + "below it has nothing to order.");
+            Assert.That(
+                server,
+                Does.Contain("DimensionCustomTileRestoreSystem>()"),
+                "The restore half is not looked up in the server block, and a bracket with one "
+                + "half captures tile layers and never puts them back.");
+            Assert.That(
+                client,
+                Does.Not.Contain("DimensionCustomTileCaptureSystem>()"),
+                "The capture system is server-only, so creating it in the client block makes a "
+                + "system that can never do anything and re-emits the engine's ordering warning.");
+            Assert.That(
+                client,
+                Does.Not.Contain("EnsureSystemOrdering"),
+                "EnsureSystemOrdering orders the capture system before the game's deserializer, "
+                + "and a client world has neither.");
         }
 
         // ---- the two lists that can only ever be baked at conversion --------------------
@@ -716,13 +737,33 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>The text of one method, from its signature to the start of the next one.</summary>
+        /// <summary>
+        /// One method's body from the mod entry's source, with its comments blanked out.
+        /// </summary>
+        /// <remarks>
+        /// THE COMMENTS GO BECAUSE EVERY CALLER HERE IS A SUBSTRING SEARCH. A test that asserts a
+        /// call is absent was failing on the comment that explains why it is absent, and a test
+        /// that asserts a call is present would pass on a commented-out one. Neither is the
+        /// question being asked. It removes a <c>//</c> run to the end of its line, which is every
+        /// comment in this file's subject.
+        /// </remarks>
         private static string MethodBody(string source, string methodName)
         {
             int start = source.IndexOf("private void " + methodName + "()", StringComparison.Ordinal);
             Assert.That(start, Is.GreaterThan(0), methodName + " is not in the mod entry.");
 
             int next = source.IndexOf("\n  private ", start + 1, StringComparison.Ordinal);
-            return next < 0 ? source.Substring(start) : source.Substring(start, next - start);
+            string body = next < 0 ? source.Substring(start) : source.Substring(start, next - start);
+
+            string[] lines = body.Split('\n');
+            System.Text.StringBuilder kept = new System.Text.StringBuilder();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                int slashes = lines[i].IndexOf("//", StringComparison.Ordinal);
+                kept.Append(slashes < 0 ? lines[i] : lines[i].Substring(0, slashes)).Append('\n');
+            }
+
+            return kept.ToString();
         }
     }
 }

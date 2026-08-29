@@ -23,6 +23,15 @@ namespace ExpandNullforge.Tilesets
     [HarmonyPatch(typeof(TilesetTypeUtility))]
     internal static class DimensionTilesetTypeUtilityPatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         private const int VanillaMaxExclusive = 75;
 
         /// <summary>True when this id is ours to serve (registered, or orphaned/out-of-range).</summary>
@@ -64,6 +73,8 @@ namespace ExpandNullforge.Tilesets
         [HarmonyPatch(nameof(TilesetTypeUtility.GetTileset))]
         private static bool GetTileset(int index, ref PugMapTileset __result)
         {
+            Fired++;
+
             if (!ShouldHandle(index, out DimensionCustomTileset tileset))
             {
                 return true;
@@ -98,6 +109,8 @@ namespace ExpandNullforge.Tilesets
             int tilesetIndex,
             ref MapWorkshopTilesetBank.TilesetTextures __result)
         {
+            Fired++;
+
             if (TryGetReskin(tilesetIndex, out DimensionCustomTileset reskin))
             {
                 __result = reskin.Textures;
@@ -124,6 +137,8 @@ namespace ExpandNullforge.Tilesets
             TextureType textureType,
             ref Texture2D __result)
         {
+            Fired++;
+
             if (TryGetReskin(tilesetIndex, out DimensionCustomTileset reskin))
             {
                 __result = reskin.Textures != null ? reskin.Textures.GetTexture(textureType) : null;
@@ -160,6 +175,8 @@ namespace ExpandNullforge.Tilesets
             TextureType textureType,
             ref Texture2D __result)
         {
+            Fired++;
+
             if (TryGetReskin(tilesetIndex, out DimensionCustomTileset reskin))
             {
                 __result = null;
@@ -211,6 +228,8 @@ namespace ExpandNullforge.Tilesets
             LayerName layerName,
             ref Material __result)
         {
+            Fired++;
+
             if (!ShouldHandle(tilesetIndex, out DimensionCustomTileset tileset))
             {
                 return true;
@@ -233,6 +252,8 @@ namespace ExpandNullforge.Tilesets
             LayerName tileName,
             ref Material __result)
         {
+            Fired++;
+
             if (!ShouldHandle(tilesetIndex, out DimensionCustomTileset tileset))
             {
                 return true;
@@ -255,6 +276,8 @@ namespace ExpandNullforge.Tilesets
             LayerName tileName,
             ref ParticleSystem __result)
         {
+            Fired++;
+
             if (!ShouldHandle(tilesetIndex, out DimensionCustomTileset _))
             {
                 return true;
@@ -269,6 +292,8 @@ namespace ExpandNullforge.Tilesets
         [HarmonyPatch(nameof(TilesetTypeUtility.GetFriendlyName))]
         private static bool GetFriendlyName(int index, ref string __result)
         {
+            Fired++;
+
             if (!ShouldHandle(index, out DimensionCustomTileset tileset))
             {
                 return true;

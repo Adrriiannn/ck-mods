@@ -166,6 +166,19 @@ namespace ExpandNullforge.Loot
             return false;
         }
 
+        /// <summary>
+        /// How many custom loot tables are queued. Read by the world-load self-audit.
+        /// </summary>
+        /// <remarks>
+        /// The audit needs it to tell two silences apart: the loot converter patch never running
+        /// while nothing was queued is nothing at all, and the same patch never running while
+        /// tables are queued means no custom drop will ever appear.
+        /// </remarks>
+        public static int QueuedTableCount
+        {
+            get { return Pending.Count; }
+        }
+
         /// <summary>Clears queued tables (mod reload).</summary>
         public static void Clear()
         {
@@ -483,10 +496,21 @@ namespace ExpandNullforge.Loot
     [HarmonyPatch(typeof(LootTableConverter), nameof(LootTableConverter.Convert))]
     internal static class DimensionLootTableConverterPatch
     {
+        /// <summary>How many times this patch has actually run. Read by the world-load self-audit.</summary>
+        /// <remarks>
+        /// A patch that binds cleanly and never runs is its own bug class, and nothing else in the
+        /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
+        /// framework cannot ask Harmony what it bound. One static increment is the whole of the
+        /// evidence, and it costs one add on a path the game was already walking.
+        /// </remarks>
+        internal static int Fired;
+
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
         private static void Prefix()
         {
+            Fired++;
+
             DimensionLootTableRegistry.ApplyToLootTables();
         }
     }

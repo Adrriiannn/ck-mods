@@ -30,12 +30,26 @@ namespace ExpandNullforge.EditorTools
                 Is.Not.Null,
                 "The transcribed deny list is missing, so this test would have proved nothing.");
 
+            // The framework's two, plus the assembly of every generated consumer mod in the
+            // project. A creator's mod carries the generated IMod and is security-checked exactly
+            // the way ours is, so leaving it out asserted its compliance nowhere.
+            List<string> assemblies =
+                DimensionSandboxAssemblyGuard.AssembliesToScan(Application.dataPath);
+            Assert.That(
+                assemblies.Count,
+                Is.GreaterThan(DimensionSandboxAssemblyGuard.ShippedAssemblies.Length),
+                "No consumer mod assembly was added to the framework's own two, so the C# this " +
+                "framework writes into somebody else's project was not read here at all. " +
+                DimensionSandboxGuard.ConsumerSetProblem(
+                    Application.dataPath,
+                    DimensionSandboxGuard.ConsumerModRoots(Application.dataPath).Count));
+
             List<DimensionSandboxGuard.Finding> findings = new List<DimensionSandboxGuard.Finding>();
             int scanned = 0;
 
-            for (int i = 0; i < DimensionSandboxAssemblyGuard.ShippedAssemblies.Length; i++)
+            for (int i = 0; i < assemblies.Count; i++)
             {
-                string path = BuiltAssembly(DimensionSandboxAssemblyGuard.ShippedAssemblies[i]);
+                string path = BuiltAssembly(assemblies[i]);
                 if (!File.Exists(path))
                 {
                     continue;
@@ -47,10 +61,10 @@ namespace ExpandNullforge.EditorTools
 
             Assert.That(
                 scanned,
-                Is.EqualTo(DimensionSandboxAssemblyGuard.ShippedAssemblies.Length),
+                Is.EqualTo(assemblies.Count),
                 "Not every shipped assembly was found under " +
                 DimensionSandboxAssemblyGuard.BuiltAssemblyFolder + ", so this checked less than " +
-                "it claims to.");
+                "it claims to. Looked for: " + string.Join(", ", assemblies.ToArray()));
 
             Assert.That(
                 findings,
