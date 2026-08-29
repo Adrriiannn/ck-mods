@@ -221,6 +221,7 @@ namespace ExpandNullforge.EditorTools
             EnsurePortalLocalization(portalOutput, modRoot);
             EnsureConsumerAssemblyReferences(modRoot);
             EnsureFrameworkModDependency(templatePath);
+            EnsureTheModCanLoadAndBeJoined(templatePath);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -10563,6 +10564,67 @@ namespace ExpandNullforge.EditorTools
                 new[] { frameworkReference, apiReference }))
             {
                 AssetDatabase.ImportAsset(asmdefPath);
+            }
+        }
+
+        /// <summary>
+        /// Sets the two switches on the creator's mod that decide whether it runs at all.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Both are off on a new mod, and neither shows a problem while you are building. The first
+        /// one, "accesses extra assemblies", decides which assemblies the game lets the mod's code
+        /// see when it compiles the mod ON LOAD. Everything this framework generates is written
+        /// against the framework's own namespaces, so without it the generated script can fail to
+        /// compile inside the game while it compiles perfectly here.
+        /// </para>
+        /// <para>
+        /// The second one says the mod has to be present on both sides of a multiplayer game. A
+        /// dimension is made of objects, blocks and systems that the server spawns and the client
+        /// draws, so a player without the mod cannot join a server that has it. Left off, the game
+        /// refuses the join with "BadProtocolVersion" and never names the mod, which is a long
+        /// afternoon for whoever is trying to work out why their friend cannot connect.
+        /// </para>
+        /// <para>
+        /// Both are set every generate rather than only when absent: they are ordinary tick boxes in
+        /// the mod's own window, and a creator who turns one off gets a mod that does not load or
+        /// cannot be joined, with nothing anywhere saying why. The report says what was changed.
+        /// </para>
+        /// </remarks>
+        private static void EnsureTheModCanLoadAndBeJoined(string templatePath)
+        {
+            ModBuilderSettings settings =
+                DimensionApiModFolderUtility.ResolveModSettingsForAssetPath(templatePath);
+            if (settings == null)
+            {
+                return;
+            }
+
+            bool changed = false;
+
+            if (!settings.metadata.accessesExtraAssemblies)
+            {
+                settings.metadata.accessesExtraAssemblies = true;
+                changed = true;
+                Debug.Log(
+                    "[ExpandNullforge] Turned on \"accesses extra assemblies\" for '" +
+                    settings.metadata.name + "'. Without it the game cannot compile the generated " +
+                    "script when the mod loads, even though it builds here.");
+            }
+
+            if (settings.metadata.requiredOn != ModMetadata.ModExistsOn.ClientAndServer)
+            {
+                settings.metadata.requiredOn = ModMetadata.ModExistsOn.ClientAndServer;
+                changed = true;
+                Debug.Log(
+                    "[ExpandNullforge] Marked '" + settings.metadata.name + "' as needed on both " +
+                    "the client and the server. A dimension is spawned by the server and drawn by " +
+                    "the client, so a player without the mod cannot join a server that has it.");
+            }
+
+            if (changed)
+            {
+                EditorUtility.SetDirty(settings);
             }
         }
 
