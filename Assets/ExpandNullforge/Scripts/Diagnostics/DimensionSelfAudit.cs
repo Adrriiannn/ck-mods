@@ -52,6 +52,16 @@ namespace ExpandNullforge.Diagnostics
     /// thirty-three more, once, five seconds later. Nothing is left running afterwards and nothing
     /// runs at all when the audit is switched off.
     /// </para>
+    /// <para>
+    /// WHAT NOBODY HAS WATCHED THIS DO. The one session that established that Core Keeper schedules
+    /// a mod's systems by itself was a client joining a dedicated server: it had a
+    /// <c>ClientWorld0</c> and no <c>ServerWorld</c> at all. A server world is built by the same
+    /// <c>ClientServerBootstrap</c> path from the same sweep, so there is no reason to expect it to
+    /// differ, but that is a reading rather than an observation. It is recorded here rather than
+    /// printed because it is a fact about how far this framework has been tested and not a fact
+    /// about the world in front of a player, and a constant cannot notice the day somebody does
+    /// watch one.
+    /// </para>
     /// </remarks>
     internal static class DimensionSelfAudit
     {
@@ -99,6 +109,8 @@ namespace ExpandNullforge.Diagnostics
         private static bool checkedNothing;
         private static int lastSeenDeclarationVersion = -1;
         private static int quietFrames;
+        private static bool sawClientWorld;
+        private static bool sawServerWorld;
 
         /// <summary>
         /// How many object findings are printed before the rest are counted instead.
@@ -145,37 +157,19 @@ namespace ExpandNullforge.Diagnostics
             + "adds to SimulationSystemGroup and nothing else, and four of these belong in other "
             + "groups, so it would leave them in two update lists and run them twice a frame.";
 
-        /// <summary>
-        /// The one thing the framework's evidence for auto-scheduling does not cover.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// The session log that settled this is a client joining a dedicated server: it has a
-        /// <c>ClientWorld0</c> and no <c>ServerWorld</c> at all. The server world is built by the
-        /// same <c>ClientServerBootstrap</c> path from the same sweep, so there is no reason to
-        /// expect it to differ — but nobody has watched it happen, and the audit is not entitled to
-        /// present a reasonable expectation as an observation.
-        /// </para>
-        /// <para>
-        /// IT USED TO OPEN WITH "This is the first world of its kind this check has ever reported
-        /// on", WHICH IS A CLAIM ABOUT THE PAST THAT A CONSTANT CANNOT MAKE. Nothing here remembers
-        /// previous sessions, so from the second run onward that sentence was false and no run could
-        /// retire it. What is true every time is what the evidence covers, which is what it says
-        /// now.
-        /// </para>
-        /// <para>
-        /// AND IT IS SAID WHETHER OR NOT THE WORLD LOOKS HEALTHY. It hung off the success milestone
-        /// alone, so the case where "nobody has read this kind of world back" matters most — a
-        /// server world that reports a problem — was the one case that did not get it.
-        /// </para>
-        /// </remarks>
-        private const string ServerWorldHasNeverBeenWatched =
-            "this is a server world, and the evidence that the game schedules a mod's systems by "
-            + "itself comes from one session with no server world in it: a client joining a "
-            + "dedicated server, which covers ClientWorld0 only. The server world is built by the "
-            + "same code from the same sweep, so the expectation is that it behaves the same way. "
-            + "The lines above are a reading of it rather than a confirmation of something already "
-            + "watched.";
+        // THERE USED TO BE A THIRD CONSTANT HERE AND IT IS DELIBERATELY GONE. It said, on every
+        // server world in every session, that the evidence the game schedules a mod's systems by
+        // itself comes from one session that had no server world in it — a client joining a
+        // dedicated server — so the server-world reading was an expectation rather than something
+        // watched.
+        //
+        // That is a true thing to record and the wrong place to record it. It is a fact about how
+        // much of this framework has been tested, not about the world in front of the reader, so it
+        // was identical on every run, could not be retired by anybody actually watching a server
+        // world, and arrived in a player's log as a note addressed to the framework's own authors.
+        // It fired on every single-player and every host session, which is the whole of normal use.
+        // The note itself now lives in the class remarks above, where it can be read by whoever
+        // needs it and changed by whoever retires it.
 
         /// <summary>Remembers a world so the next quiet frame audits it.</summary>
         public static void Arm(World world, bool isClient)
@@ -197,6 +191,18 @@ namespace ExpandNullforge.Diagnostics
             armed.World = world;
             armed.IsClient = isClient;
             Armed.Add(armed);
+
+            // Latched rather than asked of the list later, because the patch pass runs five seconds
+            // after a world load and reports on process-wide counters: what it needs to know is
+            // whether this process ever had a world of each kind, not whether one is up right now.
+            if (isClient)
+            {
+                sawClientWorld = true;
+            }
+            else
+            {
+                sawServerWorld = true;
+            }
 
             // A new world starts the wait again. Without this, a second world loaded in the same
             // session would be audited on its first frame, against registries the bootstrap has
@@ -229,6 +235,8 @@ namespace ExpandNullforge.Diagnostics
             checkedNothing = false;
             lastSeenDeclarationVersion = -1;
             quietFrames = 0;
+            sawClientWorld = false;
+            sawServerWorld = false;
         }
 
         /// <summary>
@@ -386,15 +394,6 @@ namespace ExpandNullforge.Diagnostics
             worldsAudited++;
             lastWorldDeclarationVersion = DimensionItemObjectRegistry.DeclarationVersion;
 
-            // SAID FOR A SERVER WORLD WHETHER IT LOOKED HEALTHY OR NOT. It used to ride the
-            // scheduling milestone, which only prints when nothing was wrong — so the caveat that
-            // this kind of world has never been read back went missing in exactly the case where a
-            // reader would want it.
-            if (!armed.IsClient)
-            {
-                DimensionLog.Milestone(Ch.Audit, world, ServerWorldHasNeverBeenWatched);
-            }
-
             if (armed.Problems == before)
             {
                 DimensionLog.Milestone(
@@ -405,7 +404,8 @@ namespace ExpandNullforge.Diagnostics
                             ? " Read that narrowly: no content pack declared anything this "
                                 + "session, so the parts of this check that need a pack to exist "
                                 + "had nothing to look at."
-                            : string.Empty));
+                            : string.Empty)
+                        + WhatWasNotAskedOf(armed.IsClient));
             }
             else
             {
@@ -415,8 +415,48 @@ namespace ExpandNullforge.Diagnostics
                     (armed.Problems - before) + " problem" + ((armed.Problems - before) == 1 ? "" : "s")
                         + " found in " + world.Name + ". The lines above each name what is wrong, "
                         + "what state proves it, and what to do. The liveness check runs "
-                        + FramesBeforeLivenessPass + " frames from now and may add more.");
+                        + FramesBeforeLivenessPass + " frames from now and may add more."
+                        + WhatWasNotAskedOf(armed.IsClient));
             }
+        }
+
+        /// <summary>
+        /// The checks that were skipped in this world, said out loud in the summary.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// BECAUSE "NOTHING WRONG" AFTER TWO CHECKS DID NOT RUN IS A CLAIM THIS FILE HAD NOT
+        /// EARNED. Two of the registration pass's checks are asked of a server world only, for good
+        /// reasons written where each one skips: the tile-rescue bracket is a server-side pair of
+        /// systems, and every rule in the companion table encodes a server-simulation query. Both
+        /// skips say so with a <c>Trace</c>, and traces are off unless somebody turns their channel
+        /// on (<c>DimensionLogConfig.Channels</c> is empty by default), so on the session a player
+        /// actually has — joining somebody else's server — the summary said the world was clean and
+        /// the two lines explaining what had not been looked at were invisible.
+        /// </para>
+        /// <para>
+        /// It is one clause on a line that was going to be printed anyway rather than a line of its
+        /// own, and it is worded as "not asked of this world" rather than "did not run", because on
+        /// a host they did run — in the server world, which is the only place their answer means
+        /// anything.
+        /// </para>
+        /// <para>
+        /// It takes the answer rather than the world, and is internal, so that a test can ask it
+        /// both questions without a world to ask them of.
+        /// </para>
+        /// </remarks>
+        internal static string WhatWasNotAskedOf(bool isClient)
+        {
+            if (!isClient)
+            {
+                return string.Empty;
+            }
+
+            return " Two of these are asked of a server world only and so were not asked of this "
+                + "one: whether tile capture is bracketed the right way round, and whether this "
+                + "mod's objects carry what the game's systems require before they will look at "
+                + "them. Both read server-side state, and a client world's copy of it answers a "
+                + "different question.";
         }
 
         /// <summary>
@@ -629,8 +669,12 @@ namespace ExpandNullforge.Diagnostics
         /// system that is not meant to be there.
         /// </para>
         /// <para>
-        /// A trace rather than silence, because "this check did not run here" and "this check
-        /// passed here" are different answers and the log has to be able to tell them apart.
+        /// THE TRACE BELOW IS NOT WHAT TELLS THE READER THIS DID NOT RUN, and it was written as
+        /// though it were. Traces are off unless somebody turns their channel on, so in the default
+        /// configuration it is silence. What the reader actually sees is the clause
+        /// <see cref="WhatWasNotAskedOf"/> puts on the world's own summary line, which is on by
+        /// default. The trace stays because with the tileset channel on it lands next to the rest
+        /// of the tile story, which is where somebody debugging tiles is looking.
         /// </para>
         /// </remarks>
         private static void CheckTileRescueBracket(ArmedWorld armed)
@@ -811,13 +855,35 @@ namespace ExpandNullforge.Diagnostics
                             + "thing has not been run since."));
         }
 
+        /// <summary>
+        /// Says so when a registry holds more rows for this world than for the last one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE INFERENCE IS ONLY SOUND FOR A REGISTRY THAT NOTHING BUT A CONTENT PACK WRITES. The
+        /// finding below says a pack registered itself twice, and it says it because the count went
+        /// up with no new declaration to explain it. A registry the game fills while somebody plays
+        /// breaks that reasoning outright: walk into a dimension, quit to the menu, load another
+        /// world, and the armed-trap count is higher for the second world for a reason that has
+        /// nothing to do with registration. Those rows say so on the roster
+        /// (<see cref="DimensionSystemRoster.Row.CountGrowsDuringPlay"/>) and are left out here.
+        /// </para>
+        /// <para>
+        /// IT IS ALSO SKIPPED WHOLESALE WHEN ANYTHING NEW WAS DECLARED, which is deliberate and
+        /// narrows what it can catch: a pack that re-runs its whole declaration on a second world
+        /// bumps the item version, and this says nothing. That case is loud elsewhere — every id it
+        /// re-declares goes through the item registry. What is left for this check is the quiet
+        /// one: a registry that grew while nothing declared anything.
+        /// </para>
+        /// </remarks>
         private static void CheckRegistryGrowthAcrossWorlds(ArmedWorld armed)
         {
             Dictionary<string, int> now = new Dictionary<string, int>(StringComparer.Ordinal);
             DimensionSystemRoster.Row[] rows = DimensionSystemRoster.All;
             for (int i = 0; i < rows.Length; i++)
             {
-                if (rows[i].CountWork == null || now.ContainsKey(rows[i].WorkName))
+                if (rows[i].CountWork == null || rows[i].CountGrowsDuringPlay ||
+                    now.ContainsKey(rows[i].WorkName))
                 {
                     continue;
                 }
@@ -874,8 +940,14 @@ namespace ExpandNullforge.Diagnostics
         /// the client and does not carry everything the server's copy does, so asking these
         /// questions there would name real objects, name components that are absent for a good
         /// reason, and hand the reader a fix that would be wrong. A player who joined somebody
-        /// else's server has no server world in their process; they are told that rather than given
-        /// a check that cannot be trusted.
+        /// else's server has no server world in their process, so this does not run for them at
+        /// all.
+        /// </para>
+        /// <para>
+        /// AND THEY ARE TOLD SO ON A LINE THEY CAN SEE. The trace below used to be described as
+        /// telling them, and it is off by default like every other trace, so the session where this
+        /// check never ran read exactly like the session where it passed. The summary line for the
+        /// world carries the clause now — see <see cref="WhatWasNotAskedOf"/>.
         /// </para>
         /// </remarks>
         private static void RunEntityAudit(ArmedWorld armed)
@@ -890,9 +962,15 @@ namespace ExpandNullforge.Diagnostics
                 DimensionLog.Trace(
                     Ch.Audit,
                     armed.World,
-                    "the object check reads server-side prefabs and this process has no server "
-                        + "world yet, so it has not run. On a host or a single-player world it "
-                        + "runs as that world loads.");
+                    // IT DOES NOT SAY THERE IS NO SERVER WORLD, because on a host there is one and
+                    // this line is reached anyway — the client world simply is not where the
+                    // question is asked. Which is a different sentence from the one that used to
+                    // be here.
+                    "the object check reads server-side prefabs, so it is asked of the server "
+                        + "world and not of " + armed.World.Name + ". On a host or a single-player "
+                        + "world that happens as the server world loads; for a player joined to "
+                        + "somebody else's server there is no server world here and it does not "
+                        + "run at all.");
                 return;
             }
 
@@ -914,6 +992,17 @@ namespace ExpandNullforge.Diagnostics
 
             if (result.ResolvedItems == 0)
             {
+                // NOT SAID WHEN NOTHING WAS DECLARED IN THE FIRST PLACE. An empty subject list has
+                // two causes and only one of them is a fault: a pack declared objects and none of
+                // them resolved, or there is no pack. In the second case CheckItemLedger has
+                // already said so on its own line, in the item channel, in more detail — and this
+                // one arriving under it saying "this is not a clean result" turned a session with
+                // no content pack installed into a session that looks broken.
+                if (checkedNothing)
+                {
+                    return;
+                }
+
                 // FOUND NOTHING IS NOT THE SAME AS FOUND NOTHING WRONG, and saying so is the whole
                 // reason this branch exists.
                 DimensionLog.Milestone(
@@ -1089,9 +1178,22 @@ namespace ExpandNullforge.Diagnostics
         /// Reports the patches that never ran while something was waiting on them.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// Once per process, not once per world, and with no world on the line: Harmony patching is
         /// process-wide, a count cannot be attributed to a world, and several of these targets run
         /// in neither. Attaching one would be a claim the number does not support.
+        /// </para>
+        /// <para>
+        /// BUT A TARGET THAT IS NOT IN THIS PROCESS IS NOT A FAILED PATCH. The roster's
+        /// <see cref="DimensionPatchRoster.Row.Where"/> column names the side of the game each
+        /// measured target lives on, and a row whose side has no world here is passed over. Without
+        /// that, a dedicated server running a pack with biome atmosphere, a music roster or a named
+        /// area reported up to five patches as broken — every one of them bound correctly, with
+        /// nothing on a headless server for them to run against — and a player joined to somebody
+        /// else's server got the mirror image for the dungeon and ambient-spawn patches. The
+        /// suppression is worth exactly as much as the column is honest, which is why anything not
+        /// read out of Core Keeper's own source stays <c>Both</c> and is still reported.
+        /// </para>
         /// </remarks>
         private static void RunPatchPass()
         {
@@ -1105,6 +1207,7 @@ namespace ExpandNullforge.Diagnostics
             int fired = 0;
             int idle = 0;
             int reported = 0;
+            int elsewhere = 0;
 
             DimensionPatchRoster.Row[] rows = DimensionPatchRoster.All;
             for (int i = 0; i < rows.Length; i++)
@@ -1119,6 +1222,12 @@ namespace ExpandNullforge.Diagnostics
                 idle++;
                 if (row.OnlyOnPlayerAction)
                 {
+                    continue;
+                }
+
+                if (!ThisProcessHasAWorldFor(row.Where))
+                {
+                    elsewhere++;
                     continue;
                 }
 
@@ -1162,7 +1271,41 @@ namespace ExpandNullforge.Diagnostics
                     + (reported == 1 ? " has" : " have")
                     + " content waiting on " + (reported == 1 ? "it" : "them")
                     + ". A patch that has not run and has nothing waiting "
-                    + "on it is not a fault: most of them only run when a player does something.");
+                    + "on it is not a fault: most of them only run when a player does something."
+                    + (elsewhere == 0
+                        ? string.Empty
+                        : " " + elsewhere + " of them patch " + (elsewhere == 1 ? "a part" : "parts")
+                            + " of the game this process does not run — this session has "
+                            + (sawServerWorld
+                                ? "no client world, so nothing that is drawn on screen is here"
+                                : "no server world, so nothing that generates or simulates a world "
+                                    + "is here")
+                            + " — and " + (elsewhere == 1 ? "it is" : "they are")
+                            + " not counted above."));
+        }
+
+        /// <summary>
+        /// Whether a world of the given side was ever attached in this process.
+        /// </summary>
+        /// <remarks>
+        /// Two latches rather than a walk of the armed list, because a world that has already been
+        /// forgotten still proves this process had one, and the patch pass runs five seconds after
+        /// a world load rather than during it. <see cref="Reset"/> clears them, so a mod reload
+        /// starts the question again.
+        /// </remarks>
+        private static bool ThisProcessHasAWorldFor(DimensionSystemRoster.Peer where)
+        {
+            if (where == DimensionSystemRoster.Peer.Client)
+            {
+                return sawClientWorld;
+            }
+
+            if (where == DimensionSystemRoster.Peer.Server)
+            {
+                return sawServerWorld;
+            }
+
+            return true;
         }
 
         // ---------------------------------------------------------------------------- helpers ---

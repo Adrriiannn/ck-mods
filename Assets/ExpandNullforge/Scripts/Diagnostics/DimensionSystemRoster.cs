@@ -57,7 +57,8 @@ namespace ExpandNullforge.Diagnostics
                 string capability,
                 Func<World, ComponentSystemBase> find,
                 string workName,
-                Func<int> countWork)
+                Func<int> countWork,
+                bool countGrowsDuringPlay = false)
             {
                 Name = name;
                 Where = where;
@@ -65,6 +66,7 @@ namespace ExpandNullforge.Diagnostics
                 Find = find;
                 WorkName = workName;
                 CountWork = countWork;
+                CountGrowsDuringPlay = countGrowsDuringPlay;
             }
 
             /// <summary>The class name, as it appears in the source and in a stack trace.</summary>
@@ -84,6 +86,26 @@ namespace ExpandNullforge.Diagnostics
 
             /// <summary>How many such rows there are, or <see cref="WorkUnknown"/>.</summary>
             public Func<int> CountWork { get; private set; }
+
+            /// <summary>
+            /// Whether playing the game adds rows to this, as opposed to loading a content pack.
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// READ BY ONE CHECK ONLY: the across-worlds growth comparison, which sees a registry
+            /// hold more rows for the second world of a session than it held for the first and calls
+            /// that a content pack registering itself twice. That inference is sound for a registry
+            /// only the generated bootstrap writes, and false for one the game fills as somebody
+            /// plays: load a world, walk into a dimension, quit to the menu and load another, and
+            /// the second world's audit finds a count that grew for an entirely ordinary reason.
+            /// </para>
+            /// <para>
+            /// It says nothing about the liveness pass, which is a different question — a count
+            /// that only gameplay can raise is still exactly what "was anything waiting on this
+            /// system" means there.
+            /// </para>
+            /// </remarks>
+            public bool CountGrowsDuringPlay { get; private set; }
 
             /// <summary>Whether this row belongs to the world the audit is looking at.</summary>
             public bool AppliesTo(bool isClient)
@@ -263,13 +285,20 @@ namespace ExpandNullforge.Diagnostics
                 w => w.GetExistingSystemManaged<Zones.DimensionAmbientSpawnGateSystem>(),
                 "the ambient spawn policies registered for zones",
                 null),
+            // THE ONE COUNT ON THIS TABLE THAT PLAYING RAISES. Every other registry here is filled
+            // by the generated bootstrap as a pack declares itself; this one is filled by
+            // DimensionScenePlacementPassProvider as a dimension is generated, which happens when a
+            // player first travels into one. Nothing clears it between worlds, so the second world
+            // of a session sees a bigger number than the first and the across-worlds comparison
+            // read that as the pack having registered itself twice.
             new Row(
                 "DimensionTriggeredTileSystem",
                 Peer.Server,
                 "traps and pressure plates placed inside a scene go off",
                 w => w.GetExistingSystemManaged<Zones.DimensionTriggeredTileSystem>(),
                 "DimensionTriggeredTileRegistry",
-                () => Zones.DimensionTriggeredTileRegistry.ArmedCellCount),
+                () => Zones.DimensionTriggeredTileRegistry.ArmedCellCount,
+                true),
             new Row(
                 "DimensionArenaResetSystem",
                 Peer.Server,

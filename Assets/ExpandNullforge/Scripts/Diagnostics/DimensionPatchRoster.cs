@@ -33,6 +33,13 @@ namespace ExpandNullforge.Diagnostics
     /// count is not attributable to the server world or the client world; several of these targets
     /// run in neither.
     /// </para>
+    /// <para>
+    /// WHICH IS NOT THE SAME AS SAYING THE TARGETS EXIST EVERYWHERE. <see cref="Row.Where"/> names
+    /// the side of the game a target lives on for the rows where that has been read out of
+    /// Core Keeper's own source, and a row whose side has no world in this process is not reported —
+    /// a dedicated server has no music handler to patch, and a player joined to somebody else's
+    /// server has no dungeon generator.
+    /// </para>
     /// </remarks>
     internal static class DimensionPatchRoster
     {
@@ -45,7 +52,8 @@ namespace ExpandNullforge.Diagnostics
                 bool onlyOnPlayerAction,
                 string workName,
                 Func<int> countWork,
-                string whatBreaks)
+                string whatBreaks,
+                DimensionSystemRoster.Peer where = DimensionSystemRoster.Peer.Both)
             {
                 PatchClass = patchClass;
                 Target = target;
@@ -54,6 +62,7 @@ namespace ExpandNullforge.Diagnostics
                 WorkName = workName;
                 CountWork = countWork;
                 WhatBreaks = whatBreaks;
+                Where = where;
             }
 
             /// <summary>The patch class name, as it appears in the source.</summary>
@@ -76,6 +85,29 @@ namespace ExpandNullforge.Diagnostics
 
             /// <summary>What a player would notice if it never runs.</summary>
             public string WhatBreaks { get; private set; }
+
+            /// <summary>
+            /// Which side of the game holds the thing this is declared against.
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// PATCHING IS PROCESS-WIDE AND THE TARGETS ARE NOT. A dedicated server has no
+            /// <c>GameMusicHandler</c>, no <c>AmbientSoundsHandler</c> and no
+            /// <c>RegionTitleHandler</c> — all three are <c>MonoBehaviour</c>s on the presentation
+            /// side — so five patches that are perfectly bound never run there, and a pack with
+            /// biome atmosphere, a music roster or a named area got up to five failure lines on a
+            /// server that was working. The mirror of that is a player who joined somebody else's
+            /// server: no server world in the process, so the dungeon, scene and ambient-spawn
+            /// patches have nothing to run against either.
+            /// </para>
+            /// <para>
+            /// <see cref="DimensionSystemRoster.Peer.Both"/> is the default and the honest answer
+            /// for everything that is not measured one-sided. It suppresses nothing, which is the
+            /// right way round: a row wrongly marked one-sided would go quiet about a real failure,
+            /// and a row left as Both is only ever as noisy as it was before this column existed.
+            /// </para>
+            /// </remarks>
+            public DimensionSystemRoster.Peer Where { get; private set; }
         }
 
         private static int CountOf(System.Collections.IEnumerable rows)
@@ -181,7 +213,11 @@ namespace ExpandNullforge.Diagnostics
                 false,
                 "DimensionCreatureSpawnRegistry",
                 () => CountOf(Zones.DimensionCreatureSpawnRegistry.All),
-                "the game's own ambient spawning runs everywhere, including in areas set to block it"),
+                "the game's own ambient spawning runs everywhere, including in areas set to block it",
+                // SpawnEnvironmentObjectsPeriodicallySystem is
+                // [WorldSystemFilter(ServerSimulation, Default)] — ck-db/…:14 — so it exists in no
+                // client-only process.
+                DimensionSystemRoster.Peer.Server),
 
             // ---- world rules --------------------------------------------------------------
             new Row(
@@ -226,7 +262,9 @@ namespace ExpandNullforge.Diagnostics
                 "DimensionCustomSceneRegistry",
                 () => Scenes.DimensionCustomSceneRegistry.Count,
                 "the custom scene table is not in place when the dungeon generator caches it, so "
-                    + "every custom room resolves no scene and dungeons generate as empty caves"),
+                    + "every custom room resolves no scene and dungeons generate as empty caves",
+                // SpawnDungeonAndSceneSystem is [WorldSystemFilter(ServerSimulation, Default)].
+                DimensionSystemRoster.Peer.Server),
             new Row(
                 "DimensionUniqueDungeonInjector",
                 "SpawnUniqueDungeonInitSystem.OnStartRunning",
@@ -234,7 +272,9 @@ namespace ExpandNullforge.Diagnostics
                 false,
                 "DimensionUniqueDungeonRegistry",
                 () => CountOf(Scenes.DimensionUniqueDungeonRegistry.All),
-                "no one-off dungeon this mod added is placed in the world"),
+                "no one-off dungeon this mod added is placed in the world",
+                // SpawnUniqueDungeonInitSystem is [WorldSystemFilter(ServerSimulation, Default)].
+                DimensionSystemRoster.Peer.Server),
 
             // ---- tilesets -----------------------------------------------------------------
             new Row(
@@ -356,7 +396,10 @@ namespace ExpandNullforge.Diagnostics
                 false,
                 "DimensionRegionTitleRegistry",
                 () => CountOf(Zones.DimensionRegionTitleRegistry.All),
-                "the title card shows the game's own biome name instead of the named area"),
+                "the title card shows the game's own biome name instead of the named area",
+                // RegionTitleHandler is a MonoBehaviour (ck-db/Pug.Other/RegionTitleHandler.cs:10),
+                // so it exists only where the game is drawn.
+                DimensionSystemRoster.Peer.Client),
 
             // ---- sound and music ----------------------------------------------------------
             new Row(
@@ -367,7 +410,9 @@ namespace ExpandNullforge.Diagnostics
                 "DimensionBiomeAtmosphereRegistry",
                 () => CountOf(
                     Zones.DimensionBiomeAtmosphereRegistry.All),
-                "a custom biome is silent instead of carrying its ambience"),
+                "a custom biome is silent instead of carrying its ambience",
+                // AmbientSoundsHandler is a MonoBehaviour (ck-db/Pug.Other/AmbientSoundsHandler.cs:15).
+                DimensionSystemRoster.Peer.Client),
             new Row(
                 "DimensionBiomeMusicInstallHook",
                 "GameMusicHandler.Start",
@@ -376,7 +421,9 @@ namespace ExpandNullforge.Diagnostics
                 "DimensionBiomeAtmosphereRegistry",
                 () => CountOf(
                     Zones.DimensionBiomeAtmosphereRegistry.All),
-                "a custom biome plays the game's own music for whatever it was mapped onto"),
+                "a custom biome plays the game's own music for whatever it was mapped onto",
+                // GameMusicHandler is a MonoBehaviour (ck-db/Pug.Other/GameMusicHandler.cs:13).
+                DimensionSystemRoster.Peer.Client),
             new Row(
                 "DimensionAmbienceAssetHook",
                 "AmbientSoundsHandler.AudioInfo.LoadAudioAsset",
@@ -385,7 +432,9 @@ namespace ExpandNullforge.Diagnostics
                 "DimensionBiomeAtmosphereRegistry",
                 () => CountOf(
                     Zones.DimensionBiomeAtmosphereRegistry.All),
-                "the ambience a custom biome named never loads"),
+                "the ambience a custom biome named never loads",
+                // The same handler as the install hook above, so the same side of the game.
+                DimensionSystemRoster.Peer.Client),
             new Row(
                 "DimensionMusicRosterInstallHook",
                 "GameMusicHandler.Start",
@@ -396,7 +445,9 @@ namespace ExpandNullforge.Diagnostics
                 // DimensionSelfAuditTests forbids: with no count the audit could have named it on
                 // a session where no cue had been registered and nothing was wrong.
                 () => Zones.DimensionMusicRosterRegistry.Count,
-                "a custom music roster is never installed, so its tracks never play"),
+                "a custom music roster is never installed, so its tracks never play",
+                // GameMusicHandler again.
+                DimensionSystemRoster.Peer.Client),
             new Row(
                 "DimensionMusicRosterPlayHook",
                 "MusicManager.PlayMusic",

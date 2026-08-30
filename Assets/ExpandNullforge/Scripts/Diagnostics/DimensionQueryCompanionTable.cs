@@ -72,7 +72,12 @@ namespace ExpandNullforge.Diagnostics
     /// catch is a string.</item>
     /// <item><b>A body nothing queries for</b> — a placed object with no <c>PhysicsCollider</c> is
     /// unhittable, unmineable and invisible to every cast, and casts are not queries.
-    /// <c>ColliderVariationCD</c> below is the only place that gap shows up as a query gap.</item>
+    /// <c>ColliderVariationCD</c> below is one place that gap does show up as a query gap. It was
+    /// written here as "the only place", and that is more than was measured: the sweep behind it
+    /// covered the world-object queries, and <c>LarvaHiveEggColliderSystem</c>'s
+    /// <c>PhysicsCollider</c> + <c>LarvaHiveEggHatchStateCD</c> pair is a second one it did not
+    /// reach. No rule for it is written here, because a row is only worth adding when somebody has
+    /// read the query it encodes rather than a grep of it.</item>
     /// </list>
     /// <para>
     /// A ROW'S <c>ReadingSystem</c> IS WHATEVER ACTUALLY DEMANDS THE SET, which is not always one
@@ -178,39 +183,105 @@ namespace ExpandNullforge.Diagnostics
             N<NearbyEntitiesTrackerCD>("NearbyEntitiesTrackerCD");
         private static readonly Need ObjectType = N<ObjectTypeCD>("ObjectTypeCD");
 
+        /// <summary>
+        /// An object the environment is meant to reach, and that the game has not excluded.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THREE TYPED PROBES RATHER THAN ONE, because the query this is the trigger for has two
+        /// <c>WithNone</c> terms and a rule that ignores them fires on objects the system was never
+        /// going to look at. <c>BurningConditionCD</c> is the presence half:
+        /// <c>SupportConditionsConverter</c> adds it, disabled, only when the author left
+        /// <c>cantBeAffectedByEnvironment</c> off, so it is the one component that says "the
+        /// environment is supposed to reach this thing" in the runtime's own vocabulary.
+        /// <c>HasComponent</c> answers true for a disabled enableable component, which is what
+        /// makes it readable off a prefab at all.
+        /// </para>
+        /// <para>
+        /// Two of the three exclusions are copied from the query and not guessed:
+        /// <c>ck-db/Pug.Other/EnvironmentalConditionsSystem.cs:887</c> opens
+        /// <c>WithNone&lt;ProjectileCD&gt;().WithNone&lt;DestructibleObjectCD&gt;()</c>. Every
+        /// generated projectile carries <c>SupportsConditionsAuthoring</c> with the environment
+        /// switch left alone, so without the first exclusion a correctly generated shot reported a
+        /// gap in a system that skips shots by name.
+        /// </para>
+        /// <para>
+        /// THE THIRD ONE IS THIS TABLE'S OWN JUDGEMENT AND IS NOT IN THE QUERY. An arcing shell
+        /// carries <c>MortarProjectileCD</c> INSTEAD of <c>ProjectileCD</c>
+        /// (<c>DimensionProjectileGenerator.ConfigureArtillery</c> takes the straight-shot
+        /// component off), so the game's own exclusion misses it and a correctly generated mortar
+        /// would be reported here. It is left out because the sentence this rule prints — that
+        /// burning ground and acid do nothing to it — is a true thing to say about a shell that
+        /// exists for a second and a half and is not a thing anybody can act on. If a shot that
+        /// cannot catch fire ever matters, this is the line to delete.
+        /// </para>
+        /// </remarks>
+        private static readonly Need EnvironmentIsMeantToReachIt = new Need(
+            "BurningConditionCD",
+            (em, e) => em.HasComponent<BurningConditionCD>(e)
+                && !em.HasComponent<ProjectileCD>(e)
+                && !em.HasComponent<MortarProjectileCD>(e)
+                && !em.HasComponent<DestructibleObjectCD>(e));
+
         private static readonly Rule[] RulesValue =
         {
-            // ---- every object --------------------------------------------------------------
+            // ---- anything the weather, the floor and the puddles are meant to reach ---------
             //
-            // ObjectDataCD is on every converted prefab, so this rule looks at everything the
-            // audit is handed. That is deliberate: ObjectTypeCD has exactly two producers — Core
-            // Keeper's EntityMonoBehaviourDataConverter, which no generated object goes through
+            // ObjectTypeCD has exactly two producers — Core Keeper's
+            // EntityMonoBehaviourDataConverter, which no generated object goes through
             // (ObjectConverter writes ObjectDataCD and not ObjectTypeCD,
             // ck-db/Pug.ECS.Conversion/ObjectConverter.cs:18-30), and this framework's own
             // DimensionObjectTypeAuthoring. So an object that misses the one line that adds it
-            // drops out of every query that names the type, and nothing else would say so.
+            // drops out of EnvironmentalConditionsSystem's query, and nothing else would say so.
             //
-            // WHICH GENERATORS ADD IT, MEASURED RATHER THAN REMEMBERED. This comment used to say
-            // "only the creature and item generators", and that "a generated plant, chest,
-            // workbench, vehicle, critter or world object comes out without it" — which was true of
-            // the tree the census was taken on and is not true of this one.
+            // THE TRIGGER USED TO BE ObjectDataCD, WHICH IS ON EVERY CONVERTED PREFAB, AND THAT IS
+            // WHY THIS ROW IS BEING FIXED RATHER THAN LEFT ALONE. Written that way it asked the
+            // question of everything the audit is handed, and answered with a consequence that is
+            // only true of a fraction of it. The consequence — burning ground, acid, mould, oil and
+            // slime — belongs to one query, and that query wants six more components than
+            // ObjectTypeCD (ck-db/Pug.Other/EnvironmentalConditionsSystem.cs:887-894):
+            // LocalTransform, ObjectTypeCD, SummarizedConditionsBuffer,
+            // SummarizedConditionEffectsBuffer, Simulate, ConditionsBuffer and
+            // ConditionTickTimerBuffer, with ProjectileCD and DestructibleObjectCD excluded. All
+            // four condition buffers come from one converter, SupportConditionsConverter, off one
+            // authoring component. An object with none of them was never in that query, so telling
+            // its author that fire does not touch it is a sentence that is true and worthless.
+            //
+            // WHAT THAT COST, MEASURED. A boss with a summoning item and a map pin is generated as
+            // three prefabs: the creature, <bossId>-summon-circle and <bossId>-map-marker. The two
+            // extras carry no SupportsConditionsAuthoring — the creature generator gives them
+            // ObjectAuthoring, their own ability and CloseTheGaps and nothing else — so they were
+            // never candidates for the environmental pass, and the broad trigger reported both of
+            // them, every session, on content that is exactly right. The subject list is not the
+            // problem and the generators are not either: the pin and the circle are real generated
+            // objects and belong in the audit's list, and adding a component to them to satisfy a
+            // rule would be writing content to please a check.
+            //
+            // WHICH GENERATORS ADD ObjectTypeCD, MEASURED RATHER THAN REMEMBERED.
             // DimensionQueryCompanions.CarriesWhatItIsOntoTheRunningObject is called by
             // FinishACritter, by both overloads of FinishAWorldObject (containers, workbenches,
-            // vehicles and world objects all go through it) and directly by the plant generator, so
-            // every one of those kinds carries it today. The rule stays because the mechanism is
-            // what it guards: a new generator, or a kind that stops going through the finisher,
-            // fails here rather than in a player's world.
-
+            // vehicles and world objects all go through it) and directly by the plant generator;
+            // the creature and item generators add DimensionObjectTypeAuthoring themselves. Every
+            // kind that also gets conditions support gets the type, so on correct content this rule
+            // finds nothing — it guards the pairing, so that a new generator, or a kind that stops
+            // going through the finisher, fails here rather than in a player's world.
+            //
+            // The other two readers of ObjectTypeCD are not in this rule and cannot be: AttackSystem
+            // and EntityUtility read it through a ComponentLookup with a default when it is absent,
+            // so a missing type there is a wrong value rather than a missed query, which is the
+            // second of the three shapes above.
             new Rule(
-                ObjectData,
+                EnvironmentIsMeantToReachIt,
                 new[] { ObjectType },
-                "EnvironmentalConditionsSystem, and every other query that names ObjectTypeCD",
+                "EnvironmentalConditionsSystem",
                 "LarvaEntity, and every other object it ships",
                 "standing on burning ground, acid, mould, oil or slime does nothing to it: no "
-                    + "burning, no poison, no slipping, no soaking. Every object the game ships is "
-                    + "built from an EntityMonoBehaviourData and gets this component from the "
-                    + "converter; a generated object only gets it where the generator adds "
-                    + "DimensionObjectTypeAuthoring"),
+                    + "burning, no poison, no slipping, no soaking. This object is built to be "
+                    + "affected by the environment and carries the condition buffers for it, and "
+                    + "the one component that puts it in front of that system is the one it has "
+                    + "not got. Every object the game ships is built from an EntityMonoBehaviourData "
+                    + "and gets it from the converter; a generated object only gets it where the "
+                    + "generator adds DimensionObjectTypeAuthoring"),
 
             // ---- creatures: the four roots ------------------------------------------------
             new Rule(

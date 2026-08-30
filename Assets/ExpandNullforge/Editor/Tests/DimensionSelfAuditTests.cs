@@ -567,6 +567,236 @@ namespace ExpandNullforge.EditorTools
             CollectionAssert.Contains(needs, "AnimationBufferPointer");
         }
 
+        /// <summary>
+        /// Components a converter puts on essentially every object this framework generates.
+        /// </summary>
+        /// <remarks>
+        /// A rule triggered on one of these asks its question of the whole subject list, so its
+        /// consequence has to be true of the whole subject list — and the consequences in this table
+        /// belong to one query each. The one that was written this way is the reason this list
+        /// exists: <c>ObjectDataCD</c> comes off <c>ObjectConverter</c>, so a rule triggered on it
+        /// looked at map pins and summoning circles and told their authors that fire does not touch
+        /// them, on content that was exactly right, every session.
+        /// </remarks>
+        private static readonly HashSet<string> ComponentsEveryConvertedPrefabCarries =
+            new HashSet<string>(StringComparer.Ordinal) { "ObjectDataCD", "LocalTransform" };
+
+        [Test]
+        public void NoRuleIsTriggeredByAComponentEveryConvertedPrefabCarries()
+        {
+            DimensionQueryCompanionTable.Rule[] rules = DimensionQueryCompanionTable.All;
+            Assert.GreaterOrEqual(
+                rules.Length,
+                FewestPlausibleCompanionRules,
+                "The companion table is empty or nearly so, so this test walked nothing.");
+
+            List<string> aimedAtEverything = new List<string>();
+            for (int i = 0; i < rules.Length; i++)
+            {
+                if (ComponentsEveryConvertedPrefabCarries.Contains(rules[i].Trigger.Name))
+                {
+                    aimedAtEverything.Add(rules[i].Trigger.Name + " -> " + rules[i].ReadingSystem);
+                }
+            }
+
+            Assert.IsEmpty(
+                aimedAtEverything,
+                "These rules are triggered by a component every generated object has, so they are "
+                + "asked of every object the audit is handed and answered with a consequence that "
+                + "belongs to one system's query: " + string.Join(", ", aimedAtEverything.ToArray())
+                + ". Narrow the trigger to something that says the object was in that query's "
+                + "scope in the first place.");
+        }
+
+        [Test]
+        public void APatchTargetOnlyOneSideOfTheGameRunsSaysWhichSide()
+        {
+            // Harmony patching is process-wide and the targets are not. Without this column a
+            // dedicated server reported the music, ambience and region-title patches as broken —
+            // there is no GameMusicHandler on a headless server — and a player joined to somebody
+            // else's game got the same about the dungeon and ambient-spawn patches.
+            DimensionPatchRoster.Row[] rows = DimensionPatchRoster.All;
+            Assert.GreaterOrEqual(
+                rows.Length,
+                FewestPlausiblePatches,
+                "The patch roster is empty or nearly so, so this test walked nothing.");
+
+            int oneSided = 0;
+            for (int i = 0; i < rows.Length; i++)
+            {
+                if (rows[i].Where != DimensionSystemRoster.Peer.Both)
+                {
+                    oneSided++;
+                }
+
+                Assert.IsFalse(
+                    rows[i].Where != DimensionSystemRoster.Peer.Both && rows[i].OnlyOnPlayerAction,
+                    rows[i].PatchClass + " is marked for one side of the game and is also marked "
+                    + "player-action-only, so the side it names has no effect: a player-action row "
+                    + "is never reported either way. One of the two marks is wrong.");
+            }
+
+            Assert.Greater(
+                oneSided,
+                0,
+                "Not one patch row names a side of the game, so the column is decorative and the "
+                + "patch pass reports every row in every kind of session again.");
+        }
+
+        [Test]
+        public void ThePatchPassAsksWhichSideOfTheGameThisProcessRunsBeforeReporting()
+        {
+            string audit = WithoutComments(
+                DimensionFrameworkSourceScanner.ReadByName("DimensionSelfAudit.cs"));
+            Assert.IsFalse(
+                string.IsNullOrEmpty(audit),
+                "DimensionSelfAudit.cs is not in the shipped sources, so this proved nothing.");
+
+            int method = audit.IndexOf(
+                "private static void RunPatchPass", StringComparison.Ordinal);
+            Assert.Greater(method, 0, "RunPatchPass is gone, so this test has no subject.");
+
+            int peer = audit.IndexOf("ThisProcessHasAWorldFor(", method, StringComparison.Ordinal);
+            int report = audit.IndexOf("DimensionLog.Problem(", method, StringComparison.Ordinal);
+
+            Assert.Greater(
+                peer,
+                0,
+                "The patch pass never asks which worlds this process has, so a patch whose target "
+                + "lives on the side of the game this session does not run is reported as never "
+                + "having run.");
+            Assert.Less(
+                peer,
+                report,
+                "The patch pass asks which worlds this process has only after it has already "
+                + "composed a failure, so the finding is produced before anything can stop it.");
+        }
+
+        [Test]
+        public void TheGrowthCheckLeavesOutARegistryThatPlayingRaises()
+        {
+            // The finding it produces says a content pack registered itself twice. That reading is
+            // only available for a registry nothing but a declaration writes.
+            DimensionSystemRoster.Row[] rows = DimensionSystemRoster.All;
+            int countable = 0;
+            int excluded = 0;
+            for (int i = 0; i < rows.Length; i++)
+            {
+                if (rows[i].CountWork == null)
+                {
+                    continue;
+                }
+
+                countable++;
+                if (rows[i].CountGrowsDuringPlay)
+                {
+                    excluded++;
+                }
+            }
+
+            Assert.Greater(
+                countable,
+                0,
+                "No roster row can be counted at all, so the growth check has nothing to compare "
+                + "and this test walked nothing.");
+            Assert.Greater(
+                excluded,
+                0,
+                "Not one countable registry is marked as one that playing raises. At least one is: "
+                + "the armed-trap registry is filled as a dimension generates and nothing clears "
+                + "it between worlds, so the second world of a session sees a bigger number for an "
+                + "ordinary reason.");
+            Assert.Greater(
+                countable - excluded,
+                0,
+                "Every countable registry is excluded, so the growth check compares nothing and "
+                + "can never say anything.");
+
+            string audit = WithoutComments(
+                DimensionFrameworkSourceScanner.ReadByName("DimensionSelfAudit.cs"));
+            StringAssert.Contains(
+                "CountGrowsDuringPlay",
+                audit,
+                "The roster carries the answer and the growth check does not read it, so the "
+                + "exclusion above changes nothing.");
+        }
+
+        [Test]
+        public void AWorldSaysWhichOfTheseChecksWereNotAskedOfIt()
+        {
+            // "Found nothing wrong" is a claim about what was looked at. Two of the registration
+            // pass's checks are asked of a server world only, both skip with a Trace, and traces
+            // are off unless somebody turns their channel on — so the session a player actually
+            // has, joining somebody else's server, read as clean with two checks unrun.
+            Assert.IsEmpty(
+                DimensionSelfAudit.WhatWasNotAskedOf(false),
+                "A server world is asked everything, so its summary should carry no caveat.");
+
+            string clause = DimensionSelfAudit.WhatWasNotAskedOf(true);
+            Assert.IsNotEmpty(
+                clause,
+                "A client world's summary says nothing about the two checks that were not asked "
+                + "of it, so it reads exactly like a world that passed both.");
+            StringAssert.Contains(
+                "server world only",
+                clause,
+                "The caveat does not say why those checks were not asked, so a reader cannot tell "
+                + "it from a failure.");
+
+            string audit = WithoutComments(
+                DimensionFrameworkSourceScanner.ReadByName("DimensionSelfAudit.cs"));
+            Assert.AreEqual(
+                2,
+                CountOccurrences(audit, "WhatWasNotAskedOf(armed.IsClient)"),
+                "The caveat is spliced into one of the two summary lines and not the other, so "
+                + "whichever one it is missing from claims more than it checked.");
+        }
+
+        [Test]
+        public void NoPrintedLineClaimsWhatThisProjectHasEverWatched()
+        {
+            // A constant cannot make a claim about the past. The one that used to sit here said
+            // the server-world reading had never been confirmed by anybody, on every server world
+            // in every session, and no run could retire it — including a run by the person who had
+            // just watched one.
+            string audit = WithoutComments(
+                DimensionFrameworkSourceScanner.ReadByName("DimensionSelfAudit.cs"));
+            Assert.IsFalse(
+                string.IsNullOrEmpty(audit),
+                "DimensionSelfAudit.cs is not in the shipped sources, so this proved nothing.");
+
+            string[] claims =
+            {
+                "first world of its kind",
+                "the evidence that the game schedules",
+                "nobody has yet watched",
+                "has never been watched",
+            };
+
+            for (int i = 0; i < claims.Length; i++)
+            {
+                Assert.IsFalse(
+                    audit.Contains(claims[i]),
+                    "An emitted string says \"" + claims[i] + "\". That is a statement about how "
+                    + "much of this framework anybody has tested, not about the world in front of "
+                    + "the reader: it is identical on every run and nothing here can retire it. "
+                    + "Record it in a comment instead.");
+            }
+        }
+
+        private static int CountOccurrences(string text, string needle)
+        {
+            int count = 0;
+            int at = 0;
+            while ((at = text.IndexOf(needle, at, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                at += needle.Length;
+            }
+
+            return count;
+        }
+
         [Test]
         public void AFailureSentenceNamesTheThingTheGapAndTheFix()
         {
