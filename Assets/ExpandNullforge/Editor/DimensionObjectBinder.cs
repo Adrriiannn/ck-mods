@@ -234,6 +234,96 @@ namespace ExpandNullforge.EditorTools
             return field == null ? null : field.GetValue(creature) as string;
         }
 
+        /// <summary>
+        /// Every local id an object will actually be BUILT under, which is not the same list.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// TWO VOCABULARIES, AND FEEDING ONE INTO THE OTHER'S JOB IS WHAT WENT WRONG.
+        /// <see cref="Collect"/> answers "is this name one of ours" for a reference a creator
+        /// TYPED, so it holds the ids that appear in the dashboard. The world-load audit needs the
+        /// opposite: the <c>objectName</c> each generated prefab is stamped with, which is what the
+        /// game answers to. For most kinds the two are the same string, and for three they are not:
+        /// </para>
+        /// <list type="bullet">
+        /// <item>a plant is built as two objects, <c>&lt;plantId&gt;Plant</c> and
+        /// <c>&lt;plantId&gt;Seed</c> (<c>DimensionPlantGenerator</c>), and nothing is ever stamped
+        /// with the bare plant id — so the bare id was declared, resolved to nothing, and the
+        /// <c>GrowingCD</c> rule could never reach a crop;</item>
+        /// <item>a boss with a summoning item also builds
+        /// <c>&lt;bossId&gt;-summon-circle</c>, which is the exemplar the companion table was
+        /// written for and was in nobody's list;</item>
+        /// <item>a boss that shows on the map also builds
+        /// <c>&lt;bossId&gt;-map-marker</c>.</item>
+        /// </list>
+        /// <para>
+        /// The two boss extras are behind the same conditions the generator gates them on, so this
+        /// list does not name a prefab the run will not write.
+        /// </para>
+        /// </remarks>
+        public static List<string> ObjectsMade(DimensionTemplateAsset template)
+        {
+            List<string> ids = Walk(template, true);
+            if (template == null)
+            {
+                return ids;
+            }
+
+            HashSet<string> seen = new HashSet<string>(System.StringComparer.Ordinal);
+            for (int i = 0; i < ids.Count; i++)
+            {
+                seen.Add(ids[i]);
+            }
+
+            // The bare plant id is not an object name; the plant and the seed are. Taken out rather
+            // than left beside them, because an id nothing can ever answer to is counted as
+            // unresolved and explained away, which is how a real name mismatch stays dressed as
+            // normal.
+            DimensionPlantAsset[] plants = template.GlobalPlants;
+            for (int i = 0; plants != null && i < plants.Length; i++)
+            {
+                if (plants[i] == null || !plants[i].Enabled ||
+                    string.IsNullOrEmpty(plants[i].PlantId))
+                {
+                    continue;
+                }
+
+                ids.Remove(plants[i].PlantId);
+                seen.Remove(plants[i].PlantId);
+                Add(ids, seen, plants[i].PlantId + DimensionPlantGenerator.PlantSuffix);
+                Add(ids, seen, plants[i].PlantId + DimensionPlantGenerator.SeedSuffix);
+            }
+
+            DimensionBossAsset[] bosses = template.GlobalBosses;
+            for (int i = 0; bosses != null && i < bosses.Length; i++)
+            {
+                DimensionBossAsset boss = bosses[i];
+                if (boss == null || !boss.Enabled || string.IsNullOrEmpty(boss.BossId))
+                {
+                    continue;
+                }
+
+                DimensionBossMapPinTemplate pin = boss.MapPin;
+                if (pin != null && pin.ShowsOnTheMap)
+                {
+                    Add(ids, seen, boss.BossId + BossMapMarkerSuffix);
+                }
+
+                if (!string.IsNullOrEmpty(boss.SummoningItemId))
+                {
+                    Add(ids, seen, boss.BossId + BossSummonCircleSuffix);
+                }
+            }
+
+            return ids;
+        }
+
+        /// <summary>The suffix <c>DimensionCreatureGenerator</c> stamps a boss's map pin with.</summary>
+        internal const string BossMapMarkerSuffix = "-map-marker";
+
+        /// <summary>The suffix it stamps a boss's summoning circle with.</summary>
+        internal const string BossSummonCircleSuffix = "-summon-circle";
+
         private static void Add(List<string> ids, HashSet<string> seen, string id)
         {
             if (!string.IsNullOrEmpty(id) && seen.Add(id))

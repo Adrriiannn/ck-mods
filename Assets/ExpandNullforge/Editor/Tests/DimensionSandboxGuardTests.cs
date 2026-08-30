@@ -242,7 +242,7 @@ namespace ExpandNullforge.EditorTools
         /// This is the third hole of the same shape in this class: the deny list and the emitter
         /// list each already fail rather than pass when they come back empty, and the ship set —
         /// the largest of the three — did not. One <c>"includePlatforms": ["Editor"]</c> line in
-        /// <c>ExpandNullforge.asmdef</c> takes the count from 687 to 0, and before this test both
+        /// <c>ExpandNullforge.asmdef</c> takes the count from 662 to 0, and before this test both
         /// this fixture and <c>DimensionBurstBudgetTests</c> read that as nothing to report.
         /// </remarks>
         [Test]
@@ -539,6 +539,177 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>Whether one expected finding is somewhere in the list, in any order.</summary>
+        /// <summary>
+        /// A consumer beside a generated one is scanned even though it has never been generated.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A SILENT PASS, AND THE WORST SHAPE ONE CAN HAVE: it looked like a clean run. Consumers
+        /// were found only by the generated bootstrap, and the "did this find anything" question
+        /// was asked of the whole project — so one generated mod satisfied it for every mod, and a
+        /// second mod holding hand-written C# that ships and is security-checked was never opened.
+        /// </para>
+        /// <para>
+        /// The second signature is an asmdef whose <c>references</c> name this framework. It is
+        /// narrow on purpose: the SDK ships sample mods with asmdefs of their own, and a folder
+        /// that is not built against this framework is not this framework's business. The third mod
+        /// below is one of those, and it must not be scanned.
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void AConsumerThatHasNeverBeenGeneratedIsStillScanned()
+        {
+            string assets = Path.Combine(Path.GetTempPath(), "nf_sandbox_guard_stale_consumer");
+            if (Directory.Exists(assets))
+            {
+                Directory.Delete(assets, true);
+            }
+
+            DimensionSandboxGuard.DenyList denyList = new DimensionSandboxGuard.DenyList();
+            denyList.Namespaces.Add("System.IO");
+
+            try
+            {
+                string generated = Path.Combine(
+                    Path.Combine(assets, "GeneratedMod"),
+                    DimensionSandboxGuard.GeneratedConsumerScriptFolder
+                        .Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(generated);
+                File.WriteAllText(
+                    Path.Combine(assets, "GeneratedMod", "GeneratedMod.asmdef"),
+                    "{\n  \"name\": \"GeneratedMod\",\n  \"references\": [ \"ExpandNullforge\" ]\n}\n");
+                File.WriteAllText(
+                    Path.Combine(
+                        generated,
+                        "GeneratedMod" + DimensionSandboxGuard.GeneratedConsumerScriptSuffix),
+                    "public class A { }\n");
+
+                // Built against the framework, never generated, and shipping a denied reference.
+                string stale = Path.Combine(assets, "StaleMod");
+                Directory.CreateDirectory(stale);
+                File.WriteAllText(
+                    Path.Combine(stale, "StaleMod.asmdef"),
+                    "{\n  \"name\": \"StaleMod\",\n  \"references\": [ \"ExpandNullforge.API\" ]\n}\n");
+                File.WriteAllText(
+                    Path.Combine(stale, "HandWritten.cs"),
+                    "class B { void M() { System.IO.File.Delete(\"x\"); } }\n");
+
+                // Not built against this framework at all: an SDK sample, and none of our business.
+                string sample = Path.Combine(assets, "SomeSampleMod");
+                Directory.CreateDirectory(sample);
+                File.WriteAllText(
+                    Path.Combine(sample, "SomeSampleMod.asmdef"),
+                    "{\n  \"name\": \"SomeSampleMod\",\n  \"references\": [ \"PugMod.SDK\" ]\n}\n");
+                File.WriteAllText(
+                    Path.Combine(sample, "Whatever.cs"),
+                    "class C { void M() { System.IO.File.Delete(\"x\"); } }\n");
+
+                List<string> roots = DimensionSandboxGuard.ConsumerModRoots(assets);
+
+                Assert.That(
+                    roots.Count,
+                    Is.EqualTo(2),
+                    "Expected the generated mod and the stale one and nothing else. Found: "
+                    + string.Join(", ", roots.ToArray()));
+                Assert.That(
+                    roots.Exists(r => r.EndsWith("StaleMod", System.StringComparison.Ordinal)),
+                    Is.True,
+                    "A mod built against this framework that has never been generated is invisible "
+                    + "to the scan, so its shipped C# is never read and the run reads as clean.");
+                Assert.That(
+                    roots.Exists(r => r.EndsWith("SomeSampleMod", System.StringComparison.Ordinal)),
+                    Is.False,
+                    "A mod that is not built against this framework was scanned. Widening the "
+                    + "search that far turns every sample in the SDK into a finding of ours.");
+
+                List<DimensionSandboxGuard.Finding> findings =
+                    DimensionSandboxGuard.ScanConsumers(assets, denyList);
+
+                Assert.That(
+                    Has(findings, "HandWritten.cs", "System.IO.*", 1),
+                    Is.True,
+                    "The stale consumer's violation was not reported." + Detail(findings));
+                Assert.That(
+                    Has(findings, "Whatever.cs", "System.IO.*", 1),
+                    Is.False,
+                    "An unrelated mod's code was reported as ours." + Detail(findings));
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(assets, true);
+                }
+                catch (IOException)
+                {
+                    // A leftover temp folder is not worth failing a passing test over.
+                }
+            }
+        }
+
+        /// <summary>
+        /// A consumer with no assembly definition is said so, rather than quietly half-checked.
+        /// </summary>
+        /// <remarks>
+        /// Its code compiles into <c>Assembly-CSharp</c>, which ships and is security-checked, and
+        /// <c>ShippedAssemblyNameOf</c> has no name to hand the assembly guard — so the source half
+        /// looked at it, the assembly half could not, and nothing said which. Reachable: this
+        /// framework never writes an asmdef, and <c>EnsureConsumerAssemblyReferences</c> only edits
+        /// one that already exists.
+        /// </remarks>
+        [Test]
+        public void AConsumerWithNoAssemblyDefinitionIsReportedRatherThanHalfChecked()
+        {
+            string assets = Path.Combine(Path.GetTempPath(), "nf_sandbox_guard_no_asmdef");
+            if (Directory.Exists(assets))
+            {
+                Directory.Delete(assets, true);
+            }
+
+            try
+            {
+                string generated = Path.Combine(
+                    Path.Combine(assets, "NoAsmdefMod"),
+                    DimensionSandboxGuard.GeneratedConsumerScriptFolder
+                        .Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(generated);
+                File.WriteAllText(
+                    Path.Combine(
+                        generated,
+                        "NoAsmdefMod" + DimensionSandboxGuard.GeneratedConsumerScriptSuffix),
+                    "public class A { }\n");
+
+                List<string> roots = DimensionSandboxGuard.ConsumerModRoots(assets);
+                Assert.That(roots.Count, Is.EqualTo(1), string.Join(", ", roots.ToArray()));
+                Assert.That(
+                    DimensionSandboxGuard.ShippedAssemblyNameOf(roots[0]),
+                    Is.Empty,
+                    "This fixture has no asmdef, so there is nothing for this test to be about.");
+
+                List<DimensionSandboxGuard.Finding> findings =
+                    DimensionSandboxGuard.ScanConsumers(
+                        assets, new DimensionSandboxGuard.DenyList());
+
+                Assert.That(
+                    findings.Exists(f => f.Rule == "the consumer's assembly definition"),
+                    Is.True,
+                    "A consumer mod with no assembly definition was scanned for source and left "
+                    + "out of the assembly scan with nothing said, so a clean result here means "
+                    + "less than it reads." + Detail(findings));
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(assets, true);
+                }
+                catch (IOException)
+                {
+                    // A leftover temp folder is not worth failing a passing test over.
+                }
+            }
+        }
+
         private static bool Has(
             List<DimensionSandboxGuard.Finding> findings,
             string fileEnding,

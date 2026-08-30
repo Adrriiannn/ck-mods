@@ -149,17 +149,33 @@ namespace ExpandNullforge.Diagnostics
         /// The one thing the framework's evidence for auto-scheduling does not cover.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// The session log that settled this is a client joining a dedicated server: it has a
         /// <c>ClientWorld0</c> and no <c>ServerWorld</c> at all. The server world is built by the
         /// same <c>ClientServerBootstrap</c> path from the same sweep, so there is no reason to
         /// expect it to differ — but nobody has watched it happen, and the audit is not entitled to
         /// present a reasonable expectation as an observation.
+        /// </para>
+        /// <para>
+        /// IT USED TO OPEN WITH "This is the first world of its kind this check has ever reported
+        /// on", WHICH IS A CLAIM ABOUT THE PAST THAT A CONSTANT CANNOT MAKE. Nothing here remembers
+        /// previous sessions, so from the second run onward that sentence was false and no run could
+        /// retire it. What is true every time is what the evidence covers, which is what it says
+        /// now.
+        /// </para>
+        /// <para>
+        /// AND IT IS SAID WHETHER OR NOT THE WORLD LOOKS HEALTHY. It hung off the success milestone
+        /// alone, so the case where "nobody has read this kind of world back" matters most — a
+        /// server world that reports a problem — was the one case that did not get it.
+        /// </para>
         /// </remarks>
         private const string ServerWorldHasNeverBeenWatched =
-            " This is the first world of its kind this check has ever reported on: the session "
-            + "that established the game schedules a mod's systems was a client joining a server, "
-            + "so it covers ClientWorld0 only. The server world is built by the same code from the "
-            + "same sweep, and nobody has yet watched it do so. This line is that observation.";
+            "this is a server world, and the evidence that the game schedules a mod's systems by "
+            + "itself comes from one session with no server world in it: a client joining a "
+            + "dedicated server, which covers ClientWorld0 only. The server world is built by the "
+            + "same code from the same sweep, so the expectation is that it behaves the same way. "
+            + "The lines above are a reading of it rather than a confirmation of something already "
+            + "watched.";
 
         /// <summary>Remembers a world so the next quiet frame audits it.</summary>
         public static void Arm(World world, bool isClient)
@@ -369,6 +385,15 @@ namespace ExpandNullforge.Diagnostics
 
             worldsAudited++;
             lastWorldDeclarationVersion = DimensionItemObjectRegistry.DeclarationVersion;
+
+            // SAID FOR A SERVER WORLD WHETHER IT LOOKED HEALTHY OR NOT. It used to ride the
+            // scheduling milestone, which only prints when nothing was wrong — so the caveat that
+            // this kind of world has never been read back went missing in exactly the case where a
+            // reader would want it.
+            if (!armed.IsClient)
+            {
+                DimensionLog.Milestone(Ch.Audit, world, ServerWorldHasNeverBeenWatched);
+            }
 
             if (armed.Problems == before)
             {
@@ -583,14 +608,45 @@ namespace ExpandNullforge.Diagnostics
                 DimensionLog.Milestone(
                     Ch.Audit,
                     world,
-                    mine.Count + " framework systems created and scheduled in " + world.Name + "."
-                        + (armed.IsClient ? string.Empty : ServerWorldHasNeverBeenWatched));
+                    mine.Count + " framework systems created and scheduled in " + world.Name + ".");
             }
         }
 
+        /// <summary>
+        /// Checks that tile capture runs before the deserializer, in the world that captures.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// ASKED OF THE SERVER ONLY, AND SKIPPING THAT TEST MADE THIS CHECK CRY WOLF ON EVERY
+        /// CLIENT WORLD. <c>DimensionCustomTileCaptureSystem</c> is
+        /// <c>[WorldSystemFilter(ServerSimulation)]</c> — everything that touches a serialized
+        /// submap is server-side — so it is not created in a client world at all.
+        /// <c>SerializationSystemGroup</c> carries no filter and IS created there, so the lookup
+        /// below found the group, failed to find the capture system, and printed a Problem saying
+        /// custom blocks would be gone on the next load and naming
+        /// <c>EnsureSystemOrdering</c> as the fix. All three parts were wrong on a client: nothing
+        /// was lost, the client-side call was deliberately removed, and the reader was sent after a
+        /// system that is not meant to be there.
+        /// </para>
+        /// <para>
+        /// A trace rather than silence, because "this check did not run here" and "this check
+        /// passed here" are different answers and the log has to be able to tell them apart.
+        /// </para>
+        /// </remarks>
         private static void CheckTileRescueBracket(ArmedWorld armed)
         {
             World world = armed.World;
+            if (armed.IsClient)
+            {
+                DimensionLog.Trace(
+                    Ch.Tileset,
+                    world,
+                    "the tile-rescue bracket is a server-side pair — the systems that read and "
+                        + "rewrite a serialized submap are declared for the server simulation only "
+                        + "— so there is nothing to check in " + world.Name + ".");
+                return;
+            }
+
             SerializationSystemGroup group =
                 world.GetExistingSystemManaged<SerializationSystemGroup>();
             if (group == null)

@@ -58,15 +58,31 @@ namespace ExpandNullforge.EditorTests
         /// </remarks>
         private const int FewestPlausibleSystems = 20;
 
+        /// <summary>
+        /// Nothing opts a framework system out of being created — on the class or on the assembly.
+        /// </summary>
+        /// <remarks>
+        /// THE ASSEMBLY HALF WAS THE HOLE, AND IT IS THE CHEAPER MISTAKE TO MAKE. Unity's own
+        /// system sweep reads the attribute off the assembly as well as off the class
+        /// (<c>Packages/com.unity.entities/Unity.Entities/Types/TypeManagerSystems.cs:1199-1202</c>
+        /// adds a <c>DisableAutoCreationAttribute</c> to a type's list when
+        /// <c>systemType.Assembly.GetCustomAttribute</c> answers one), so a single
+        /// <c>[assembly: DisableAutoCreation]</c> in any <c>AssemblyInfo</c>-style file kills all
+        /// thirty-one at once — and this framework already ships two such files, for
+        /// <c>InternalsVisibleTo</c>. Asking only the class printed a clean result for a mod where
+        /// nothing would ever run.
+        /// </remarks>
         [Test]
         public void NoFrameworkSystemOptsOutOfBeingCreatedWithTheWorld()
         {
             List<string> optedOut = new List<string>();
             int checkedSystems = 0;
+            Assembly shipped = null;
 
             foreach (Type system in FrameworkSystems())
             {
                 checkedSystems++;
+                shipped = system.Assembly;
                 if (system.GetCustomAttribute<DisableAutoCreationAttribute>() != null)
                 {
                     optedOut.Add(system.FullName);
@@ -80,9 +96,20 @@ namespace ExpandNullforge.EditorTests
                 + "about the ones it did not see. The scan is broken.");
             Assert.IsEmpty(
                 optedOut,
-                "[DisableAutoCreation] is the one thing that stops the game creating a system as it "
-                + "builds a world, and these carry it. Whatever they do never happens, with no "
-                + "error and no log line: " + string.Join(", ", optedOut.ToArray()));
+                "[DisableAutoCreation] on the class stops the game creating a system as it builds a "
+                + "world, and these carry it. Whatever they do never happens, with no error and no "
+                + "log line: " + string.Join(", ", optedOut.ToArray()));
+
+            Assert.IsNull(
+                shipped == null
+                    ? null
+                    : shipped.GetCustomAttribute<DisableAutoCreationAttribute>(),
+                "[assembly: DisableAutoCreation] is on "
+                + (shipped == null ? "the shipped assembly" : shipped.GetName().Name)
+                + ". The engine reads that attribute off the assembly as well as off the class, so "
+                + "not one of the " + checkedSystems + " systems above is created in any world and "
+                + "every runtime feature this framework has is dead — with no error and no log "
+                + "line. Take it off whichever assembly-level file carries it.");
         }
 
         [Test]
@@ -188,6 +215,23 @@ namespace ExpandNullforge.EditorTests
                     (filter.FilterFlags & WorldSystemFilterFlags.ServerSimulation) != 0;
                 bool client =
                     (filter.FilterFlags & WorldSystemFilterFlags.ClientSimulation) != 0;
+
+                // NEITHER BIT IS NOT "SERVER", AND READING IT AS SERVER MADE A WRONG PAIR AGREE.
+                // The derivation was `server && client ? Both : (client ? Client : Server)`, so a
+                // class saying [WorldSystemFilter(LocalSimulation)] — or Default, which the engine
+                // expands to its group's child default — came out Server, and a roster row saying
+                // Server passed while naming a world the class does not claim. No class does this
+                // today; the point is that if one ever does, it is named here rather than certified.
+                if (!server && !client)
+                {
+                    disagreements.Add(
+                        rows[i].Name + ": its [WorldSystemFilter] names neither ServerSimulation "
+                        + "nor ClientSimulation (" + filter.FilterFlags + "), so the roster's "
+                        + "server/client/both column cannot describe it and the world-load check "
+                        + "would look for it in the wrong world");
+                    continue;
+                }
+
                 DimensionSystemRoster.Peer declared =
                     server && client
                         ? DimensionSystemRoster.Peer.Both
@@ -263,6 +307,60 @@ namespace ExpandNullforge.EditorTests
                 broken,
                 "These orderings are silently discarded at world creation, and the systems then run "
                 + "in whatever order the sort produces:\n" + string.Join("\n", broken.ToArray()));
+        }
+
+        /// <summary>
+        /// The group a system names exists in every world the system itself is created in.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE SAME DEFECT CLASS AS THE ORDERING CHECK, ONE STEP EARLIER, AND NOTHING COVERED IT. A
+        /// system created into a world whose group is not there is put in
+        /// <c>SimulationSystemGroup</c> instead or dropped, and either way it stops doing what it
+        /// says on the class — the tile-capture bug was this shape read from the other end. The
+        /// four tests here checked the ordering targets and never the group itself.
+        /// </para>
+        /// <para>
+        /// Measured at zero mismatches across the thirty-one today, so this is a guard rather than
+        /// a fix. <see cref="WorldsOf"/> reads a group with no filter as everywhere, which is the
+        /// direction that cannot produce a false failure.
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void EverySystemsGroupExistsInEveryWorldTheSystemDoes()
+        {
+            List<string> broken = new List<string>();
+            int compared = 0;
+
+            foreach (Type system in FrameworkSystems())
+            {
+                Type group = GroupOf(system);
+                if (group == null)
+                {
+                    // Named by EveryFrameworkSystemSaysWhichGroupAndWhichWorldsItBelongsIn; not
+                    // repeated as a second failure here.
+                    continue;
+                }
+
+                compared++;
+                WorldSystemFilterFlags missing = WorldsOf(system) & ~WorldsOf(group);
+                if (missing != 0)
+                {
+                    broken.Add(
+                        system.Name + " is created in " + missing + " and " + group.Name
+                        + " is not, so there is no such group to put it in there");
+                }
+            }
+
+            Assert.GreaterOrEqual(
+                compared,
+                FewestPlausibleSystems,
+                "Only " + compared + " systems named a group, so this compared almost nothing.");
+            Assert.IsEmpty(
+                broken,
+                "These systems name a group that does not exist in a world they are created in, so "
+                + "in that world they end up somewhere else or nowhere:\n"
+                + string.Join("\n", broken.ToArray()));
         }
 
         private static Type GroupOf(Type system)

@@ -64,8 +64,9 @@ namespace ExpandNullforge.EditorTools
         /// means the scan found nothing to look at, not that there is nothing wrong.
         /// </summary>
         /// <remarks>
-        /// The ship set is 687 files, and the largest planned change to it — moving the authoring
-        /// engine behind the Editor boundary — takes out about forty. One
+        /// The ship set is 662 files — measured by walking it, not remembered; this note said 687
+        /// and no run had ever agreed with it. The largest planned change to the set, moving the
+        /// authoring engine behind the Editor boundary, takes out about forty. One
         /// <c>"includePlatforms": ["Editor"]</c> line in <c>ExpandNullforge.asmdef</c> takes it to
         /// zero instead, and every check that walks the set then reports clean having read nothing.
         /// The floor sits far below the real count so ordinary work never trips it, and far above
@@ -444,6 +445,17 @@ namespace ExpandNullforge.EditorTools
         /// looked for, and the mod root is the folder two above it. The framework's own folder is
         /// excluded: the generator refuses to write into it, and its scan is the other one.
         /// </para>
+        /// <para>
+        /// AND A MOD THAT HAS NOT BEEN GENERATED YET IS STILL A CONSUMER. Looking only for the
+        /// bootstrap made a stale mod invisible: it holds hand-written C# that ships and is
+        /// security-checked, and beside one generated mod it was reported as a clean run rather
+        /// than as an unscanned one, because the "did this find anything" question was asked of the
+        /// whole project. The second signature closes that — an <c>.asmdef</c> whose
+        /// <c>references</c> name <see cref="ShippedRoot"/> or its API assembly is a mod built
+        /// against this framework whether or not a generate has ever been run in it, and no mod
+        /// that is not built against this framework carries that line. Both signatures find the two
+        /// mods in this repository, which is why widening it changes no result here.
+        /// </para>
         /// </remarks>
         public static List<string> ConsumerModRoots(string assetsPath)
         {
@@ -452,6 +464,8 @@ namespace ExpandNullforge.EditorTools
             {
                 return roots;
             }
+
+            AddRootsThatReferenceTheFramework(assetsPath, roots);
 
             string[] bootstraps;
             try
@@ -494,6 +508,77 @@ namespace ExpandNullforge.EditorTools
             }
 
             return roots;
+        }
+
+        /// <summary>
+        /// Adds every mod folder whose asmdef is built against this framework.
+        /// </summary>
+        /// <remarks>
+        /// The asmdef's own folder is the mod root, which is how Unity treats it and how the
+        /// bootstrap emitter treats it. Editor-only asmdefs are kept here rather than filtered:
+        /// <see cref="ScanConsumers"/> is the half that decides what a mod with no shipped source
+        /// means, and it already has a sentence for it.
+        /// </remarks>
+        private static void AddRootsThatReferenceTheFramework(string assetsPath, List<string> roots)
+        {
+            string[] asmdefs;
+            try
+            {
+                asmdefs = Directory.GetFiles(assetsPath, "*.asmdef", SearchOption.AllDirectories);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            string frameworkRoot = Path.Combine(assetsPath, ShippedRoot);
+            for (int i = 0; i < asmdefs.Length; i++)
+            {
+                string root = Path.GetDirectoryName(asmdefs[i]);
+                if (string.IsNullOrEmpty(root) || IsWithin(root, frameworkRoot) ||
+                    roots.Contains(root))
+                {
+                    continue;
+                }
+
+                string text;
+                try
+                {
+                    text = System.IO.File.ReadAllText(asmdefs[i]);
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+
+                if (!ReferencesTheFramework(text))
+                {
+                    continue;
+                }
+
+                roots.Add(root);
+            }
+        }
+
+        /// <summary>
+        /// Whether an asmdef's <c>references</c> name this framework's runtime or API assembly.
+        /// </summary>
+        /// <remarks>
+        /// A quoted whole-word match rather than a substring, so a mod named
+        /// <c>ExpandNullforgeExtras</c> in somebody's own reference list is not mistaken for one of
+        /// ours. GUID references are not matched and cannot be: the emitter writes names
+        /// (<c>"useGUIDs": false</c> on every mod it touches), and a project that switched to GUIDs
+        /// would be found by its generated bootstrap instead.
+        /// </remarks>
+        private static bool ReferencesTheFramework(string asmdef)
+        {
+            if (string.IsNullOrEmpty(asmdef))
+            {
+                return false;
+            }
+
+            return asmdef.IndexOf("\"" + ShippedRoot + "\"", StringComparison.Ordinal) >= 0 ||
+                asmdef.IndexOf("\"" + ShippedRoot + ".API\"", StringComparison.Ordinal) >= 0;
         }
 
         /// <summary>
@@ -556,6 +641,25 @@ namespace ExpandNullforge.EditorTools
                         "compiled into an assembly the game loads, so nothing was checked. Check " +
                         "that its .asmdef does not say \"includePlatforms\": [\"Editor\"]."));
                     continue;
+                }
+
+                // NO ASMDEF IS NOT NO PROBLEM. Unity compiles a folder with no asmdef into
+                // Assembly-CSharp, which ships and is security-checked like any other — but
+                // ShippedAssemblyNameOf has no name to give, so AssembliesToScan cannot add it and
+                // the assembly half of the guard never sees this mod at all. Saying it here is what
+                // stops the source scan's clean result being read as a clean result for the mod.
+                // Reachable: the framework never writes an asmdef, and EnsureConsumerAssemblyReferences
+                // only edits one that already exists.
+                if (string.IsNullOrEmpty(ShippedAssemblyNameOf(roots[i])))
+                {
+                    findings.Add(new Finding(
+                        roots[i],
+                        0,
+                        "the consumer's assembly definition",
+                        "This mod has no .asmdef of its own, so its code is compiled into " +
+                        "Assembly-CSharp. Its source is checked below, and its compiled assembly " +
+                        "is not: nothing here can name a DLL to read. Add an assembly definition " +
+                        "to the mod folder, which is what the game expects a mod to ship as."));
                 }
 
                 for (int f = 0; f < files.Count; f++)

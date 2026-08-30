@@ -55,6 +55,15 @@ namespace ExpandNullforge.EditorTools
         /// place that knows the strip exists. Renaming them would have been twenty-one chances to
         /// miss one, and a missed one is a message that silently goes nowhere again.
         /// </para>
+        /// <para>
+        /// THE SETTER DOES NOT TOUCH THE STRIP ITSELF, and that is the whole reason
+        /// <see cref="ScheduleActionFeedbackRefresh"/> exists. Five of the twenty-one publish sites
+        /// sit inside IMGUI draw methods, which run from the <c>IMGUIContainer</c> that hosts the
+        /// legacy body — so writing here rewrote a UITK sibling's display and class list from
+        /// inside <c>OnGUI</c>, which is the exact mid-pass mutation the comment on
+        /// <c>DrawLegacyStageBodyInner</c> exists to prevent. The value is stored now and the strip
+        /// is rebuilt on the next UITK frame instead.
+        /// </para>
         /// </remarks>
         private string lastEditorActionMessage
         {
@@ -62,7 +71,7 @@ namespace ExpandNullforge.EditorTools
             set
             {
                 lastEditorActionMessageValue = value;
-                RefreshActionFeedback();
+                ScheduleActionFeedbackRefresh();
             }
         }
 
@@ -73,7 +82,7 @@ namespace ExpandNullforge.EditorTools
             set
             {
                 lastEditorActionTypeValue = value;
-                RefreshActionFeedback();
+                ScheduleActionFeedbackRefresh();
             }
         }
         private Object lastGeneratedManifestAsset;
@@ -3722,7 +3731,11 @@ namespace ExpandNullforge.EditorTools
                 localization,
                 OwnedObjectIds(),
                 selectedTemplate.GlobalExplosions,
-                SwitchedOffObjectIds());
+                SwitchedOffObjectIds(),
+                // The names the prefabs are actually stamped with, which is not the same list as
+                // the ids a creator types. It is what the runtime manifest carries for the
+                // world-load check to look at.
+                DimensionGeneratedObjectIds.ObjectsMade(selectedTemplate));
 
             for (int i = 0; i < report.Errors.Count; i++)
             {
@@ -3869,7 +3882,7 @@ namespace ExpandNullforge.EditorTools
             // the two halves are both known, so it is the only place the typo can be caught.
             WarnAboutDropsFromNowhere(drops);
             WarnAboutIdsThatShadowTheGame();
-            WarnAboutPortalCostsFromNowhere(outputFolder);
+            WarnAboutPortalCostsFromNowhere(outputFolder, report.Warnings);
 
             // And the same shape of silence for names: an object built by a generator nobody
             // remembered to give a name to reaches the player showing its own key. Every generator
@@ -4347,8 +4360,24 @@ namespace ExpandNullforge.EditorTools
         /// which the generators and the bootstrap emitter already decide references with. Asking it
         /// here is what keeps this answer and theirs the same answer.
         /// </para>
+        /// <para>
+        /// ONLY THE RULES THAT REALLY ASK FOR SOMETHING. It used to walk <c>RequiredItems</c> on
+        /// every enabled rule, and the list is kept when a creator switches "When it opens" to a
+        /// mode that never reads it — <c>AppendTravelRequirements</c> returns immediately unless
+        /// <c>UsesRequiredItems</c>, and the Access page hides the offering card entirely — so
+        /// generating after that switch warned about entries the creator could neither see on the
+        /// page nor act on. An item portal is skipped for the same reason: the page says in as many
+        /// words that a portal torn open by an item has no window, so its offering is never asked
+        /// for.
+        /// </para>
+        /// <para>
+        /// The messages go to the generate report as well as the Console, because the report is
+        /// what the creator is shown when the run finishes.
+        /// </para>
         /// </remarks>
-        private void WarnAboutPortalCostsFromNowhere(string outputFolder)
+        private void WarnAboutPortalCostsFromNowhere(
+            string outputFolder,
+            List<string> intoReportWarnings)
         {
             DimensionPortalAccessRuleAsset[] rules = selectedTemplate == null
                 ? null
@@ -4365,7 +4394,7 @@ namespace ExpandNullforge.EditorTools
             for (int i = 0; i < rules.Length; i++)
             {
                 DimensionPortalAccessRuleAsset rule = rules[i];
-                if (rule == null || !rule.Enabled)
+                if (rule == null || !rule.Enabled || !rule.UsesRequiredItems || rule.IsItemPortal)
                 {
                     continue;
                 }
@@ -4380,10 +4409,18 @@ namespace ExpandNullforge.EditorTools
                     string itemId = items[n].ItemId;
                     if (string.IsNullOrEmpty(itemId))
                     {
-                        Debug.LogWarning(
-                            "[Dimensions API] The portal '" + which + "' has an offering slot with " +
-                            "no item in it, so nothing can ever be put there and the portal stays " +
-                            "shut. Name the item, or take the slot out.");
+                        // IT DOES NOT HOLD THE DOOR SHUT, and this line used to say it did.
+                        // AppendTravelRequirements skips an entry with no ItemId outright
+                        // (DimensionPortalAccessRuleAsset.AppendTravelRequirements), so an empty
+                        // slot contributes no requirement at all — the portal opens for whatever
+                        // the filled slots ask for. The fault is a row that does nothing, not a
+                        // locked door, and saying the wrong one sends the reader looking for a
+                        // player who cannot get through.
+                        Say(
+                            intoReportWarnings,
+                            "The portal '" + which + "' has an offering row with no item in it. " +
+                            "The row is ignored, so it asks for nothing and holds nothing shut — " +
+                            "name the item you meant, or take the row out.");
                         continue;
                     }
 
@@ -4397,17 +4434,36 @@ namespace ExpandNullforge.EditorTools
                         "The portal '" + which + "' asks for", itemId);
                     if (switchedOff != null)
                     {
-                        Debug.LogWarning("[Dimensions API] " + switchedOff);
+                        Say(intoReportWarnings, switchedOff);
                         continue;
                     }
 
-                    Debug.LogWarning(
-                        "[Dimensions API] The portal '" + which + "' asks for '" + itemId +
+                    Say(
+                        intoReportWarnings,
+                        "The portal '" + which + "' asks for '" + itemId +
                         "', and nothing in the game or in this mod is called that. The portal is " +
                         "still built and its slot is still drawn, and no item will ever go into " +
                         "it, so no player can open the door — check the spelling against the " +
                         "item you meant.");
                 }
+            }
+        }
+
+        /// <summary>
+        /// One warning, said to the Console and carried into the run's own report.
+        /// </summary>
+        /// <remarks>
+        /// The Console alone is where this went, and a creator who has not opened the Console never
+        /// sees it. The report is what the generate summary counts and what the dialog at the end
+        /// of the run points at, so a portal that can never open is now part of the answer to
+        /// "what did that do" rather than a line somebody has to go looking for.
+        /// </remarks>
+        private static void Say(List<string> intoReportWarnings, string message)
+        {
+            Debug.LogWarning("[Dimensions API] " + message);
+            if (intoReportWarnings != null)
+            {
+                intoReportWarnings.Add(message);
             }
         }
 

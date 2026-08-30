@@ -171,7 +171,8 @@ namespace ExpandNullforge.EditorTools
             DimensionLocalizationPlan localization = null,
             IEnumerable<string> otherOwnedObjectIds = null,
             IEnumerable<DimensionExplosionAsset> blasts = null,
-            IEnumerable<string> switchedOffObjectIds = null)
+            IEnumerable<string> switchedOffObjectIds = null,
+            IEnumerable<string> objectNamesThisRunWrites = null)
         {
             DimensionItemGenerationReport report = new DimensionItemGenerationReport();
             if (items == null)
@@ -377,17 +378,41 @@ namespace ExpandNullforge.EditorTools
             // folders, so an orphan left here still registers an object in game.
             PruneOrphanedItemPrefabs(modRoot, outputFolder, generatedIds, report);
 
-            // The whole owned set, qualified the same way the prefabs are named. ownItemIds is the
-            // mod's items plus every other id the template generates an object under — creatures,
-            // bosses, summoning circles, plants, containers, workbenches, world objects — which is
-            // exactly the list the world-load check needs and could not have. It is recorded
-            // beside the item ids rather than instead of them: the item list is the promise the
-            // runtime holds the game to, and this one is only a subject list.
+            // The whole set of NAMES this pack's prefabs are stamped with, qualified the same way
+            // the prefabs are, which is exactly the subject list the world-load check needs and
+            // could not have. Recorded beside the item ids rather than instead of them: the item
+            // list is the promise the runtime holds the game to, and this one is only a list of
+            // what to look at.
+            //
+            // IT IS NOT ownItemIds WHEN THE CALLER KNOWS BETTER. ownItemIds is the reference
+            // vocabulary — the ids a creator TYPES — and three kinds of object are stamped with
+            // something else: a plant becomes "<id>Plant" and "<id>Seed", a boss also builds
+            // "<id>-summon-circle" and "<id>-map-marker". Fed the typed ids, the ledger declared a
+            // plant id nothing answers to and never contained the summoning circle the companion
+            // table was written for. DimensionGeneratedObjectIds.ObjectsMade answers the other
+            // question; the fallback below keeps a caller that does not pass one behaving as before.
             List<string> ownedObjectIds = new List<string>();
             HashSet<string> seenOwnedObjectIds = new HashSet<string>(StringComparer.Ordinal);
-            for (int i = 0; i < ownItemIds.Count; i++)
+            List<string> namesToQualify = new List<string>();
+            if (objectNamesThisRunWrites != null)
             {
-                string qualifiedOwned = naming.QualifyGenerated(ownItemIds[i]);
+                foreach (string written in objectNamesThisRunWrites)
+                {
+                    if (!string.IsNullOrEmpty(written))
+                    {
+                        namesToQualify.Add(written);
+                    }
+                }
+            }
+
+            if (namesToQualify.Count == 0)
+            {
+                namesToQualify.AddRange(ownItemIds);
+            }
+
+            for (int i = 0; i < namesToQualify.Count; i++)
+            {
+                string qualifiedOwned = naming.QualifyGenerated(namesToQualify[i]);
                 if (!string.IsNullOrEmpty(qualifiedOwned) && seenOwnedObjectIds.Add(qualifiedOwned))
                 {
                     ownedObjectIds.Add(qualifiedOwned);

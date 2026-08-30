@@ -1436,31 +1436,74 @@ namespace ExpandNullforge.EditorTools
             return DimensionsApiControls.Field(label, tooltip, field);
         }
 
+        /// <summary>
+        /// Tells the creator what a button on this page did, wherever the shell puts messages.
+        /// </summary>
+        /// <remarks>
+        /// ONE ROUTE FOR BOTH OUTCOMES, which it was not. Only the failure branch spoke, so a
+        /// creator who clicked "Build the glow sheet" and got a sheet was told nothing and could
+        /// not tell it apart from a click that missed — the same complaint the portal page's
+        /// PrepareRule already answers by reporting both. And the Console fallback was reachable
+        /// only in a branch production never takes, because the shell always supplies a reporter;
+        /// routed through here it is the one fallback for every message this page has.
+        /// </remarks>
+        private void Say(string message, MessageType type)
+        {
+            if (string.IsNullOrEmpty(message))
+            {
+                return;
+            }
+
+            if (report != null)
+            {
+                report(message, type);
+                return;
+            }
+
+            if (type == MessageType.Error)
+            {
+                Debug.LogError("[ExpandNullforge] " + message);
+            }
+            else if (type == MessageType.Warning)
+            {
+                Debug.LogWarning("[ExpandNullforge] " + message);
+            }
+            else
+            {
+                Debug.Log("[ExpandNullforge] " + message);
+            }
+        }
+
         private void MakeGlowSheet()
         {
             Texture2D created;
             string error;
             if (!Generation.DimensionTilesetEmissiveSheet.TryCreate(selected, out created, out error))
             {
-                if (report != null)
-                {
-                    report(error, MessageType.Warning);
-                }
-                else
-                {
-                    Debug.LogWarning("[ExpandNullforge] " + error);
-                }
-
+                Say(error, MessageType.Warning);
                 return;
             }
 
             serialized.Update();
             SerializedProperty glow = serialized.FindProperty("emissiveTexture");
-            if (glow != null)
+            if (glow == null)
             {
-                glow.objectReferenceValue = created;
-                serialized.ApplyModifiedProperties();
+                // The sheet was written and there is nowhere on this asset to hang it, which is a
+                // worse outcome than the failure above and used to be the quietest one.
+                Say(
+                    "The glow sheet was drawn and this block has no glow slot to put it in, so "
+                        + "nothing on the block changed. The file is at " +
+                        AssetDatabase.GetAssetPath(created) + ".",
+                    MessageType.Warning);
+                return;
             }
+
+            glow.objectReferenceValue = created;
+            serialized.ApplyModifiedProperties();
+
+            Say(
+                "Built the glow sheet for " + created.name + " and put it on the block.",
+                MessageType.Info);
 
             DeferredDetail();
             MarkCanvasDirty();

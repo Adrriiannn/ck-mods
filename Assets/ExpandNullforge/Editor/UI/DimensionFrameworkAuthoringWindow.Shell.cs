@@ -894,6 +894,45 @@ namespace ExpandNullforge.EditorTools
         /// the elements being built, because a message can be published while the window is still
         /// opening and before <c>CreateGUI</c> has run.
         /// </remarks>
+        /// <summary>Whether a published message is waiting for the strip to be rebuilt.</summary>
+        private bool actionFeedbackRefreshQueued;
+
+        /// <summary>
+        /// Asks for the strip to be rebuilt on the next UITK frame rather than here and now.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// BECAUSE FIVE OF THE PUBLISH SITES ARE INSIDE OnGUI. <c>DrawPortalEditor</c>,
+        /// <c>DrawTilesetsEditor</c>, <c>DrawSerializedAsset</c> and the two portal-profile
+        /// creators all run from the <c>IMGUIContainer</c> that hosts the legacy body, and the
+        /// strip is that container's SIBLING in the UITK tree. Rebuilding it from inside an IMGUI
+        /// pass changes an element's <c>display</c> and its class list between that pass's Layout
+        /// and Repaint — the same class of mid-pass mutation <c>DrawLegacyStageBodyInner</c> already
+        /// defends against by deferring its own read.
+        /// </para>
+        /// <para>
+        /// The flag is not an optimisation: without it a message published on every draw would
+        /// queue one callback per frame for as long as the window is open.
+        /// </para>
+        /// </remarks>
+        private void ScheduleActionFeedbackRefresh()
+        {
+            if (actionFeedback == null || actionFeedbackRefreshQueued)
+            {
+                // No strip yet means the message was published before CreateGUI built the frame.
+                // CreateGUI calls RefreshActionFeedback once at the end for exactly that case, so
+                // nothing published this early is lost.
+                return;
+            }
+
+            actionFeedbackRefreshQueued = true;
+            actionFeedback.schedule.Execute(() =>
+            {
+                actionFeedbackRefreshQueued = false;
+                RefreshActionFeedback();
+            });
+        }
+
         private void RefreshActionFeedback()
         {
             if (actionFeedback == null || actionFeedbackLabel == null)

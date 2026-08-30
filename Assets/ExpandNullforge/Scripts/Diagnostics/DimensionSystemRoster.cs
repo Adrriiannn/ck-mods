@@ -215,14 +215,22 @@ namespace ExpandNullforge.Diagnostics
             // Server, not both. Everything that touches a serialized submap is server-side, so the
             // client copies of these two could never do anything — and this table saying Both is
             // what would have had the audit certify them as working there.
+            // NO COUNT ON PURPOSE, AND THE COUNT IT USED TO HAVE WAS A FALSE ALARM. Its
+            // RequireForUpdate is a query over SERIALIZED submaps, which exist only once the game
+            // has read one back off disk; the tileset registry counts CONTENT. On a world that has
+            // just been generated nothing has been serialized yet, so five seconds in this system
+            // has correctly never run while the registry holds rows — and the liveness pass called
+            // that a problem and predicted lost terrain. The failure it was meant to catch is the
+            // registration pass's business: CheckTileRescueBracket asks whether the system is in
+            // SerializationSystemGroup at all, which is the thing that can actually be wrong.
             new Row(
                 "DimensionCustomTileCaptureSystem",
                 Peer.Server,
                 "custom terrain survives a reload",
                 w => w.GetExistingSystemManaged<Tilesets.DimensionCustomTileCaptureSystem>(),
-                "DimensionTilesetRegistry",
-                () => CountOf(
-                    Tilesets.DimensionTilesetRegistry.All)),
+                "nothing counts the submaps waiting to be read back; this runs when the game "
+                    + "deserializes one, which a freshly generated world has not done yet",
+                null),
             new Row(
                 "DimensionCustomTileRestoreSystem",
                 Peer.Server,
@@ -356,14 +364,21 @@ namespace ExpandNullforge.Diagnostics
                 "DimensionExplosiveRegistry",
                 () => CountOf(
                     Explosives.DimensionExplosiveRegistry.All)),
+            // NO COUNT, FOR THE SAME REASON AS THE TILE CAPTURE ROW ABOVE. Its RequireForUpdate is
+            // a query over live blasts, and the registry counts explosives a pack DECLARED. A
+            // session where nobody has set a bomb off is the normal session, so counting the
+            // registry here made every pack with one explosive in it produce a failure line five
+            // seconds into every world. Its sibling, DimensionExplosiveHydrationSystem, keeps its
+            // count: that one waits on the database rather than on a blast, so it ticks from the
+            // first frame and a zero there really is a fault.
             new Row(
                 "DimensionBlastFireSystem",
                 Peer.Both,
                 "a blast that is meant to leave fire behind leaves it",
                 w => w.GetExistingSystemManaged<Explosives.DimensionBlastFireSystem>(),
-                "DimensionExplosiveRegistry",
-                () => CountOf(
-                    Explosives.DimensionExplosiveRegistry.All)),
+                "nothing counts the blasts waiting to go off; a bomb has to explode before this "
+                    + "has anything to do",
+                null),
             new Row(
                 "DimensionObjectLinkHydrationSystem",
                 Peer.Both,

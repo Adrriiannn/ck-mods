@@ -10,10 +10,20 @@ namespace ExpandNullforge.EditorTools
     /// The two ways a curated row could be worse than an uncurated one.
     /// </summary>
     /// <remarks>
-    /// Both were live. A dotted path put its block back in the catch-all fold, so twenty-two values
-    /// had two live editors on one page; and the control the page built for a string, an int or a
-    /// bool asked nothing about that field's drawer, so the four name pickers appeared only on the
-    /// rows nobody had written a card for. Neither is visible from a screenshot of a working page.
+    /// <para>
+    /// ONE OF THE TWO WAS LIVE AND THE OTHER IS NOT, AND THE DIFFERENCE IS RECORDED HERE BECAUSE
+    /// THIS FIXTURE USED TO SAY "both were live". A dotted card path put its whole block back in
+    /// the catch-all fold, so twenty-two values had two live editors on one page: measured on the
+    /// catalog, and the first three tests below are that rule.
+    /// </para>
+    /// <para>
+    /// The second is a rule about a card nobody has written. The control layer builds a plain
+    /// <c>TextField</c> for a curated string, which would drop the drawer on a field this framework
+    /// draws itself — but not one of the twenty-five fields carrying those marks is named by a card
+    /// anywhere, so no picker has ever disappeared. The last two tests hold the rule to the real
+    /// marked fields rather than to a story about them, and they are worth running because the day
+    /// somebody writes that card is the day it stops being theory.
+    /// </para>
     /// </remarks>
     internal sealed class DimensionCuratedFieldTests
     {
@@ -109,12 +119,11 @@ namespace ExpandNullforge.EditorTools
         /// against, so no drawer is stripped from a curated row.
         /// </summary>
         /// <remarks>
-        /// <c>DimensionsApiControls.HasFrameworkDrawer</c> decides "does this framework draw this
+        /// <c>DimensionsApiControls.FrameworkDrawsField</c> decides "does this framework draw this
         /// field" by asking whether any of its <c>PropertyAttribute</c>s comes from the assembly
         /// the authoring marks live in. That is the whole rule, and it is only correct while every
         /// mark with a drawer is declared there. A mark declared in the editor assembly instead
-        /// would compile, draw perfectly everywhere else, and silently vanish from curated rows —
-        /// which is exactly the bug this was written to close.
+        /// would compile, draw perfectly everywhere else, and be dropped from a curated row.
         /// </remarks>
         [Test]
         public void EveryAttributeThisFrameworkDrawsLivesWithTheAuthoringMarks()
@@ -187,6 +196,134 @@ namespace ExpandNullforge.EditorTools
         /// but a handful of rows on every page would be pushed through <c>PropertyField</c> and the
         /// studio's own controls would disappear from the whole window.
         /// </remarks>
+        /// <summary>
+        /// The rule answers yes for every field this framework marks, and no for a plain one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THIS IS THE TEST THAT GIVES THE RULE A SUBJECT. No curated card names a marked field, so
+        /// nothing in the studio exercises <c>FrameworkDrawsField</c> — a check written, shipped and
+        /// reached by nothing is this project's own recurring failure, and a guard for a card
+        /// somebody may write one day is only worth keeping if the rule itself is known to work.
+        /// The subjects are the real fields in the real assembly, found the same way the control
+        /// layer finds them.
+        /// </para>
+        /// <para>
+        /// It walks the assembly rather than a list of names, so a mark added to a new field is
+        /// covered without touching this, and the floor below fails the run if the walk ever stops
+        /// finding any.
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void TheDrawerRuleAnswersYesForEveryFieldThisFrameworkMarks()
+        {
+            System.Reflection.Assembly authoring =
+                typeof(ExpandNullforge.Authoring.DimensionSoundNameAttribute).Assembly;
+
+            List<string> answeredNo = new List<string>();
+            List<string> unmarkedAnsweredYes = new List<string>();
+            int marked = 0;
+            int unmarked = 0;
+
+            const System.Reflection.BindingFlags Flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly;
+
+            Type[] types;
+            try
+            {
+                types = authoring.GetTypes();
+            }
+            catch (System.Reflection.ReflectionTypeLoadException loadFailure)
+            {
+                List<Type> loaded = new List<Type>();
+                for (int i = 0; i < loadFailure.Types.Length; i++)
+                {
+                    if (loadFailure.Types[i] != null)
+                    {
+                        loaded.Add(loadFailure.Types[i]);
+                    }
+                }
+
+                types = loaded.ToArray();
+            }
+
+            for (int t = 0; t < types.Length; t++)
+            {
+                System.Reflection.FieldInfo[] fields = types[t].GetFields(Flags);
+                for (int f = 0; f < fields.Length; f++)
+                {
+                    if (!CarriesAMarkFrom(fields[f], authoring))
+                    {
+                        // One plain field per type is enough to prove the rule says no as well as
+                        // yes; walking every field in the assembly would say the same thing slower.
+                        if (unmarked < 200 &&
+                            fields[f].GetCustomAttributes(typeof(SerializeField), true).Length > 0)
+                        {
+                            unmarked++;
+                            if (DimensionsApiControls.FrameworkDrawsField(types[t], fields[f].Name))
+                            {
+                                unmarkedAnsweredYes.Add(types[t].Name + "." + fields[f].Name);
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    marked++;
+                    if (!DimensionsApiControls.FrameworkDrawsField(types[t], fields[f].Name))
+                    {
+                        answeredNo.Add(types[t].Name + "." + fields[f].Name);
+                    }
+                }
+            }
+
+            Assert.That(
+                marked,
+                Is.GreaterThan(0),
+                "No field in " + authoring.GetName().Name + " carries one of this framework's own " +
+                "field marks, so this test checked nothing. Either the marks were removed — in " +
+                "which case DimensionsApiControls.FrameworkDrawsField and this test can go — or " +
+                "the walk is broken.");
+            Assert.That(
+                unmarked,
+                Is.GreaterThan(0),
+                "No unmarked serialized field was found to check the other direction against, so " +
+                "a rule that answered yes to everything would pass this.");
+            Assert.That(
+                answeredNo,
+                Is.Empty,
+                "These fields carry a mark this framework draws and the control layer says it does " +
+                "not draw them, so a curated card for one would show a plain box with no Browse " +
+                "button: " + string.Join(", ", answeredNo.ToArray()));
+            Assert.That(
+                unmarkedAnsweredYes,
+                Is.Empty,
+                "These fields carry no mark of this framework's and the control layer says it " +
+                "draws them, so every one of them would be pushed through PropertyField and lose " +
+                "the studio's own control: " + string.Join(", ", unmarkedAnsweredYes.ToArray()));
+        }
+
+        private static bool CarriesAMarkFrom(
+            System.Reflection.FieldInfo field, System.Reflection.Assembly authoring)
+        {
+            // Fully qualified: NUnit ships a PropertyAttribute of its own and this fixture has both
+            // namespaces open.
+            object[] marks =
+                field.GetCustomAttributes(typeof(UnityEngine.PropertyAttribute), true);
+            for (int i = 0; i < marks.Length; i++)
+            {
+                if (marks[i].GetType().Assembly == authoring)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         [Test]
         public void UnitysOwnMarksAreNotMistakenForThisFrameworksMarks()
         {

@@ -1414,7 +1414,11 @@ namespace ExpandNullforge.EditorTools
             try
             {
                 ObjectAuthoring obj = markerRoot.AddComponent<ObjectAuthoring>();
-                obj.objectName = naming.QualifyGenerated(request.CreatureId + "-map-marker");
+                // The suffix is shared with DimensionGeneratedObjectIds.ObjectsMade, which is what
+                // tells the world-load check this pin exists. Two copies of the string would drift,
+                // and a drifted one reads as an id nothing answers to.
+                obj.objectName = naming.QualifyGenerated(
+                    request.CreatureId + DimensionGeneratedObjectIds.BossMapMarkerSuffix);
                 obj.objectType = ObjectType.PlaceablePrefab;
                 obj.initialAmount = 1;
 
@@ -1474,7 +1478,11 @@ namespace ExpandNullforge.EditorTools
             try
             {
                 ObjectAuthoring obj = circleRoot.AddComponent<ObjectAuthoring>();
-                obj.objectName = naming.QualifyGenerated(request.CreatureId + "-summon-circle");
+                // Shared with DimensionGeneratedObjectIds.ObjectsMade for the same reason as the
+                // map pin above: this circle is the object the companion table was written for, and
+                // it can only be checked if both sides spell it the same way.
+                obj.objectName = naming.QualifyGenerated(
+                    request.CreatureId + DimensionGeneratedObjectIds.BossSummonCircleSuffix);
                 obj.objectType = ObjectType.PlaceablePrefab;
                 obj.initialAmount = 1;
 

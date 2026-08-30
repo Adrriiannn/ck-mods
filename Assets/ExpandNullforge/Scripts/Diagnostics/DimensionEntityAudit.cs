@@ -265,9 +265,18 @@ namespace ExpandNullforge.Diagnostics
 
             text.Append("Of that set this object already has: ");
             text.Append(finding.Present.Count == 0 ? "nothing" : Join(finding.Present));
-            text.Append(". Fix: generate this object again — the generator's CloseTheGaps pass "
-                + "fills the companions in — and if it comes back the same, the gap is in the "
-                + "generator rather than in the content.");
+            // NO PASS IS NAMED, AND THE ONE IT USED TO NAME WAS WRONG FOR FOUR OF THE RULES. It
+            // said "the generator's CloseTheGaps pass fills the companions in", which is true of
+            // the item, creature, plant, critter, container, workbench, world-object and vehicle
+            // paths and of nothing else: neither DimensionProjectileGenerator nor
+            // DimensionExplosionGenerator calls CloseTheGaps, so for the ProjectileCD,
+            // MortarProjectileCD, ExplosionCD and SequenceExplosiveCD rules the reader was told to
+            // run a pass that does not exist for their object. What is true of every rule is the
+            // instruction below.
+            text.Append(". Fix: generate this object again and see whether it comes back the same. "
+                + "Most generators close a gap like this as they finish an object; if this one "
+                + "survives a regenerate, the gap is in the generator for that kind of thing "
+                + "rather than in what was authored.");
             return text.ToString();
         }
 

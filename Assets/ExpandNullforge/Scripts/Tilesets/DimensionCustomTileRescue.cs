@@ -66,6 +66,21 @@ namespace ExpandNullforge.Tilesets
         private static readonly Dictionary<ulong, Dictionary<int2, PendingSubMap>> PendingByWorld =
             new Dictionary<ulong, Dictionary<int2, PendingSubMap>>();
 
+        /// <summary>
+        /// The worlds that have actually taken layers out of a submap.
+        /// </summary>
+        /// <remarks>
+        /// THE TALLY IS PROCESS-WIDE AND THE REPORT IS PER WORLD, which without this made a host
+        /// say the wrong thing about the wrong world. <c>DimensionLog.Count</c> keys on the channel
+        /// and nothing else, so the captured/restored pair is one bucket for the whole process,
+        /// while <see cref="Clear"/> is called once per world as it goes away — and the capture and
+        /// restore systems are server-side, so a client world contributes nothing and used to
+        /// arrive first, drain the server's tally and print it under ClientWorld0. A mid-flight
+        /// difference between the two counts then reads as "custom terrain will be gone", about a
+        /// world that never held any. A world that never captured says nothing and drains nothing.
+        /// </remarks>
+        private static readonly HashSet<ulong> WorldsThatCaptured = new HashSet<ulong>();
+
         private static ulong KeyOf(World world)
         {
             // A null world would mean a system ticked without one, which cannot happen; bucket 0 keeps
@@ -88,6 +103,7 @@ namespace ExpandNullforge.Tilesets
             }
 
             ulong key = KeyOf(world);
+            WorldsThatCaptured.Add(key);
             Dictionary<int2, PendingSubMap> bucket;
             if (!PendingByWorld.TryGetValue(key, out bucket))
             {
@@ -175,6 +191,7 @@ namespace ExpandNullforge.Tilesets
         {
             ReportTheBracket(world);
             PendingByWorld.Remove(KeyOf(world));
+            WorldsThatCaptured.Remove(KeyOf(world));
         }
 
         /// <summary>
@@ -190,6 +207,14 @@ namespace ExpandNullforge.Tilesets
         /// </remarks>
         private static void ReportTheBracket(World world)
         {
+            if (!WorldsThatCaptured.Contains(KeyOf(world)))
+            {
+                // This world took nothing out of a submap, so the tally is somebody else's and
+                // draining it here would both mis-attribute the line and leave the world that did
+                // the work with nothing to report.
+                return;
+            }
+
             int captured = DimensionLog.CountOf(DimensionLogChannels.Tileset, "captured");
             int restored = DimensionLog.CountOf(DimensionLogChannels.Tileset, "restored");
             if (captured == 0 && restored == 0)

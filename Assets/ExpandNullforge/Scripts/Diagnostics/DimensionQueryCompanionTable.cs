@@ -47,6 +47,34 @@ namespace ExpandNullforge.Diagnostics
     /// passed.
     /// </para>
     /// <para>
+    /// THREE KINDS OF RECORDED DEFECT CANNOT BE WRITTEN AS A ROW HERE AT ALL, and the reason is the
+    /// same each time: this asks one question, "the object carries A, does it also carry B". Adding
+    /// a row that cannot answer the question it is named after would be worse than the gap.
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>A component a later pass DELETED</b> — the recorded case is
+    /// <c>CooldownAuthoring</c> removed by <c>ApplyItemEffects</c> after the generator wrote it.
+    /// With the component gone there is no trigger, and no other component says it was ever meant
+    /// to be there: an item whose creator left the cooldown blank and an item whose cooldown was
+    /// destroyed produce the same entity. <c>CooldownCD</c> is also never in an
+    /// <c>EntityQuery</c> — <c>EquipmentSlot</c> reads it through a
+    /// <c>ComponentLookup&lt;CooldownCD&gt;</c> off the item's prefab — so there is no companion
+    /// set to be missing from. Catching this needs the generator to record what it MEANT to write,
+    /// which is a change to every generator pass rather than a row.</item>
+    /// <item><b>A value that is wrong rather than absent</b> — a <c>lootTableID</c> left pointing at
+    /// a renamed table, a <c>NearbyEntitiesTrackerCD</c> with radius 0 and mask 0, a collider on the
+    /// wrong filter. The census wrote this down about the tracker in as many words: a presence check
+    /// finds it and moves on. Every loot rule in <c>DropLootSystem</c> is in the same position: the
+    /// companions its jobs demand beside <c>DropsLootFromLootTableCD</c> — <c>ObjectDataCD</c>,
+    /// <c>LocalTransform</c>, <c>RandomCD</c>, <c>EntityDestroyedCD</c>,
+    /// <c>StartDroppingLootCD</c> — are all added by converters that fire on any
+    /// <c>ObjectAuthoring</c>, so a rule for it could never fail while the defect it was asked to
+    /// catch is a string.</item>
+    /// <item><b>A body nothing queries for</b> — a placed object with no <c>PhysicsCollider</c> is
+    /// unhittable, unmineable and invisible to every cast, and casts are not queries.
+    /// <c>ColliderVariationCD</c> below is the only place that gap shows up as a query gap.</item>
+    /// </list>
+    /// <para>
     /// A ROW'S <c>ReadingSystem</c> IS WHATEVER ACTUALLY DEMANDS THE SET, which is not always one
     /// system's <c>EntityQuery</c>. Core Keeper's creature states are entered through
     /// <c>IStateRequester</c> gates, and the gate asks for components the state's own system does
@@ -156,10 +184,23 @@ namespace ExpandNullforge.Diagnostics
             //
             // ObjectDataCD is on every converted prefab, so this rule looks at everything the
             // audit is handed. That is deliberate: ObjectTypeCD has exactly two producers — Core
-            // Keeper's EntityMonoBehaviourDataConverter, which no generated object goes through,
-            // and this framework's own DimensionObjectTypeAuthoring, which only the creature and
-            // item generators add. A generated plant, chest, workbench, vehicle, critter or world
-            // object comes out without it and drops out of every query that names it.
+            // Keeper's EntityMonoBehaviourDataConverter, which no generated object goes through
+            // (ObjectConverter writes ObjectDataCD and not ObjectTypeCD,
+            // ck-db/Pug.ECS.Conversion/ObjectConverter.cs:18-30), and this framework's own
+            // DimensionObjectTypeAuthoring. So an object that misses the one line that adds it
+            // drops out of every query that names the type, and nothing else would say so.
+            //
+            // WHICH GENERATORS ADD IT, MEASURED RATHER THAN REMEMBERED. This comment used to say
+            // "only the creature and item generators", and that "a generated plant, chest,
+            // workbench, vehicle, critter or world object comes out without it" — which was true of
+            // the tree the census was taken on and is not true of this one.
+            // DimensionQueryCompanions.CarriesWhatItIsOntoTheRunningObject is called by
+            // FinishACritter, by both overloads of FinishAWorldObject (containers, workbenches,
+            // vehicles and world objects all go through it) and directly by the plant generator, so
+            // every one of those kinds carries it today. The rule stays because the mechanism is
+            // what it guards: a new generator, or a kind that stops going through the finisher,
+            // fails here rather than in a player's world.
+
             new Rule(
                 ObjectData,
                 new[] { ObjectType },
@@ -344,6 +385,30 @@ namespace ExpandNullforge.Diagnostics
                 "the summoning circle will never fire"),
 
             // ---- world objects -------------------------------------------------------------
+            //
+            // THE ONE PLACE A PLACED OBJECT'S MISSING BODY IS A QUERY GAP RATHER THAN A SILENCE.
+            // Every generated world object, container, workbench and vehicle used to come out with
+            // no PhysicsCollider, and almost all of what that cost — nothing could hit it, mine it,
+            // dig it or find it with a cast — is invisible to a table like this one, because casts
+            // are not EntityQueries. ColliderVariationSystem's job IS a query, and it is exactly
+            // ColliderVariationCD + PhysicsCollider + ObjectDataCD
+            // (ck-db/Pug.Other/ColliderVariationSystem.cs:365-368), so a door whose collider never
+            // swaps is expressible and is written here.
+            //
+            // NOTHING THIS FRAMEWORK GENERATES CARRIES THE TRIGGER TODAY, and saying so is part of
+            // the row. DoorConverter adds ColliderVariationCD only when DoorAuthoring
+            // .changesColliderByVariation is true, and DimensionWorldObjectGenerator sets it false
+            // on purpose — one prefab per object means there is no second shape to swap to. So this
+            // rule guards that decision rather than reporting on content: flip that flag back on,
+            // or write a generator that produces a two-shape door, and a missing body stops being
+            // silent.
+            new Rule(
+                N<ColliderVariationCD>("ColliderVariationCD"),
+                new[] { Collider, ObjectData },
+                "ColliderVariationSystem.UpdateColliderByVariationJob",
+                "WoodDoorEntity",
+                "the door's shape never changes when it opens or shuts, so a player is blocked by a "
+                    + "door that looks open or walks through one that looks shut"),
             new Rule(
                 N<ChangeVariationTriggerCD>("ChangeVariationTriggerCD"),
                 new[] { N<Interaction.TriggerUseInteractionBuffer>("TriggerUseInteractionBuffer"),

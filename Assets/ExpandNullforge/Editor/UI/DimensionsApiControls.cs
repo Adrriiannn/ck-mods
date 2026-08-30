@@ -172,12 +172,23 @@ namespace ExpandNullforge.EditorTools
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A CURATED ROW USED TO BE WORSE THAN AN UNCURATED ONE. <see cref="ControlFor"/> answers a
+        /// WHAT THIS IS FOR, SAID WITHOUT OVERSTATING IT. <see cref="ControlFor"/> answers a
         /// string with a plain <c>TextField</c>, an int with an <c>IntegerField</c> and a bool with
-        /// a <c>Toggle</c>, and none of those asks Unity for the field's drawer. So the four
-        /// name pickers — sound, puff, skill, effect — appeared on exactly the fields nobody had
-        /// written a card for, and vanished the moment somebody wrote one. Fourteen hundred sound
-        /// names, and the Browse button was on the row nobody had looked at.
+        /// a <c>Toggle</c>, and none of those asks Unity for the field's drawer. So a curated card
+        /// written for a field this framework draws itself would lose its Browse button, while the
+        /// same field left to the "Everything else" fold keeps it, because that fold builds a
+        /// <c>PropertyField</c>.
+        /// </para>
+        /// <para>
+        /// NO CARD NAMES SUCH A FIELD TODAY, and that is measured rather than assumed: twenty-five
+        /// fields in the authoring assembly carry one of the four marks, twenty-four distinct
+        /// names, and not one of them is a card path in <c>DimensionStageCatalog</c> or on any
+        /// stage page. So this changes nothing that is drawn now. This comment used to say the
+        /// pickers "vanished the moment somebody wrote one", which claimed a defect nothing has
+        /// ever been able to reach; what is true is that the pickers are only reached through the
+        /// fold, and this is the rule that keeps them when a card is written for one.
+        /// <c>DimensionCuratedFieldTests</c> runs the rule against those real marked fields, so the
+        /// predicate has a subject even while no card does.
         /// </para>
         /// <para>
         /// WHAT IS ASKED IS "does this framework draw it", not "does anything draw it". The mark
@@ -205,14 +216,34 @@ namespace ExpandNullforge.EditorTools
                 return false;
             }
 
-            string key = target.GetType().FullName + "|" + property.propertyPath;
+            return FrameworkDrawsField(target.GetType(), property.propertyPath);
+        }
+
+        /// <summary>
+        /// The same question about a type and a serialized path, with no <c>SerializedProperty</c>.
+        /// </summary>
+        /// <remarks>
+        /// SPLIT OUT SO THE RULE CAN BE RUN AT ALL. <see cref="HasFrameworkDrawer"/> needs a live
+        /// <c>SerializedProperty</c>, which needs Unity, so the decision this change turns on could
+        /// only ever be read rather than executed. This half is plain reflection over a type and a
+        /// path: the test fixture calls it on the real marked fields, and so can a console harness
+        /// outside the editor.
+        /// </remarks>
+        internal static bool FrameworkDrawsField(System.Type owner, string propertyPath)
+        {
+            if (owner == null || string.IsNullOrEmpty(propertyPath))
+            {
+                return false;
+            }
+
+            string key = owner.FullName + "|" + propertyPath;
             bool marked;
             if (frameworkDrawnFields.TryGetValue(key, out marked))
             {
                 return marked;
             }
 
-            marked = IsMarked(FieldOf(target.GetType(), property.propertyPath));
+            marked = IsMarked(FieldOf(owner, propertyPath));
             frameworkDrawnFields[key] = marked;
             return marked;
         }

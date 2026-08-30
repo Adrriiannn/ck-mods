@@ -344,6 +344,137 @@ namespace ExpandNullforge.EditorTools
                 "A missing row is reported as a failure, so the pass can fail on nothing.");
         }
 
+        /// <summary>
+        /// A row counts what would have WOKEN the system, or it counts nothing.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// THE FALSE-ALARM RULE, WRITTEN DOWN. <see cref="DimensionSelfAudit.WorthReportingAsNeverRan"/>
+        /// turns "this system has never updated" into a Problem as soon as its row can count
+        /// something, and that is only sound while the thing counted is the thing that makes it
+        /// update. Two rows counted content instead:
+        /// </para>
+        /// <list type="bullet">
+        /// <item><c>DimensionBlastFireSystem</c> waits on a live blast and counted the explosives a
+        /// pack DECLARED, so any pack with one bomb in it produced a failure line five seconds into
+        /// every world where nobody had set one off — which is every ordinary session;</item>
+        /// <item><c>DimensionCustomTileCaptureSystem</c> waits on a SERIALIZED submap and counted
+        /// the tileset registry, so a freshly generated world — which has nothing serialized yet —
+        /// produced a failure line about terrain that was never at risk.</item>
+        /// </list>
+        /// <para>
+        /// Their siblings keep their counts and are named here beside them, because the difference
+        /// is the whole point: <c>DimensionCustomTileRestoreSystem</c> has no
+        /// <c>RequireForUpdate</c> at all and <c>DimensionExplosiveHydrationSystem</c> waits on the
+        /// object database, so both tick from the first frame and a zero on either really is a
+        /// fault.
+        /// </para>
+        /// </remarks>
+        [Test]
+        public void ARowOnlyCountsWhatWouldHaveWokenItsSystem()
+        {
+            string[] wokenByAnEvent =
+            {
+                "DimensionBlastFireSystem",
+                "DimensionCustomTileCaptureSystem",
+            };
+            string[] tickEveryFrame =
+            {
+                "DimensionCustomTileRestoreSystem",
+                "DimensionExplosiveHydrationSystem",
+            };
+
+            Dictionary<string, DimensionSystemRoster.Row> byName =
+                new Dictionary<string, DimensionSystemRoster.Row>(StringComparer.Ordinal);
+            DimensionSystemRoster.Row[] rows = DimensionSystemRoster.All;
+            for (int i = 0; i < rows.Length; i++)
+            {
+                byName[rows[i].Name] = rows[i];
+            }
+
+            for (int i = 0; i < wokenByAnEvent.Length; i++)
+            {
+                DimensionSystemRoster.Row row;
+                Assert.IsTrue(
+                    byName.TryGetValue(wokenByAnEvent[i], out row),
+                    wokenByAnEvent[i] + " has no roster row, so this test has no subject.");
+                Assert.IsFalse(
+                    DimensionSelfAudit.WorthReportingAsNeverRan(row),
+                    wokenByAnEvent[i] + " can be reported for never having run. It waits on "
+                    + "something that happens in play, not on something a pack registers, so on an "
+                    + "ordinary session it correctly never runs and this would be a failure line "
+                    + "about nothing. Leave its CountWork null.");
+            }
+
+            int countable = 0;
+            for (int i = 0; i < tickEveryFrame.Length; i++)
+            {
+                DimensionSystemRoster.Row row;
+                Assert.IsTrue(
+                    byName.TryGetValue(tickEveryFrame[i], out row),
+                    tickEveryFrame[i] + " has no roster row, so this test has no subject.");
+                Assert.IsNotNull(
+                    row.CountWork,
+                    tickEveryFrame[i] + " no longer counts what is waiting on it. It updates from "
+                    + "the first frame, so a zero really is a fault and giving that up loses a real "
+                    + "signal.");
+                countable++;
+            }
+
+            Assert.Greater(
+                countable,
+                0,
+                "No row was checked in the other direction, so a roster with every count removed "
+                + "would pass this.");
+        }
+
+        /// <summary>
+        /// The tile-rescue bracket is asked about in the world that captures, and nowhere else.
+        /// </summary>
+        /// <remarks>
+        /// THE ONE FALSE ALARM THE DIAGNOSTICS WAVE INTRODUCED. The capture system was made
+        /// <c>[WorldSystemFilter(ServerSimulation)]</c> and the client-side creation call was
+        /// removed, both correctly — but this check was still run for every armed world, and
+        /// <c>SerializationSystemGroup</c> exists in a client world. So on every client world it
+        /// found the group, failed to find the capture system, and printed that custom blocks would
+        /// be gone on the next load and that <c>EnsureSystemOrdering</c> had failed to run. Nothing
+        /// was lost, and the fix it named had been deliberately deleted.
+        /// </remarks>
+        [Test]
+        public void TheTileRescueBracketIsOnlyCheckedInTheWorldThatCapturesTiles()
+        {
+            string audit = WithoutComments(
+                DimensionFrameworkSourceScanner.ReadByName("DimensionSelfAudit.cs"));
+            Assert.IsFalse(
+                string.IsNullOrEmpty(audit),
+                "DimensionSelfAudit.cs is not in the shipped sources, so this proved nothing.");
+
+            int method = audit.IndexOf(
+                "private static void CheckTileRescueBracket", StringComparison.Ordinal);
+            Assert.Greater(
+                method,
+                0,
+                "CheckTileRescueBracket is gone, so this test has no subject.");
+
+            int peer = audit.IndexOf("armed.IsClient", method, StringComparison.Ordinal);
+            int group = audit.IndexOf(
+                "GetExistingSystemManaged<SerializationSystemGroup>", method, StringComparison.Ordinal);
+
+            Assert.Greater(
+                peer,
+                0,
+                "The bracket check never asks which world it is in. The capture system is declared "
+                + "for the server simulation only and SerializationSystemGroup exists in a client "
+                + "world, so on every client world this reports that custom terrain will be lost "
+                + "and names a repair call that was deliberately removed.");
+            Assert.Less(
+                peer,
+                group,
+                "The bracket check asks which world it is in only after it has already looked for "
+                + "the group and the capture system, so the client-world finding is produced before "
+                + "anything can stop it.");
+        }
+
         [Test]
         public void EveryCompanionRuleCanActuallyFail()
         {

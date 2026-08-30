@@ -40,9 +40,12 @@ namespace ExpandNullforge.EditorTools
                 Is.GreaterThan(DimensionSandboxAssemblyGuard.ShippedAssemblies.Length),
                 "No consumer mod assembly was added to the framework's own two, so the C# this " +
                 "framework writes into somebody else's project was not read here at all. " +
-                DimensionSandboxGuard.ConsumerSetProblem(
-                    Application.dataPath,
-                    DimensionSandboxGuard.ConsumerModRoots(Application.dataPath).Count));
+                // WHY THE COUNT IS SPELLED OUT RATHER THAN LEFT TO ConsumerSetProblem. That
+                // sentence only exists for the zero case and answers null otherwise, so with one
+                // consumer found and no assembly name for it — a mod folder with no .asmdef — this
+                // message ended mid-explanation and then said no consumer had been found, which was
+                // the opposite of what happened.
+                WhyNoConsumerAssembly(Application.dataPath));
 
             List<DimensionSandboxGuard.Finding> findings = new List<DimensionSandboxGuard.Finding>();
             int scanned = 0;
@@ -76,6 +79,48 @@ namespace ExpandNullforge.EditorTools
                 "that: only then add it to the compiler-emitted list in Assets/" +
                 DimensionSandboxGuard.DenyListPath + ", with the note that says where." +
                 Detail(findings));
+        }
+
+        /// <summary>
+        /// Why the framework's own two assemblies were the only ones to scan, in a whole sentence.
+        /// </summary>
+        /// <remarks>
+        /// Three different states end here and they need three different answers: no consumer mod
+        /// in the project at all, a consumer mod that ships nothing, and a consumer mod with no
+        /// assembly definition — whose code goes into Assembly-CSharp and which the assembly half
+        /// of this guard therefore cannot name. Reporting the first sentence for all three is what
+        /// made this message say "no consumer found" about a project that had one.
+        /// </remarks>
+        private static string WhyNoConsumerAssembly(string assetsPath)
+        {
+            List<string> roots = DimensionSandboxGuard.ConsumerModRoots(assetsPath);
+            string noneAtAll = DimensionSandboxGuard.ConsumerSetProblem(assetsPath, roots.Count);
+            if (noneAtAll != null)
+            {
+                return noneAtAll;
+            }
+
+            List<string> unnamed = new List<string>();
+            for (int i = 0; i < roots.Count; i++)
+            {
+                if (string.IsNullOrEmpty(DimensionSandboxGuard.ShippedAssemblyNameOf(roots[i])))
+                {
+                    unnamed.Add(roots[i]);
+                }
+            }
+
+            if (unnamed.Count == roots.Count)
+            {
+                return roots.Count + " consumer mod(s) were found and not one of them names an " +
+                       "assembly this check could read: " + string.Join(", ", unnamed.ToArray()) +
+                       ". A mod folder with no .asmdef, or one marked \"includePlatforms\": " +
+                       "[\"Editor\"], compiles into Assembly-CSharp or into nothing, and either " +
+                       "way there is no DLL here to open.";
+            }
+
+            return roots.Count + " consumer mod(s) were found and AssembliesToScan added none of " +
+                   "them, which is a fault in AssembliesToScan rather than in the project: " +
+                   string.Join(", ", roots.ToArray());
         }
 
         /// <summary>
