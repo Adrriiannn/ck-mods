@@ -608,6 +608,188 @@ namespace ExpandNullforge.EditorTools
                 + "scope in the first place.");
         }
 
+        /// <summary>
+        /// The kinds whose <c>ObjectTypeCD</c> arrives from the generator's finishing pass rather
+        /// than from conditions support, by the component that says which kind it is.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// WHY THESE FOUR AND NOT THE OTHER FOUR. Eight kinds carry <c>ObjectTypeCD</c>. The
+        /// environmental rule is triggered by <c>BurningConditionCD</c>, which only arrives with
+        /// <c>SupportsConditionsAuthoring</c>, and only the container, creature, item and
+        /// world-object generators add that. So the rule cannot fire on a crop, a critter, a
+        /// station or a vehicle no matter what is wrong with one, and narrowing it — which was
+        /// right — left those four with nothing watching the pairing at all.
+        /// </para>
+        /// <para>
+        /// The names are the trigger names in the table, so a rule that is deleted, or one whose
+        /// trigger is quietly swapped for something the kind does not carry, fails here.
+        /// </para>
+        /// </remarks>
+        private static readonly string[] KindsWhoseTypeComesFromTheFinisher =
+        {
+            "GrowingCD", "CritterCD", "CraftingCD", "BoatCD, MinecartCD or VehicleCD"
+        };
+
+        [Test]
+        public void EveryKindWhoseTypeComesFromTheFinisherIsGuarded()
+        {
+            DimensionQueryCompanionTable.Rule[] rules = DimensionQueryCompanionTable.All;
+            Assert.GreaterOrEqual(
+                rules.Length,
+                FewestPlausibleCompanionRules,
+                "The companion table is empty or nearly so, so this test walked nothing.");
+
+            List<string> unguarded = new List<string>();
+            for (int k = 0; k < KindsWhoseTypeComesFromTheFinisher.Length; k++)
+            {
+                string kind = KindsWhoseTypeComesFromTheFinisher[k];
+                bool guarded = false;
+                for (int i = 0; i < rules.Length && !guarded; i++)
+                {
+                    if (rules[i].Trigger.Name != kind)
+                    {
+                        continue;
+                    }
+
+                    for (int n = 0; n < rules[i].AlsoNeeds.Length; n++)
+                    {
+                        if (rules[i].AlsoNeeds[n].Name == "ObjectTypeCD")
+                        {
+                            guarded = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!guarded)
+                {
+                    unguarded.Add(kind);
+                }
+            }
+
+            Assert.IsEmpty(
+                unguarded,
+                "Nothing in the table would notice if these kinds stopped carrying ObjectTypeCD: "
+                + string.Join(", ", unguarded.ToArray())
+                + ". They get it from their generator's finishing pass and never get a condition "
+                + "buffer, so the BurningConditionCD rule cannot reach them and their own rows are "
+                + "the only thing watching.");
+        }
+
+        [Test]
+        public void TheObjectCheckSaysWhatItDidNotLookAt()
+        {
+            // The case is a content pack built before the framework kept a list of everything it
+            // generated: its items resolve, the wider list is empty, and the summary used to end
+            // "all of them carry what the systems that read them require".
+            DimensionEntityAudit.Result itemsOnly = new DimensionEntityAudit.Result();
+            itemsOnly.ResolvedItems = 2;
+            itemsOnly.ItemSubjects = 2;
+            itemsOnly.LedgerSubjects = 0;
+            itemsOnly.Checked = 2;
+            itemsOnly.RulesInTable = DimensionQueryCompanionTable.All.Length;
+            itemsOnly.RulesApplied = 1;
+            itemsOnly.WithoutAPrefab = new List<string>();
+            itemsOnly.Findings = new List<DimensionEntityAudit.Finding>();
+
+            Assert.GreaterOrEqual(
+                itemsOnly.RulesInTable,
+                FewestPlausibleCompanionRules,
+                "The companion table is empty, so the sentence under test has nothing to be a "
+                + "summary of.");
+
+            string said = DimensionSelfAudit.WhatTheObjectCheckCoveredAndDidNot(
+                itemsOnly,
+                "Server world");
+
+            StringAssert.Contains(
+                "NOT LOOKED AT",
+                said,
+                "The summary of an items-only walk does not say that is what it was: " + said);
+            StringAssert.Contains(
+                "2 items and nothing else",
+                said,
+                "It does not say how narrow the subject list was: " + said);
+            StringAssert.DoesNotContain(
+                "all of them carry what the systems that read them require",
+                said,
+                "The old unqualified verdict is back: " + said);
+            StringAssert.Contains(
+                "1 of them applied",
+                said,
+                "It reports the table's length without saying how much of it was a test of "
+                + "anything: " + said);
+        }
+
+        [Test]
+        public void TheObjectCheckWillNotCallAWalkCleanWhenNoRuleApplied()
+        {
+            // Every rule passing because none of them asked anything is the same shape as an empty
+            // subject list, and it produced the same congratulation.
+            DimensionEntityAudit.Result nothingApplied = new DimensionEntityAudit.Result();
+            nothingApplied.ResolvedItems = 4;
+            nothingApplied.ItemSubjects = 1;
+            nothingApplied.LedgerSubjects = 3;
+            nothingApplied.Checked = 4;
+            nothingApplied.RulesInTable = DimensionQueryCompanionTable.All.Length;
+            nothingApplied.RulesApplied = 0;
+            nothingApplied.WithoutAPrefab = new List<string>();
+            nothingApplied.Findings = new List<DimensionEntityAudit.Finding>();
+
+            Assert.GreaterOrEqual(
+                nothingApplied.RulesInTable,
+                FewestPlausibleCompanionRules,
+                "The companion table is empty, so the sentence under test has nothing to be a "
+                + "summary of.");
+
+            string said = DimensionSelfAudit.WhatTheObjectCheckCoveredAndDidNot(
+                nothingApplied,
+                "Server world");
+
+            StringAssert.Contains(
+                "not as a clean result",
+                said,
+                "A walk where no rule applied to anything is still reported as a pass: " + said);
+            StringAssert.DoesNotContain(
+                "was there",
+                said,
+                "It claims the objects satisfied something when no rule looked at them: " + said);
+        }
+
+        [Test]
+        public void TheObjectCheckKeepsQuietAboutScopeWhenTheListIsWhole()
+        {
+            // The caveat has to be worth reading, which means it cannot be on every line.
+            DimensionEntityAudit.Result whole = new DimensionEntityAudit.Result();
+            whole.ResolvedItems = 12;
+            whole.ItemSubjects = 4;
+            whole.LedgerSubjects = 8;
+            whole.Checked = 12;
+            whole.RulesInTable = DimensionQueryCompanionTable.All.Length;
+            whole.RulesApplied = 6;
+            whole.WithoutAPrefab = new List<string>();
+            whole.Findings = new List<DimensionEntityAudit.Finding>();
+
+            Assert.Greater(
+                whole.LedgerSubjects,
+                0,
+                "This test is about a subject list that is not items-only, so an empty one would "
+                + "make it assert nothing.");
+
+            string said = DimensionSelfAudit.WhatTheObjectCheckCoveredAndDidNot(whole, "Server world");
+
+            StringAssert.DoesNotContain(
+                "NOT LOOKED AT",
+                said,
+                "A pack whose whole generated list was in front of the check is told it was not: "
+                + said);
+            StringAssert.Contains(
+                "6 of them applied",
+                said,
+                "It does not say how much of the table was a test of anything: " + said);
+        }
+
         [Test]
         public void APatchTargetOnlyOneSideOfTheGameRunsSaysWhichSide()
         {

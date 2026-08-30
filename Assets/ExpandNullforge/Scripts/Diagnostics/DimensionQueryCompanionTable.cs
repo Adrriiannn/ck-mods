@@ -183,6 +183,43 @@ namespace ExpandNullforge.Diagnostics
             N<NearbyEntitiesTrackerCD>("NearbyEntitiesTrackerCD");
         private static readonly Need ObjectType = N<ObjectTypeCD>("ObjectTypeCD");
 
+        // The four markers below say which generator finished an object, and they exist so that the
+        // ObjectTypeCD pairing can be guarded on the four kinds the environmental rule cannot see.
+        // Each is written by one generator and by nothing else in this framework.
+
+        /// <summary>A crop, either half of it.</summary>
+        /// <remarks>
+        /// <c>GrowingCD</c> rather than <c>PlantCD</c> because a crop is two objects and only one
+        /// of them is the plant: <c>DimensionSeedConverter</c> and
+        /// <c>DimensionPlantProduceConverter</c> both emit the growing timer, so this one probe
+        /// covers the seed and the plant, and both go through the same
+        /// <c>DimensionPlantGenerator.BuildPrefab</c> pass that adds the type.
+        /// </remarks>
+        private static readonly Need ItIsACrop = N<GrowingCD>("GrowingCD");
+
+        /// <summary>A critter.</summary>
+        private static readonly Need ItIsACritter = N<CritterCD>("CritterCD");
+
+        /// <summary>A station, or anything else built to craft.</summary>
+        /// <remarks>
+        /// It reaches further than the workbench generator — a container or a world object that a
+        /// drill can craft at gets <c>CraftingAuthoring</c> too
+        /// (<c>DimensionObjectSpine.cs:1317</c>) — and that costs nothing: both of those finish
+        /// through <c>FinishAWorldObject</c>, which adds the type, so the rule cannot fail on one.
+        /// </remarks>
+        private static readonly Need ItIsAStation = N<CraftingCD>("CraftingCD");
+
+        /// <summary>A vehicle, whichever of the three kinds it was built as.</summary>
+        /// <remarks>
+        /// Three probes because <c>DimensionVehicleGenerator.ApplyMovement</c> writes exactly one
+        /// of the three and takes the other two off, so no single component says "vehicle".
+        /// </remarks>
+        private static readonly Need ItIsAVehicle = new Need(
+            "BoatCD, MinecartCD or VehicleCD",
+            (em, e) => em.HasComponent<BoatCD>(e)
+                || em.HasComponent<MinecartCD>(e)
+                || em.HasComponent<VehicleCD>(e));
+
         /// <summary>
         /// An object the environment is meant to reach, and that the game has not excluded.
         /// </summary>
@@ -264,7 +301,11 @@ namespace ExpandNullforge.Diagnostics
             // the creature and item generators add DimensionObjectTypeAuthoring themselves. Every
             // kind that also gets conditions support gets the type, so on correct content this rule
             // finds nothing — it guards the pairing, so that a new generator, or a kind that stops
-            // going through the finisher, fails here rather than in a player's world.
+            // going through the finisher, fails here rather than in a player's world. IT GUARDS
+            // FOUR OF THE EIGHT KINDS THAT CARRY THE TYPE, and it used to be written as though it
+            // guarded all eight. The other four — crop, critter, station, vehicle — carry no
+            // condition buffer and so can never reach this trigger; the four rows under this one
+            // are theirs, and the comment on them says what each one's absence actually costs.
             //
             // The other two readers of ObjectTypeCD are not in this rule and cannot be: AttackSystem
             // and EntityUtility read it through a ComponentLookup with a default when it is absent,
@@ -282,6 +323,90 @@ namespace ExpandNullforge.Diagnostics
                     + "not got. Every object the game ships is built from an EntityMonoBehaviourData "
                     + "and gets it from the converter; a generated object only gets it where the "
                     + "generator adds DimensionObjectTypeAuthoring"),
+
+            // ---- the four kinds the rule above cannot reach --------------------------------
+            //
+            // THE RULE ABOVE GUARDS FOUR OF THE EIGHT KINDS THAT CARRY ObjectTypeCD, AND THAT WAS
+            // NOT SAID WHEN IT WAS NARROWED. Its trigger is BurningConditionCD, which arrives with
+            // SupportConditionsConverter off SupportsConditionsAuthoring, and exactly four
+            // generators call DimensionObjectSpine.ApplyInitialConditions, which is the only thing
+            // in this framework that adds that authoring component: containers
+            // (DimensionContainerGenerator.cs:276), creatures (DimensionCreatureGenerator.cs:651),
+            // items (DimensionItemGenerator.cs:1627) and world objects
+            // (DimensionWorldObjectGenerator.cs:385). CloseTheGaps does not add it either — it is
+            // in the companion pass's "needs nothing beside it" list. So a crop, a critter, a
+            // station and a vehicle carry the type and never carry a condition buffer, the trigger
+            // above cannot fire on one of them, and nothing said anything when the pairing came
+            // apart. The type reaches all four through
+            // DimensionQueryCompanions.CarriesWhatItIsOntoTheRunningObject (:2109), called directly
+            // by the plant generator (DimensionPlantGenerator.cs:647) and by FinishACritter and
+            // both FinishAWorldObject overloads for the other three.
+            //
+            // WHAT A MISSING TYPE COSTS EACH OF THEM, MEASURED, AND IT IS NOT ONE SENTENCE FOUR
+            // TIMES. One query in the whole game names ObjectTypeCD
+            // (ck-db/Pug.Other/EnvironmentalConditionsSystem.cs:888) and it wants the four
+            // condition buffers as well, so none of these four is ever in it. The other three
+            // readers take a ComponentLookup and fall back to default(ObjectTypeCD), whose Value is
+            // ObjectType.NonUsable — the enum's zero — so what the absence costs comes down to
+            // whether the authored answer differs from that zero in a comparison somebody makes,
+            // and there are only two of those:
+            //   ck-db/Pug.Other/AttackSystem.cs:943 withholds the hit effect on the thing it hit
+            //   when its type is PlaceablePrefab. A station and a vehicle are authored
+            //   PlaceablePrefab (DimensionWorkbenchGenerator.cs:224,
+            //   DimensionVehicleGenerator.cs:211), so without the component they show a player the
+            //   sparks and the flying number the game holds back for a building.
+            //   ck-db/Pug.Other/EntityUtility.cs:1675 reads the same value into flag2, and both
+            //   branches that use it (:1696, :1720) sit behind isCreated2 — the RECEIVER's own
+            //   condition buffers. None of these four has one, so that reader cannot tell the
+            //   difference either way.
+            // A crop is authored NonObtainable and a critter Critter
+            // (DimensionPlantGenerator.cs:892, DimensionCritterGenerator.cs:220). Neither equals
+            // PlaceablePrefab and neither does the zero, so nothing in the game reads the
+            // difference on those two today, and their rows say so instead of borrowing the
+            // station's sentence. Overstating what was found is what the wide rule was removed for.
+            //
+            // NONE OF THE FOUR CAN FIRE ON CORRECT CONTENT. Each trigger is a component only the
+            // generator for that kind writes, and each of those generators adds the type on a pass
+            // it runs unconditionally over every object it builds.
+            new Rule(
+                ItIsAStation,
+                new[] { ObjectType },
+                "AttackSystem",
+                "CopperWorkBenchEntity",
+                "hitting it throws up the sparks and the flying damage number the game keeps for "
+                    + "creatures. The game withholds those on a building, and it asks the running "
+                    + "object what it is rather than the object table, so a station that does not "
+                    + "carry its own type answers with the enum's zero instead of the placeable it "
+                    + "was authored as"),
+            new Rule(
+                ItIsAVehicle,
+                new[] { ObjectType },
+                "AttackSystem",
+                "BoatEntity",
+                "hitting it throws up the sparks and the flying damage number the game keeps for "
+                    + "creatures, for the same reason a station does: the game asks the running "
+                    + "object whether it is a placeable, and a boat, cart or kart without its own "
+                    + "type answers with the enum's zero"),
+            new Rule(
+                ItIsACrop,
+                new[] { ObjectType },
+                "AttackSystem",
+                "CarrockPlantEntity",
+                "nothing a player can see is different today, and that is the whole of what this "
+                    + "row says. A crop is authored NonObtainable, which is not the one value "
+                    + "anything compares against, so the missing answer costs it nothing yet. What "
+                    + "it does mean is that the crop generator's last pass over this object did "
+                    + "not run — it writes this component over the seed and the plant alike — so "
+                    + "look at what else that pass writes before looking at this"),
+            new Rule(
+                ItIsACritter,
+                new[] { ObjectType },
+                "AttackSystem",
+                "CritterLarvaEntity",
+                "nothing a player can see is different today, the same as a crop: a critter is "
+                    + "authored Critter, which nothing compares against either. It means the "
+                    + "critter generator's finishing pass did not run over this object, and that "
+                    + "pass also gives it its body, its network presence and its turning"),
 
             // ---- creatures: the four roots ------------------------------------------------
             new Rule(

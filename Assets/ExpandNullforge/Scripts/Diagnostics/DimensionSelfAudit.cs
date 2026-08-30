@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using ExpandNullforge.Api;
 using ExpandNullforge.Foundation;
 using Unity.Entities;
@@ -107,6 +108,32 @@ namespace ExpandNullforge.Diagnostics
         private static bool processChecksDone;
         private static bool entityAuditDone;
         private static bool checkedNothing;
+
+        /// <summary>
+        /// Set when the object check ran and its subject list held items and nothing else.
+        /// </summary>
+        /// <remarks>
+        /// The world's own "found nothing wrong" reads it, because that sentence is the one most
+        /// people will see and it was the last place the narrowness of the list was not mentioned.
+        /// It is not <see cref="checkedNothing"/>: that one means no pack declared anything, and
+        /// this one means a pack declared items only — which looks identical in a count and is a
+        /// different thing to be told.
+        /// </remarks>
+        private static bool objectCheckSawItemsOnly;
+
+        /// <summary>
+        /// Whether the object half of this pass was skipped in the world being summarised.
+        /// </summary>
+        /// <remarks>
+        /// A third thing, and not either of the two above. <see cref="checkedNothing"/> means no
+        /// pack declared anything; <see cref="objectCheckSawItemsOnly"/> means it ran and had only
+        /// items to look at. This one means it did not run here at all — switched off, or already
+        /// answered in an earlier world, or a client world where the question is not asked. Without
+        /// it the verdict for such a world reads exactly like the verdict for a world where the
+        /// check ran and found nothing, which is the difference this whole pass exists to keep.
+        /// </remarks>
+        private static bool objectCheckDidNotRunHere;
+
         private static int lastSeenDeclarationVersion = -1;
         private static int quietFrames;
         private static bool sawClientWorld;
@@ -233,6 +260,8 @@ namespace ExpandNullforge.Diagnostics
             processChecksDone = false;
             entityAuditDone = false;
             checkedNothing = false;
+            objectCheckSawItemsOnly = false;
+            objectCheckDidNotRunHere = false;
             lastSeenDeclarationVersion = -1;
             quietFrames = 0;
             sawClientWorld = false;
@@ -404,6 +433,22 @@ namespace ExpandNullforge.Diagnostics
                             ? " Read that narrowly: no content pack declared anything this "
                                 + "session, so the parts of this check that need a pack to exist "
                                 + "had nothing to look at."
+                            : string.Empty)
+                        // THE SAME CAVEAT FOR THE OTHER EMPTY LIST. A pack that declared items and
+                        // nothing else is not "nothing declared", so the clause above stays quiet
+                        // for it, and the object half of this pass was still aimed at the item
+                        // slice of a table written mostly for creatures and world objects.
+                        + (objectCheckDidNotRunHere
+                            ? " The object half of this pass did not run in " + world.Name + ", so "
+                                + "nothing above tested whether this pack's objects carry what the "
+                                + "systems that read them require. That is not a result about them "
+                                + "either way."
+                            : string.Empty)
+                        + (objectCheckSawItemsOnly
+                            ? " Read the object half of that narrowly too: the only objects it had "
+                                + "to look at were this pack's items, so no creature, boss, "
+                                + "summoning circle, plant or world object was in front of it. The "
+                                + "object line above says what that covered."
                             : string.Empty)
                         + WhatWasNotAskedOf(armed.IsClient));
             }
@@ -645,10 +690,20 @@ namespace ExpandNullforge.Diagnostics
 
             if (missing.Count == 0 && unscheduled.Count == 0)
             {
+                // NOTHING TO CHECK IS NOT THE SAME AS EVERYTHING CHECKING OUT. With no row on the
+                // roster claiming this world, missing and unscheduled are both empty for the same
+                // reason the subject list is — and the sentence read as a pass either way.
                 DimensionLog.Milestone(
                     Ch.Audit,
                     world,
-                    mine.Count + " framework systems created and scheduled in " + world.Name + ".");
+                    mine.Count == 0
+                        ? "no framework system on the roster claims " + world.Name
+                            + ", so nothing was looked for there and this is not a pass. The "
+                            + "roster holds " + rows.Length + " row"
+                            + (rows.Length == 1 ? "" : "s")
+                            + ", and every one of them is marked for the other side of the game."
+                        : mine.Count + " framework systems created and scheduled in "
+                            + world.Name + ".");
             }
         }
 
@@ -844,8 +899,17 @@ namespace ExpandNullforge.Diagnostics
                 armed.World,
                 declared + " declared items all exist in this world (" + resolved
                     + " names resolved)."
+                    // THE EMPTY CASE IS SAID, NOT LEFT OUT. It used to add nothing at all here,
+                    // and a line that names only what it found reads as though that was all there
+                    // was to find: a pack built before the framework kept the wider list declares
+                    // its items and nothing else, and looked from here exactly like a pack that
+                    // has no creatures.
                     + (DimensionGeneratedObjectLedger.DeclaredCount == 0
-                        ? string.Empty
+                        ? " No generated object was declared beside them — no creature, boss, "
+                            + "summoning circle, plant, container or world object — so those are "
+                            + "not being checked this session. A pack built before the framework "
+                            + "kept that list has none in its manifest; generating it again is "
+                            + "what puts them in."
                         : " Beside them, " + DimensionGeneratedObjectLedger.ResolvedCount + " of "
                             + DimensionGeneratedObjectLedger.DeclaredCount + " other generated "
                             + "objects — creatures, bosses, plants, containers, world objects — "
@@ -954,6 +1018,7 @@ namespace ExpandNullforge.Diagnostics
         {
             if (!DimensionLogConfig.EntityAudit || entityAuditDone)
             {
+                objectCheckDidNotRunHere = true;
                 return;
             }
 
@@ -971,12 +1036,16 @@ namespace ExpandNullforge.Diagnostics
                         + "world that happens as the server world loads; for a player joined to "
                         + "somebody else's server there is no server world here and it does not "
                         + "run at all.");
+                objectCheckDidNotRunHere = true;
                 return;
             }
 
             entityAuditDone = true;
             DimensionEntityAudit.Result result =
                 DimensionEntityAudit.Run(armed.World, DimensionLogConfig.EntityAuditBudget);
+
+            // Read by the world's own verdict below, which is the sentence most people see.
+            objectCheckSawItemsOnly = result.ResolvedItems > 0 && result.LedgerSubjects == 0;
 
             if (result.ResolvedItems > 0 && result.Checked == 0 && result.StoppedEarly)
             {
@@ -1056,15 +1125,104 @@ namespace ExpandNullforge.Diagnostics
                 DimensionLog.Milestone(
                     Ch.Audit,
                     armed.World,
-                    result.Checked + " of this mod's objects checked in " + armed.World.Name
-                        + " against " + DimensionQueryCompanionTable.All.Length
-                        + " of the game's queries; all of them carry what the systems that read "
-                        + "them require."
-                        + (result.StoppedEarly
-                            ? " The budget stopped the walk before the end of the list; raise "
-                                + "diagnostics entityAuditBudget to check the rest."
-                            : string.Empty));
+                    WhatTheObjectCheckCoveredAndDidNot(result, armed.World.Name));
             }
+        }
+
+        /// <summary>
+        /// The object check's own summary, scope first and verdict only over that scope.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// IT USED TO CONGRATULATE ON A SUBJECT LIST IT HAD NOT DESCRIBED. The line was
+        /// "N of this mod's objects checked against 41 of the game's queries; all of them carry
+        /// what the systems that read them require", where N was whatever resolved and 41 was the
+        /// whole table — most of which is creature and world-object rules that an item cannot
+        /// trigger. A content pack generated before the object ledger existed declares its items
+        /// and nothing else, so on that pack the sentence measured two tileset blocks against
+        /// thirty-nine creature rules and called the result clean. Nothing in it was false and the
+        /// reader was still misled, because the two numbers in it were the size of the walk rather
+        /// than the size of what the walk could have caught.
+        /// </para>
+        /// <para>
+        /// SO THE VERDICT IS NOW SECOND AND NARROWER THAN THE OLD ONE. First how many rules were a
+        /// test of anything, which is measured on the walk itself
+        /// (<see cref="DimensionEntityAudit.Result.RulesApplied"/>) rather than assumed from the
+        /// table's length; then what was not in the list at all, when the wider half of it is
+        /// empty; and the affirmative clause is dropped altogether when no rule applied, because
+        /// there is nothing there to be clean.
+        /// </para>
+        /// </remarks>
+        /// <remarks>
+        /// It takes the world's NAME rather than the world, and is internal rather than private,
+        /// for one reason: a test can then hand it a result and read the sentence back. The
+        /// sentence is the whole of what this change is, and a test that could only reach it
+        /// through a live <c>World</c> could not run outside Unity at all.
+        /// </remarks>
+        internal static string WhatTheObjectCheckCoveredAndDidNot(
+            DimensionEntityAudit.Result result,
+            string worldName)
+        {
+            StringBuilder line = new StringBuilder();
+            line.Append(result.Checked);
+            line.Append(" of this mod's objects checked in ");
+            line.Append(worldName);
+            line.Append(" against ");
+            line.Append(result.RulesInTable);
+            line.Append(" of the game's queries. ");
+
+            if (result.RulesApplied == 0)
+            {
+                line.Append("None of those ");
+                line.Append(result.RulesInTable);
+                line.Append(" rules asked for anything these objects carry, so nothing here was "
+                    + "actually tested — read this as a walk that found nothing to look at, not "
+                    + "as a clean result.");
+            }
+            else
+            {
+                line.Append(result.RulesApplied);
+                line.Append(result.RulesApplied == 1
+                    ? " of them applied to something in this list, and what it asked for was there."
+                    : " of them applied to something in this list, and everything they asked for "
+                        + "was there.");
+                if (result.RulesInTable > result.RulesApplied)
+                {
+                    line.Append(" The other ");
+                    line.Append(result.RulesInTable - result.RulesApplied);
+                    line.Append(" ask for a component nothing here carries, so they passed without "
+                        + "looking and are not part of that.");
+                }
+            }
+
+            // WHAT WAS NOT IN THE LIST, when the half of it that holds everything but items is
+            // empty. The table is mostly creature and world-object rules, so an item-only list is
+            // not a small version of the check — it is a different one, and the reader has no way
+            // to know that from a count.
+            if (result.LedgerSubjects == 0)
+            {
+                line.Append(" NOT LOOKED AT: this session's subject list is ");
+                line.Append(result.ItemSubjects);
+                line.Append(result.ItemSubjects == 1 ? " item" : " items");
+                line.Append(" and nothing else. ");
+                line.Append(DimensionGeneratedObjectLedger.DeclaredCount == 0
+                    ? "No content pack declared any generated object beside its items, which is "
+                        + "what a pack built before the framework kept that list looks like from "
+                        + "here. Generate the pack again and its creatures, bosses, summoning "
+                        + "circles, plants, containers and world objects come into this check with "
+                        + "it."
+                    : DimensionGeneratedObjectLedger.DeclaredCount
+                        + " were declared and none of them resolved, so the game does not answer "
+                        + "to any of their names and none could be checked.");
+            }
+
+            if (result.StoppedEarly)
+            {
+                line.Append(" The budget stopped the walk before the end of the list; raise "
+                    + "diagnostics entityAuditBudget to check the rest.");
+            }
+
+            return line.ToString();
         }
 
         // ---------------------------------------------------------------------- liveness pass ---

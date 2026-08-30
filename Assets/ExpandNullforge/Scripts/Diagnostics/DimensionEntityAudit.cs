@@ -59,7 +59,17 @@ namespace ExpandNullforge.Diagnostics
     /// exposed the whole bug class. On the two content packs in this repository the item-only list
     /// was two tileset blocks measured against thirty-nine creature rules, and the audit called
     /// that a clean result. A pack has to be generated again for its manifest to carry the wider
-    /// list; until it is, this reads exactly as it did before.
+    /// list.
+    /// </para>
+    /// <para>
+    /// AND UNTIL IT IS, THE SUMMARY LINE SAYS SO, WHICH IS THE HALF THAT WAS MISSING. The sentence
+    /// above lived only here, in a comment, while the line a player and a modder actually read
+    /// counted the item slice against the whole table and ended "all of them carry what the systems
+    /// that read them require" — a clean verdict on a subject list that could not contain the thing
+    /// the table was written for. <see cref="Result.ItemSubjects"/>,
+    /// <see cref="Result.LedgerSubjects"/> and <see cref="Result.RulesApplied"/> exist so that the
+    /// line can name its own scope out loud: how many of the rules were a test of anything, and
+    /// what kinds of object were not in the list at all.
     /// </para>
     /// </remarks>
     internal static class DimensionEntityAudit
@@ -89,8 +99,39 @@ namespace ExpandNullforge.Diagnostics
             /// <summary>How many declared ids — items and other objects — resolved at all.</summary>
             public int ResolvedItems;
 
+            /// <summary>
+            /// How many of those came from the item registry, and how many from the wider ledger.
+            /// </summary>
+            /// <remarks>
+            /// THE SPLIT IS HERE SO THE SUMMARY LINE CAN SAY WHAT IT DID NOT LOOK AT. A content
+            /// pack generated before <see cref="DimensionGeneratedObjectLedger"/> existed carries
+            /// no manifest entry for anything but its items, so the second number is zero and the
+            /// subject list is the item slice of a table that is mostly creature and world-object
+            /// queries — which is the case that used to be reported as a clean result. Neither
+            /// number is a fault on its own; both are needed for the line to be honest about its
+            /// own scope.
+            /// </remarks>
+            public int ItemSubjects;
+
+            /// <summary>How many subjects came from the generated-object ledger.</summary>
+            public int LedgerSubjects;
+
             /// <summary>How many of those had a prefab in this world.</summary>
             public int Checked;
+
+            /// <summary>How many rules were in the table this run was measured against.</summary>
+            public int RulesInTable;
+
+            /// <summary>
+            /// How many of those rules matched at least one object that was looked at.
+            /// </summary>
+            /// <remarks>
+            /// A COUNT OF RULES THAT WERE A TEST OF SOMETHING. The rest asked for a component
+            /// nothing in the subject list carries and passed without looking, so a line that
+            /// reports the table's whole length as what the objects were measured against reports
+            /// a number the run did not earn.
+            /// </remarks>
+            public int RulesApplied;
 
             /// <summary>Ids that resolved and whose prefab this world does not hold.</summary>
             public List<string> WithoutAPrefab;
@@ -125,8 +166,12 @@ namespace ExpandNullforge.Diagnostics
             result.WithoutAPrefab = new List<string>();
             result.Findings = new List<Finding>();
 
-            List<KeyValuePair<string, ObjectID>> items = Subjects();
+            int fromItemRegistry;
+            List<KeyValuePair<string, ObjectID>> items = Subjects(out fromItemRegistry);
             result.ResolvedItems = items.Count;
+            result.ItemSubjects = fromItemRegistry;
+            result.LedgerSubjects = items.Count - fromItemRegistry;
+            result.RulesInTable = DimensionQueryCompanionTable.All.Length;
             if (world == null || !world.IsCreated || items.Count == 0 || budget <= 0)
             {
                 result.StoppedEarly = budget <= 0 && items.Count > 0;
@@ -136,6 +181,11 @@ namespace ExpandNullforge.Diagnostics
             Dictionary<int, Entity> prefabs = BuildPrefabLookup(world);
             DimensionQueryCompanionTable.Rule[] rules = DimensionQueryCompanionTable.All;
             EntityManager entities = world.EntityManager;
+
+            // WHICH RULES WERE A TEST OF ANYTHING. Marked as the walk goes rather than counted
+            // afterwards, because the trigger is the only thing that knows whether a rule looked at
+            // an object or passed over it.
+            bool[] ruleApplied = new bool[rules.Length];
 
             for (int i = 0; i < items.Count; i++)
             {
@@ -162,6 +212,8 @@ namespace ExpandNullforge.Diagnostics
                     {
                         continue;
                     }
+
+                    ruleApplied[r] = true;
 
                     List<string> missing = null;
                     List<string> present = new List<string>();
@@ -197,6 +249,14 @@ namespace ExpandNullforge.Diagnostics
                 }
             }
 
+            for (int r = 0; r < ruleApplied.Length; r++)
+            {
+                if (ruleApplied[r])
+                {
+                    result.RulesApplied++;
+                }
+            }
+
             return result;
         }
 
@@ -209,10 +269,11 @@ namespace ExpandNullforge.Diagnostics
         /// both here is what stops the check being aimed at the item slice of a table written for
         /// creatures. An id in both is checked once.
         /// </remarks>
-        private static List<KeyValuePair<string, ObjectID>> Subjects()
+        private static List<KeyValuePair<string, ObjectID>> Subjects(out int fromItemRegistry)
         {
             List<KeyValuePair<string, ObjectID>> subjects =
                 DimensionItemObjectRegistry.ResolvedItems();
+            fromItemRegistry = subjects.Count;
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < subjects.Count; i++)
             {
