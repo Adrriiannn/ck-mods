@@ -482,7 +482,9 @@ namespace ExpandNullforge.EditorTools
                     F("icon", "Icon", "The picture shown on its item in the inventory. Falls back to the artwork."),
                     F("description", "Description", "The line under the name in the tooltip.")),
                 G("Opening", "doors and gates",
-                    F("gate", "It Opens When", "A held item, an object placed nearby, or a melody — how doors, hidden passages and singing walls work. A key put INSIDE something is a container; author that on a container instead.")));
+                    F("gate", "It Opens When", "A held item, an object placed nearby, or a melody — how doors, hidden passages and singing walls work. A key put INSIDE something is a container; author that on a container instead.")),
+                G("Light", "torches and lamps",
+                    F("emittedLight", "The light it gives off", "Whether it lights the floor around it where it stands, and what that light looks like. Copy one of the game's own — a torch, a campfire, a lamp — or say the colour, reach and flicker yourself. Two of these on next-door tiles will not both light: the game keeps one real light per two tiles and draws the rest as a glow.")));
         }
 
         private static DimensionCollectionDescriptor BuildVehiclesCollection()
@@ -625,6 +627,7 @@ namespace ExpandNullforge.EditorTools
                     F("simpleTraits", "Traits", "The small switches: burns, floats, fears light, and the rest of the one-line behaviours."),
                     F("eliteVariant", "Elite Variant", "An occasional stronger version, the way the game's own mobs have elites."),
                     F("pet", "Pet", "Whether this mob can be tamed and follow a player."),
+                    F("pet.colours", "Colours", "Gradient maps this pet can be recoloured into. The first is the one it hatches with. Leave it empty for a pet with one look."),
                     F("behaviorScriptId", "Borrowed Behaviour", "Take one of the game's own creature behaviours wholesale, by name.")),
                 NotesGroup(),
             };
@@ -782,7 +785,7 @@ namespace ExpandNullforge.EditorTools
                 "World rules",
                 "rule set",
                 "No world rules yet",
-                "World rules are the four things a mod changes about the game rather than adds to: what upgrading costs, what fishing catches, what talents give, and the numbers on the player. Switch on the block you want; nothing else changes.",
+                "World rules are what a mod changes about the game rather than adds to: what upgrading costs, what fishing catches, what talents give, the numbers on the player, its armour sets, what a background starts you with, when the world acts on its own, what its own caves are made of, and how its skills are drawn. Switch on the block you want; nothing else changes.",
                 t => Wrap(t.GlobalGameSetups),
                 t => DimensionFrameworkAuthoringAssetUtility.CreateWorldRules(t),
                 a => Str(a, "displayName", "Rule set"),
@@ -806,7 +809,22 @@ namespace ExpandNullforge.EditorTools
                     F("player.overridesTheGamesPlayer", "Change it", "Off leaves the player exactly as the game has them."),
                     F("player.turningCatchesUpAfter", "Turning", "How long they carry on facing the old way after turning, in seconds."),
                     F("player.vehicleDrift", "Vehicle drift", "How much a vehicle slides sideways as it turns, over the length of the turn."),
-                    F("player.aimSitsAt", "Aim sits at", "Where what they are aiming at sits, relative to them.")));
+                    F("player.aimSitsAt", "Aim sits at", "Where what they are aiming at sits, relative to them.")),
+                G("Armour sets", "your own sets, and what wearing enough gives",
+                    F("armourSets.addsArmourSets", "Add sets", "Off leaves the game's own 62 sets alone."),
+                    F("armourSets.sets", "Sets", "Each row is one set: its pieces, which tier of the world it belongs to, how good it is, and what wearing enough of them gives. Two to five pieces is what the game's own sets use. The number on each line is worked out from the tier and the rarity, not typed.")),
+                G("Backgrounds", "what a new character starts with",
+                    F("backgrounds.changesWhatBackgroundsStartYouWith", "Change it", "Off leaves all eleven backgrounds exactly as the game has them."),
+                    F("backgrounds.backgrounds", "Backgrounds", "Each row changes one of the game's eleven: the skill it starts you at level 3 in, and up to two things in the bag. There is no twelfth background and there cannot be one.")),
+                G("When the world acts on its own", "cave-ins, swarms, tentacles",
+                    F("worldEvents.changesWhenTheWorldActs", "Change it", "Off leaves all four events exactly as the game has them."),
+                    F("worldEvents.events", "Events", "Each row re-aims one of the four: which of the game's biomes, how far from the core, what the ground has to be made of, and the cooldowns. Only the game's own biomes can be named. Your own blocks can be counted in the ground.")),
+                G("Your blocks in the game's own caves", "terrain and ore rules",
+                    F("gamesOwnTerrain.putsBlocksInTheGamesWorld", "Change it", "Off leaves Core Keeper's own caves exactly as they generate."),
+                    F("gamesOwnTerrain.rules", "Rules", "Each row says what the generator decided about a tile and what block to lay because of it. This is how one of your ores ends up in the walls of a vanilla biome. It applies to the whole world, not to one dimension.")),
+                G("Skill pictures", "the game's twelve skills",
+                    F("skillPictures.changesTheSkillPictures", "Change it", "Off leaves all twelve as the game draws them."),
+                    F("skillPictures.skills", "Pictures", "Each row repaints one of the game's twelve skills. Give the gold picture too for how it looks at the highest level. This does not add a thirteenth skill.")));
 
             // Passes returned the day the ladder genuinely ran them: every dimension now gets
             // a synthesized plan (terrain, then dungeons, then scenes, then ore), and an

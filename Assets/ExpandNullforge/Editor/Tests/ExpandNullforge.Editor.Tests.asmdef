@@ -40,6 +40,8 @@
         "Pug.ECS.Components.dll",
         "Pug.Other.dll",
         "PugMap.Common.dll",
+        "WorldGen.dll",
+        "WorldGen.Runtime.dll",
         "PugSprite.dll",
         "Pug.UnityExtensions.dll",
         "PugMod.SDK.Runtime.dll",

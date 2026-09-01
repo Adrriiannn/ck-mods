@@ -252,6 +252,64 @@ namespace ExpandNullforge.Diagnostics
                 "DimensionPlayerOverrideRegistry",
                 () => WorldRules.DimensionPlayerOverrideRegistry.OverridesAim ? 1 : 0,
                 "the aim offset override does nothing"),
+            new Row(
+                "DimensionSetBonusesPatch",
+                "SummarizeConditionsSystem.OnCreate",
+                () => WorldRules.DimensionSetBonusesPatch.Fired,
+                false,
+                "DimensionSetBonusRegistry",
+                () => WorldRules.DimensionSetBonusRegistry.PendingCount,
+                "no armour set this mod added gives anything, and its pieces show no set in the "
+                    + "hover panel"),
+            new Row(
+                "DimensionBackgroundPerksPatch",
+                "RolePerksTable.GetPerks",
+                () => WorldRules.DimensionBackgroundPerksPatch.Fired,
+                // The character-creation screen asks this question, and so does a brand new
+                // character the first time it plays. Neither happens on its own.
+                true,
+                "DimensionBackgroundRegistry",
+                () => WorldRules.DimensionBackgroundRegistry.PendingCount,
+                "backgrounds start a new character with exactly what the game gives them"),
+            new Row(
+                "DimensionEnvironmentEventsPatch",
+                "EnvironmentEventSystem.OnCreate",
+                () => WorldRules.DimensionEnvironmentEventsPatch.Fired,
+                false,
+                "DimensionEnvironmentEventRegistry",
+                () => WorldRules.DimensionEnvironmentEventRegistry.PendingCount,
+                "cave-ins, swarms and tentacles happen only where the game's own rules put them",
+                // EnvironmentEventSystem is [WorldSystemFilter(ServerSimulation, Default)].
+                DimensionSystemRoster.Peer.Server),
+            new Row(
+                "DimensionWorldTerrainRulesPatch",
+                "SpawnProceduralTerrainSystem.OnCreate",
+                () => WorldRules.DimensionWorldTerrainRulesPatch.Fired,
+                false,
+                "DimensionWorldTerrainRuleRegistry",
+                () => WorldRules.DimensionWorldTerrainRuleRegistry.PendingCount,
+                "none of this mod's blocks or ores appear anywhere in Core Keeper's own caves",
+                // SpawnProceduralTerrainSystem is [WorldSystemFilter(ServerSimulation, Default)].
+                DimensionSystemRoster.Peer.Server),
+
+            // ---- skills and pets ----------------------------------------------------------
+            new Row(
+                "DimensionSkillIconPatch",
+                "SkillIconsTable.GetIcon",
+                () => Skills.DimensionSkillIconPatch.Fired,
+                // Only drawn while the skill window is open.
+                true,
+                "DimensionSkillIconRegistry",
+                () => Skills.DimensionSkillIconRegistry.Count,
+                "the game's own pictures stay on the skill squares"),
+            new Row(
+                "DimensionPetSkinPatch",
+                "PetInfosTable.GetPetSkinInfo",
+                () => Creatures.DimensionPetSkinPatch.Fired,
+                false,
+                "DimensionPetSkinRegistry",
+                () => Creatures.DimensionPetSkinRegistry.Count,
+                "a pet this mod added converts with no colours, so it can never be recoloured"),
 
             // ---- scenes and dungeons ------------------------------------------------------
             new Row(

@@ -44,7 +44,9 @@ namespace ExpandNullforge.Objects
     /// An unregistered station still gets Wood, which is the value the game itself falls back to.
     /// </para>
     /// </remarks>
-    public class DimensionCraftingBenchView : CraftingBuilding, IDimensionAuthoredBody
+    public class DimensionCraftingBenchView : CraftingBuilding,
+        IDimensionAuthoredBody,
+        IDimensionAuthoredLight
     {
         /// <summary>
         /// The renderer that draws the station. Wired at generation; the sprite it shows is replaced
@@ -73,6 +75,7 @@ namespace ExpandNullforge.Objects
         public override void OnOccupied()
         {
             DimensionAuthoredBody.Point(body, objectData.objectID, objectData.variation);
+            PointTheLight();
 
             buildingSpecificUISettings = new List<CraftingUISettingsOverride>();
             craftingCategoryWindowInfos = new List<CraftingCategoryWindowInfos>();
@@ -82,6 +85,18 @@ namespace ExpandNullforge.Objects
                 DimensionAuthoredBody.NameTerm(objectData.objectID));
 
             base.OnOccupied();
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// One pool serves every generated station, so a lit forge and a plain workbench are drawn
+        /// by the same instance. Without this call one of them would wear the other's light, and
+        /// which one depends on the order their prefabs registered — so it would change when the
+        /// author added an unrelated object.
+        /// </remarks>
+        public void PointTheLight()
+        {
+            DimensionAuthoredLight.Point(optionalLightOptimizer, objectData.objectID);
         }
     }
 }

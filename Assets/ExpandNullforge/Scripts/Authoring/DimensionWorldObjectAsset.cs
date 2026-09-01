@@ -105,7 +105,21 @@ namespace ExpandNullforge.Authoring
         [SerializeField] private int surfacePriority;
 
         [Header("Light")]
-        [Tooltip("It lights the area around it once placed. This is what a wall torch does.")]
+        [Tooltip("The light it throws on the floor where it stands. This is what a wall torch, a " +
+                 "lamp and a campfire do.")]
+        [SerializeField] private DimensionEmittedLightTemplate emittedLight =
+            new DimensionEmittedLightTemplate();
+
+        // RELABELLED, NOT REWIRED. This tick writes TableItemLightSourceAuthoring, whose only
+        // reader in the whole game is Table.UpdateGlowingObject: it lights the TABLE'S own light
+        // node for an item lying on the table, and does nothing at all for the object standing in
+        // the world. Its old wording, "it lights the area around it once placed. This is what a
+        // wall torch does", is the sentence the fold above now actually delivers, and leaving the
+        // two side by side would have made one of them a lie. The field, its name and everything
+        // it writes are untouched.
+        [Tooltip("It glows in its slot when it is set down on a table. It does not light the " +
+                 "room. Which colour and how far that glow reaches are answered under how the " +
+                 "world treats it.")]
         [SerializeField] private bool lightsTheRoomWhenPlaced;
 
         [Tooltip("It lights the area around the player while carried. This is what a held torch does.")]
@@ -429,7 +443,22 @@ namespace ExpandNullforge.Authoring
             get { return surfacePriority; }
         }
 
-        /// <summary>Whether it lights the area around it once placed.</summary>
+        /// <summary>The light it throws on the floor where it stands.</summary>
+        /// <remarks>
+        /// Never null: the generator asks it questions on every pass, and an asset saved before
+        /// this block existed deserialises the field as null rather than as an empty one.
+        /// </remarks>
+        public DimensionEmittedLightTemplate EmittedLight
+        {
+            get { return emittedLight ?? (emittedLight = new DimensionEmittedLightTemplate()); }
+        }
+
+        /// <summary>Whether it glows in its slot when it is set down on a table.</summary>
+        /// <remarks>
+        /// The name is the one the field shipped under and is kept so no saved asset loses its
+        /// answer. What it writes has only ever been the table glow — see the remark beside the
+        /// serialized field.
+        /// </remarks>
         public bool LightsTheRoomWhenPlaced
         {
             get { return lightsTheRoomWhenPlaced; }
@@ -633,10 +662,36 @@ namespace ExpandNullforge.Authoring
         /// <remarks>
         /// Worth saying out loud because it is the one lighting mistake that looks right in the
         /// inspector: a lamp that glows in the dark and leaves the room black.
+        /// <para>
+        /// The light it gives off where it stands counts here, and it did not used to, because
+        /// until that fold existed there was no way for a placed object to light anything at all.
+        /// Without this clause a lamp answered honestly — a real light, and a glow on top — would
+        /// be told it lights nothing.
+        /// </para>
         /// </remarks>
         public bool GlowsButLightsNothing
         {
-            get { return objectItselfGlows && !lightsTheRoomWhenPlaced && !lightsTheRoomWhenHeld; }
+            get
+            {
+                return objectItselfGlows &&
+                       !EmittedLight.GivesOffLight &&
+                       !lightsTheRoomWhenPlaced &&
+                       !lightsTheRoomWhenHeld;
+            }
+        }
+
+        /// <summary>
+        /// Fills in the numbers behind a named light the first time one is chosen.
+        /// </summary>
+        /// <remarks>
+        /// Unity runs this whenever the inspector writes a field, which is what lets picking
+        /// "Torch" in the dropdown fill the colour, reach, flicker and height in the same frame and
+        /// then leave them alone. Everything it can do is inside the light block; nothing else on
+        /// this asset is touched.
+        /// </remarks>
+        private void OnValidate()
+        {
+            EmittedLight.CopyThePresetInIfItChanged();
         }
 
         /// <summary>Whether it is a trophy with nothing to summon.</summary>

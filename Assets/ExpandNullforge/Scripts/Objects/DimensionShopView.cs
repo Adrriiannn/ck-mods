@@ -26,7 +26,9 @@ namespace ExpandNullforge.Objects
     /// <see cref="OnOccupied"/> rather than baked into the prefab.
     /// </para>
     /// </remarks>
-    public class DimensionShopView : VendingMachine, IDimensionAuthoredBody
+    public class DimensionShopView : VendingMachine,
+        IDimensionAuthoredBody,
+        IDimensionAuthoredLight
     {
         /// <summary>
         /// The renderer that draws the shop. Wired at generation; the sprite it shows is replaced on
@@ -48,7 +50,14 @@ namespace ExpandNullforge.Objects
         public override void OnOccupied()
         {
             DimensionAuthoredBody.Point(body, objectData.objectID, objectData.variation);
+            PointTheLight();
             base.OnOccupied();
+        }
+
+        /// <inheritdoc/>
+        public void PointTheLight()
+        {
+            DimensionAuthoredLight.Point(optionalLightOptimizer, objectData.objectID);
         }
     }
 }

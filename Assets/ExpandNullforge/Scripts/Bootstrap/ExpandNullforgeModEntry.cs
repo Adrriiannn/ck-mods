@@ -315,6 +315,15 @@ public sealed class ExpandNullforgeModEntry : IMod
     ExpandNullforge.Creatures.DimensionBossPresentationRegistry.Clear();
     ExpandNullforge.Creatures.DimensionCreaturePresentationRegistry.Clear();
     ExpandNullforge.WorldRules.DimensionUpgradeCostRegistry.Clear();
+    // The six tables of the game's own that a pack can now write into. The set-bonus one
+    // deliberately keeps its record of the numbers already handed to Core Keeper's table, so a
+    // reload strips those rows rather than adding a second copy of them.
+    ExpandNullforge.WorldRules.DimensionSetBonusRegistry.Clear();
+    ExpandNullforge.WorldRules.DimensionBackgroundRegistry.Clear();
+    ExpandNullforge.WorldRules.DimensionEnvironmentEventRegistry.Clear();
+    ExpandNullforge.WorldRules.DimensionWorldTerrainRuleRegistry.Clear();
+    ExpandNullforge.Skills.DimensionSkillIconRegistry.Clear();
+    ExpandNullforge.Creatures.DimensionPetSkinRegistry.Clear();
     ExpandNullforge.WorldRules.DimensionPlayerOverrideRegistry.Clear();
     ExpandNullforge.Creatures.DimensionBossRespawnRegistry.Clear();
     ExpandNullforge.Zones.DimensionMusicRosterRegistry.Clear();

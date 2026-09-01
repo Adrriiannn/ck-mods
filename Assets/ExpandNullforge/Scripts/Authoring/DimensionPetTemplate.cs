@@ -39,6 +39,9 @@ namespace ExpandNullforge.Authoring
         [Min(0f)]
         [SerializeField] private float happyAnimationSeconds = 1f;
 
+        [Tooltip("Colours this pet can be recoloured into, as gradient maps. The first is the one it hatches with. Leave empty for a pet with one look.")]
+        [SerializeField] private GradientMapDataBlock[] colours = new GradientMapDataBlock[0];
+
         public bool IsAPet { get { return isAPet; } }
 
         public DimensionPetKind FightsBy { get { return fightsBy; } }
@@ -52,10 +55,38 @@ namespace ExpandNullforge.Authoring
             get { return happyAnimationSeconds < 0f ? 0f : happyAnimationSeconds; }
         }
 
+        /// <summary>
+        /// The colours this pet can be recoloured into.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A PET'S SKINS ARE NOT ON THE PET. Core Keeper keeps them in <c>PetInfosTable</c>, a list
+        /// of gradient maps per pet object, and reads them in three places: the converter, which
+        /// turns the count into <c>PetCD.maxSkins</c>; the pet itself, which applies the chosen one
+        /// to its sprite (<c>ck-db\Pug.Other\PetBase.cs:159-162</c>); and the inventory, which tints
+        /// its icon to match. So a pet a mod adds has always converted with a skin count of zero,
+        /// however many colours the mod shipped.
+        /// </para>
+        /// <para>
+        /// EMPTY IS A PET WITH ONE LOOK, which is what the great majority of the game's own pets
+        /// are. This is only worth filling for a pet meant to come in colours.
+        /// </para>
+        /// </remarks>
+        public GradientMapDataBlock[] Colours
+        {
+            get { return colours ?? new GradientMapDataBlock[0]; }
+        }
+
         /// <summary>Whether talents were listed on something that is not a pet.</summary>
         public bool TalentsWillBeIgnored
         {
             get { return !isAPet && Talents.Length > 0; }
+        }
+
+        /// <summary>Whether colours were listed on something that is not a pet.</summary>
+        public bool ColoursWillBeIgnored
+        {
+            get { return !isAPet && Colours.Length > 0; }
         }
     }
 

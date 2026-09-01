@@ -209,7 +209,12 @@ namespace ExpandNullforge.EditorTools
                         report.Warnings.Add("'" + worldObject.DisplayName + "' " + message);
                     },
                     true,
-                    worldObject.Sprite);
+                    worldObject.Sprite,
+                    // The light a placed object gives off is not an entity component — Core Keeper
+                    // keeps it in the graphical prefab — so it is answered here rather than in
+                    // ApplyLight below, which writes the entity's three lighting components. The
+                    // two halves write different files and cannot overwrite each other.
+                    worldObject.EmittedLight);
                 ApplyShopStock(root, worldObject, naming, report);
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
 
@@ -922,12 +927,21 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>
-        /// The three separate lighting mechanisms, written independently.
+        /// The three separate lighting mechanisms that live on the entity, written independently.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// A torch carries <c>ActAsLightSourceWhenHeldInHand</c> and <c>TableItemLightSource</c> and
         /// NOT <c>GlowLight</c>. Collapsing them into one answer would produce lamps that glow and
         /// light nothing.
+        /// </para>
+        /// <para>
+        /// THE FOURTH ONE IS NOT HERE, AND CANNOT BE. The light a placed object throws on the floor
+        /// around it has no component on the entity at all — Core Keeper keeps it as a subtree of
+        /// nodes in the graphical prefab — so it is written by
+        /// <c>DimensionInteractionVisualUtility</c>, from the answers on the asset's own light
+        /// block. Whoever comes looking for it here should look there.
+        /// </para>
         /// </remarks>
         private static void ApplyLight(GameObject root, DimensionWorldObjectAsset worldObject)
         {

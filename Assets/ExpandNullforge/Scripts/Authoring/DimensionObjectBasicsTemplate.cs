@@ -24,7 +24,14 @@ namespace ExpandNullforge.Authoring
         Desert = 62,
         Lava = 63,
         Crystal = 70,
-        Passage = 80
+        Passage = 80,
+
+        // Added when the armour-set work needed them: four of the game's own 62 sets are priced at
+        // area level 85, which had no name here and so could not be chosen. Both values are the
+        // game's own (`ck-db\Pug.Base\AreaLevel.cs`), and every member of this enum carries an
+        // explicit number, so adding two at the end moves nothing already serialized.
+        Excavation = 85,
+        Obsidian = 100
     }
 
     /// <summary>Which ways a thing's art can face.</summary>

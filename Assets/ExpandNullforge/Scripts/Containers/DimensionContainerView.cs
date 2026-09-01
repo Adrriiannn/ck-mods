@@ -39,7 +39,10 @@ namespace ExpandNullforge.Containers
     /// have to be kept in step.
     /// </para>
     /// </remarks>
-    public class DimensionContainerView : Chest, IDimensionAuthoredBody
+    public class DimensionContainerView :
+        Chest,
+        IDimensionAuthoredBody,
+        IDimensionAuthoredLight
     {
         /// <summary>
         /// The renderer that draws the container. Wired at generation; the sprite it shows is
@@ -69,7 +72,20 @@ namespace ExpandNullforge.Containers
         public override void OnOccupied()
         {
             DimensionAuthoredBody.Point(body, objectData.objectID, objectData.variation);
+            PointTheLight();
             base.OnOccupied();
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The container generator never asks the light question, so a container's own answer is
+        /// always "none" — and this call is what makes that answer stick. The pool is shared with
+        /// every other object that opens like a chest, including a lit one, so without it a chest
+        /// would be handed a brazier's light and keep it.
+        /// </remarks>
+        public void PointTheLight()
+        {
+            DimensionAuthoredLight.Point(optionalLightOptimizer, objectData.objectID);
         }
     }
 }

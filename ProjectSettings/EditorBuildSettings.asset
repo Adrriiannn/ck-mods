@@ -9,6 +9,6 @@ EditorBuildSettings:
     path: Assets/SmartSplitterMod/SmartSplitterBootstrap.unity
     guid: 446b31cf369476e4eb388e4f9fa68609
   m_configObjects:
-    com.unity.addressableassets: {fileID: 11400000, guid: 5c7edc00be4cbb84c8a8b83b1cf3e855,
+    com.unity.addressableassets: {fileID: 11400000, guid: 1c0a53707daceaa4bb75b8d1f51c1774,
       type: 2}
   m_UseUCBPForAssetBundles: 0

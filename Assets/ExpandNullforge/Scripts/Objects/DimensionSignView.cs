@@ -45,7 +45,9 @@ namespace ExpandNullforge.Objects
     /// mod's, so a generated sign carrying that component was handed the game's wooden sign to wear.
     /// </para>
     /// </remarks>
-    public class DimensionSignView : WorldLabel, IDimensionAuthoredBody
+    public class DimensionSignView : WorldLabel,
+        IDimensionAuthoredBody,
+        IDimensionAuthoredLight
     {
         /// <summary>
         /// The renderer that draws the sign. Wired at generation; the sprite it shows is replaced on
@@ -72,7 +74,14 @@ namespace ExpandNullforge.Objects
         public override void OnOccupied()
         {
             DimensionAuthoredBody.Point(body, objectData.objectID, objectData.variation);
+            PointTheLight();
             base.OnOccupied();
+        }
+
+        /// <inheritdoc/>
+        public void PointTheLight()
+        {
+            DimensionAuthoredLight.Point(optionalLightOptimizer, objectData.objectID);
         }
 
         /// <summary>Opens the writing window against this sign.</summary>

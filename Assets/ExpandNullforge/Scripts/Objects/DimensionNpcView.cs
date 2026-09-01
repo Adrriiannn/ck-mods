@@ -29,7 +29,9 @@ namespace ExpandNullforge.Objects
     /// per entity in <see cref="OnOccupied"/>.
     /// </para>
     /// </remarks>
-    public class DimensionNpcView : NPC, IDimensionAuthoredBody
+    public class DimensionNpcView : NPC,
+        IDimensionAuthoredBody,
+        IDimensionAuthoredLight
     {
         /// <summary>
         /// The renderer that draws the character. Wired at generation; the sprite it shows is
@@ -52,7 +54,14 @@ namespace ExpandNullforge.Objects
         public override void OnOccupied()
         {
             DimensionAuthoredBody.Point(body, objectData.objectID, objectData.variation);
+            PointTheLight();
             base.OnOccupied();
+        }
+
+        /// <inheritdoc/>
+        public void PointTheLight()
+        {
+            DimensionAuthoredLight.Point(optionalLightOptimizer, objectData.objectID);
         }
     }
 }

@@ -4254,28 +4254,6 @@ namespace ExpandNullforge.EditorTools
             }
 
             Transform xScaler = EnsurePortalXScaler(root);
-            Transform existing = xScaler.Find(PortalLightObjectName);
-            if (existing != null)
-            {
-                Object.DestroyImmediate(existing.gameObject, true);
-            }
-
-            GameObject template =
-                AssetDatabase.LoadAssetAtPath<GameObject>(PortalVisualTemplatePath);
-            Transform source = template == null
-                ? null
-                : FindDescendantTransform(template.transform, PortalLightObjectName);
-            if (source == null)
-            {
-                throw new System.InvalidOperationException(
-                    "Could not find the vanilla portal PugLight subtree at " +
-                    PortalVisualTemplatePath +
-                    ".");
-            }
-
-            GameObject clone = Object.Instantiate(source.gameObject);
-            clone.name = PortalLightObjectName;
-            clone.transform.SetParent(xScaler, false);
             Vector2 lightOffset = visualProfile == null
                 ? Vector2.zero
                 : visualProfile.GroundLightOffsetPixels;
@@ -4284,29 +4262,13 @@ namespace ExpandNullforge.EditorTools
             Vector3 footprintShift = itemPortal
                 ? new Vector3(-1.0f, 0.0f, 0.0f)
                 : Vector3.zero;
-            clone.transform.localPosition = source.localPosition + footprintShift + new Vector3(
-                lightOffset.x / DimensionPortalVisualContract.PixelsPerUnit,
-                0.0f,
-                lightOffset.y / DimensionPortalVisualContract.PixelsPerUnit);
-            clone.transform.localRotation = source.localRotation;
-            clone.transform.localScale = source.localScale;
-
-            ManagedLight managedLight = clone.GetComponent<ManagedLight>();
-            Light light = clone.GetComponentInChildren<Light>(true);
-            SpriteObject fallback = FindDescendantSpriteObject(clone.transform, "IndirectLightSprite");
-            if (managedLight == null || light == null || fallback == null)
-            {
-                throw new System.InvalidOperationException(
-                    "The generated portal PugLight subtree is incomplete. " +
-                    "Expected ManagedLight, Point Light, and IndirectLightSprite SpriteObject.");
-            }
-
-            managedLight.lightContainer = light.transform.parent != null
-                ? light.transform.parent.gameObject
-                : light.gameObject;
-            managedLight.lightToOptimize = light;
-            managedLight.fallbackRenderer = fallback;
-            fallback.gameObject.SetActive(false);
+            Vector3 localPosition =
+                DimensionEmittedLightBuilder.TemplateLightLocalPosition() +
+                footprintShift +
+                new Vector3(
+                    lightOffset.x / DimensionPortalVisualContract.PixelsPerUnit,
+                    0.0f,
+                    lightOffset.y / DimensionPortalVisualContract.PixelsPerUnit);
 
             Color lightColor = visualProfile == null
                 ? DimensionPortalVisualProfileAsset.VanillaGroundLightColor
@@ -4325,29 +4287,26 @@ namespace ExpandNullforge.EditorTools
                 : visualProfile.GroundLightMaximumIntensity;
             bool movement = visualProfile == null || visualProfile.GroundLightMovement;
             bool castsShadows = visualProfile == null || visualProfile.GroundLightCastsShadows;
-
-            light.color = lightColor;
-            light.intensity = lightIntensity;
-            light.range = lightRange;
-            light.shadows = castsShadows ? LightShadows.Hard : LightShadows.None;
-
-            LightFlickerEffect flicker = clone.GetComponentInChildren<LightFlickerEffect>(true);
-            if (flicker != null)
-            {
-                flicker.flickeringLight = light;
-                flicker.enableMovement = movement;
-                flicker.SetIntensityRange(
-                    minimumLightIntensity,
-                    maximumLightIntensity);
-            }
-
             bool lightEnabled = visualProfile == null || visualProfile.GroundLightEnabled;
-            clone.SetActive(lightEnabled);
 
-            // EntityMonoBehaviour automatically re-enables an assigned optional light
-            // when the visual is hydrated. Leaving the disabled subtree unassigned is
-            // therefore required for an authored "no ground light" preset to persist.
-            return lightEnabled ? managedLight : null;
+            // THE BODY OF THIS METHOD MOVED, IT DID NOT CHANGE. Every line that used to stand here
+            // — destroying an existing light before cloning, the clone out of the donor prefab, the
+            // three ManagedLight references, the colour, range and shadow assignments, the flicker
+            // range, and returning null for a light that is switched off — now lives in
+            // DimensionEmittedLightBuilder.Ensure, so that a placed object authored with a light
+            // gets the same subtree the portal does rather than a second implementation of it. The
+            // portal's own numbers are unchanged and are still read from its visual profile here.
+            return DimensionEmittedLightBuilder.Ensure(
+                xScaler,
+                localPosition,
+                lightColor,
+                lightIntensity,
+                lightRange,
+                castsShadows,
+                minimumLightIntensity,
+                maximumLightIntensity,
+                movement,
+                lightEnabled);
         }
 
         private static SpriteObject FindDescendantSpriteObject(
@@ -6067,6 +6026,14 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("    // is read off the template here and handed to the talent window as it draws.");
             builder.AppendLine("    ExpandNullforge.Skills.DimensionTalentIconRegistry.AttachFrom(manifest.SourceTemplate);");
             builder.AppendLine();
+            builder.AppendLine("    // Skill pictures and a pet's colours are the same shape again: both are Unity");
+            builder.AppendLine("    // objects rather than numbers, so neither can be written into generated source.");
+            builder.AppendLine("    // They are read off the template here and answered where the game asks for them.");
+            builder.AppendLine("    ExpandNullforge.Skills.DimensionSkillIconRegistry.AttachFrom(");
+            builder.AppendLine("        manifest.SourceTemplate, ExpandNullforge.Foundation.DimensionFrameworkLog.Warning);");
+            builder.AppendLine("    ExpandNullforge.Creatures.DimensionPetSkinRegistry.AttachFrom(");
+            builder.AppendLine("        manifest.SourceTemplate, ExpandNullforge.Foundation.DimensionFrameworkLog.Warning);");
+            builder.AppendLine();
             builder.AppendLine("    // Register the painted tile map the moment the manifest asset loads — before the");
             builder.AppendLine("    // world generates the dimension area. DimensionTileMapRegistry is a plain static");
             builder.AppendLine("    // store, so this does not need the dimension service (not ready this early);");
@@ -6296,6 +6263,7 @@ namespace ExpandNullforge.EditorTools
             // written-and-never-run failure this framework keeps finding.
             AppendCreaturePresentationRegistrations(builder, template, modName);
             AppendPlantPresentationRegistrations(builder, template, modName);
+            AppendEmittedLightRegistrations(builder, template, modName);
             AppendFoodRegistrations(builder, template, modName);
             AppendExplosiveRegistrations(builder, template, modName);
             AppendObjectLinkRegistrations(builder, template, modName);

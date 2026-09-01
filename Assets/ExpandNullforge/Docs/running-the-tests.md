@@ -1,7 +1,9 @@
 # Running the tests
 
-Written 2026-08-29, alongside Phase 0.5. **The suite has never been run.** Nothing in this file
-reports a result; it reports how to get one, and what the result will and will not mean.
+Written 2026-08-29 alongside Phase 0.5, and corrected 2026-08-30. The claim this file opened with —
+that the suite had never been run — was wrong, and it had shaped a great many decisions: every
+build wave was told a test could only be "correct by reading". Nobody had tried. Filtered batchmode
+runs work, and the first one found a real bug on its first use. See the command at the end.
 
 ---
 
@@ -137,3 +139,36 @@ them that could be executed offline were, and are listed above; the parts that n
 It is not a CI configuration, and none is proposed. Nobody asked for one, and a scheduled green bar
 on a suite that cannot see the failures this project actually has would be worse than no bar: it
 would make the number in the capability registry easier to ignore.
+
+## Running them from the command line (measured 2026-08-30)
+
+This works today and gives a real pass/fail with line numbers. Unity must not be open — check for
+`CoreKeeperModSDK/Temp/UnityLockfile` first.
+
+```
+"C:\Program Files\Unity\Hub\Editor\6000.0.59f2\Editor\Unity.exe" ^
+  -batchmode -nographics -projectPath "E:\ck mods\CoreKeeperModSDK" ^
+  -burst-disable-compilation ^
+  -runTests -testPlatform EditMode ^
+  -testFilter "ExpandNullforge.EditorTests.DimensionEmittedLightTests" ^
+  -testResults "E:\ck mods\CoreKeeperModSDK\results.xml" ^
+  -logFile "E:\ck mods\CoreKeeperModSDK\run.log"
+```
+
+**Read the results file, never the exit code.** Exit 0 means nothing here: a run that dies before
+writing results exits 0, and a filter that matches nothing writes `result="Passed"` over
+`total="0"`. Check `total` against a number you expected before believing `passed`.
+
+**A whole-suite run does not finish.** It dies on a `StackOverflowException` from
+`BurstDirectCall` re-entering the method it is resolving — `AddSkillValueSystem.__codegen__OnCreate`
+and friends, all of them Core Keeper's own `WorldGen` and `Pug.Other` systems, during Entities'
+world bootstrap. Nothing in this framework causes it and no Harmony patch is applied in the editor.
+`-burst-disable-compilation` takes it from 1,001 occurrences to one, and one is still fatal. Filtered
+runs by test class are reliable; the full suite needs the Unity GUI, or a project-level
+`UNITY_DISABLE_AUTOMATIC_SYSTEM_BOOTSTRAP` define, which nobody has decided on.
+
+**The numbers a run reports**, so a shrunken one is obvious: 5,904 test cases in the project,
+**1,355** in `ExpandNullforge.Editor.Tests.dll`, 846 of them under `ExpandNullforge.EditorTests`.
+
+The older claim in this file that no test in this project has ever been run was simply wrong —
+nobody had tried.

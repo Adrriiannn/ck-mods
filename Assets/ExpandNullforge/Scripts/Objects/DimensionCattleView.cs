@@ -39,7 +39,9 @@ namespace ExpandNullforge.Objects
     /// prefab.
     /// </para>
     /// </remarks>
-    public class DimensionCattleView : Cattle, IDimensionAuthoredBody
+    public class DimensionCattleView : Cattle,
+        IDimensionAuthoredBody,
+        IDimensionAuthoredLight
     {
         /// <summary>
         /// The renderer that draws the animal. Wired at generation; the sprite it shows is replaced
@@ -66,7 +68,14 @@ namespace ExpandNullforge.Objects
         public override void OnOccupied()
         {
             DimensionAuthoredBody.Point(body, objectData.objectID, objectData.variation);
+            PointTheLight();
             base.OnOccupied();
+        }
+
+        /// <inheritdoc/>
+        public void PointTheLight()
+        {
+            DimensionAuthoredLight.Point(optionalLightOptimizer, objectData.objectID);
         }
 
         /// <summary>
