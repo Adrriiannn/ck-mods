@@ -70,8 +70,10 @@ namespace ExpandNullforge.WorldRules
         /// </remarks>
         public const int MostItemsTheScreenCanShow = 2;
 
-        /// <summary>Core Keeper's Nomad, which is given nothing by a hardcoded test on the number.</summary>
-        public const int NomadBackground = 6;
+        // A `NomadBackground = 6` constant used to sit here and had no readers anywhere in the
+        // tree: the check that matters is DimensionBackgroundKit.NamesASkillNomadWillNeverGet,
+        // which the template carries and the generator reports from. A public number nothing asks
+        // for reads as a check that is being made somewhere, and none was.
 
         private static readonly List<Row> Rows = new List<Row>();
 
@@ -197,14 +199,27 @@ namespace ExpandNullforge.WorldRules
         /// What one background should answer, or false when this mod says nothing about it.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// THE ANSWER IS ONLY KEPT ONCE IT IS WHOLE. The character-creation screen is open long
         /// before a world exists, and a mod's own object has no number until its content has
         /// loaded, so the first time this is asked one of the mod's own items can still come back
         /// empty. Caching that answer would freeze a half-built kit for the rest of the session, so
         /// an answer with anything missing from it is rebuilt on the next ask instead of stored.
+        /// </para>
+        /// <para>
+        /// A HALF NOBODY FILLED IN KEEPS THE GAME'S OWN, which is why the game's answer is passed
+        /// in rather than ignored. The answer replaces Core Keeper's whole <c>Perks</c> struct, so
+        /// building it from nothing made a row that changed only the bag also move that background
+        /// to Mining — <c>default(SkillID)</c> is Mining, and neither branch below fires on an
+        /// empty name. Chef given a new bag lost Cooking, and Chef given a new skill lost the
+        /// cooking pot, both without a word. Starting from the game's own answer means a row edits
+        /// the halves it names and leaves the rest exactly as the game had it, which is what the
+        /// row-level promise on the template already says about a background nobody names.
+        /// </para>
         /// </remarks>
         internal static bool TryAnswer(
             int background,
+            RolePerksTable.Perks theGamesOwn,
             System.Func<string, ObjectID> resolveItem,
             System.Action<string> report,
             out RolePerksTable.Perks perks)
@@ -233,10 +248,20 @@ namespace ExpandNullforge.WorldRules
                 return false;
             }
 
+            // The game's own list is copied rather than handed back: it belongs to RolePerksTable,
+            // which is one asset shared by five prefabs and never reloaded, so adding to it would
+            // outlive the world that wanted it.
+            List<ObjectData> keptItems = new List<ObjectData>();
+            for (int i = 0; theGamesOwn.starterItems != null && i < theGamesOwn.starterItems.Count; i++)
+            {
+                keptItems.Add(theGamesOwn.starterItems[i]);
+            }
+
             RolePerksTable.Perks built = new RolePerksTable.Perks
             {
                 role = (CharacterRole)background,
-                starterItems = new List<ObjectData>()
+                starterSkill = theGamesOwn.starterSkill,
+                starterItems = keptItems
             };
 
             SkillID skill;
@@ -254,7 +279,15 @@ namespace ExpandNullforge.WorldRules
                     "Range, Gardening, Fishing, Cooking, Magic, Summoning and Explosives.");
             }
 
+            // A row that lists nothing to start with keeps the game's bag; a row that lists
+            // anything replaces the whole bag, because "two items instead of these two" is what
+            // listing items means and there is no way to say "and also".
             int fits = ItemsThatWillFit(row.StartsWith.Count);
+            if (fits > 0)
+            {
+                built.starterItems.Clear();
+            }
+
             if (row.StartsWith.Count > fits && report != null)
             {
                 report(
@@ -343,6 +376,8 @@ namespace ExpandNullforge.WorldRules
             RolePerksTable.Perks ours;
             if (DimensionBackgroundRegistry.TryAnswer(
                     (int)role,
+                    // The game's own answer goes in so a row that fills one half keeps the other.
+                    __result,
                     DimensionBackgroundRegistry.ResolveItemName,
                     DimensionFrameworkLog.Warning,
                     out ours))

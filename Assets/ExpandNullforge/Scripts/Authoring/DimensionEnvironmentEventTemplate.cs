@@ -36,7 +36,9 @@ namespace ExpandNullforge.Authoring
     /// right biome, far enough from the core, standing on enough of the right tiles, not next to a
     /// boss, and off cooldown (<c>ck-db\EnvironmentEvents\EnvironmentEventSystem.cs:459-540</c>).
     /// Every one of those answers comes out of <c>EnvironmentEventsTable</c>, which is why editing
-    /// it is how a cave-in happens in a biome this mod added.
+    /// it is how a cave-in happens somewhere it never happened before — in one of the game's own
+    /// biomes, over blocks of your own. Not in a biome this mod added; see the paragraph on that
+    /// below, which is measured.
     /// </para>
     /// <para>
     /// AN EVENT WITH NO ROW NEVER HAPPENS. The check starts by looking the event up and returning

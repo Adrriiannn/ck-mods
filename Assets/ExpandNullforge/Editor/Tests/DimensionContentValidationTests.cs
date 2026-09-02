@@ -281,6 +281,112 @@ namespace ExpandNullforge.EditorTools
                 "times and asserted nothing. A disabled item is meant to get one Info line " +
                 "('item-disabled') saying it will not be generated.");
         }
+
+        /// <summary>
+        /// Builds a portal rule that asks for one item before it opens.
+        /// </summary>
+        /// <remarks>
+        /// Written through the serialized object rather than through <c>Configure</c> because the
+        /// offering list is what is under test, and going through the twenty-argument configure
+        /// call would let a change of argument order pass this silently.
+        /// </remarks>
+        private DimensionPortalAccessRuleAsset MakeRuleAskingFor(string itemId)
+        {
+            DimensionPortalAccessRuleAsset rule = Make<DimensionPortalAccessRuleAsset>();
+            SerializedObject serialized = new SerializedObject(rule);
+            serialized.FindProperty("ruleId").stringValue = "test:OfferingRule";
+            serialized.FindProperty("enabled").boolValue = true;
+            serialized.FindProperty("activationMode").intValue =
+                (int)DimensionPortalActivationMode.RequiredItems;
+            SerializedProperty offerings = serialized.FindProperty("requiredItems");
+            Assert.That(offerings, Is.Not.Null, "requiredItems missing on the access rule.");
+            offerings.arraySize = 1;
+            offerings.GetArrayElementAtIndex(0).FindPropertyRelative("itemId").stringValue = itemId;
+            offerings.GetArrayElementAtIndex(0).FindPropertyRelative("amount").intValue = 1;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            return rule;
+        }
+
+        private static int CountOf(IReadOnlyList<DimensionAuthoringIssue> issues, string code)
+        {
+            int count = 0;
+            for (int i = 0; i < issues.Count; i++)
+            {
+                if (issues[i].Code == code)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        [Test]
+        public void AMisspeltPortalOffering_IsOneErrorBeforeTheBuild()
+        {
+            DimensionTemplateAsset template = Make<DimensionTemplateAsset>();
+            template.SetPortalAccessRules(new[] { MakeRuleAskingFor("test:NothingDefinesThis") });
+
+            DimensionContentValidationUtility.BumpChangeStamp();
+            DimensionAuthoringPreviewSummary preview =
+                DimensionAuthoringPreviewBuilder.Build(template);
+
+            Assert.That(
+                CountOf(preview.Issues, "portal-required-item-unresolved"),
+                Is.EqualTo(1),
+                "One slot naming nothing, one row. Until this check existed the misspelling " +
+                "reached the build unmentioned and shipped a door with a slot no item fits.");
+
+            for (int i = 0; i < preview.Issues.Count; i++)
+            {
+                if (preview.Issues[i].Code == "portal-required-item-unresolved")
+                {
+                    Assert.That(
+                        preview.Issues[i].Severity,
+                        Is.EqualTo(DimensionAuthoringSeverity.Error),
+                        "A portal that can never open is not a warning.");
+                }
+            }
+        }
+
+        [Test]
+        public void APortalOfferingNamingOneOfTheGamesItems_SaysNothing()
+        {
+            DimensionTemplateAsset template = Make<DimensionTemplateAsset>();
+            template.SetPortalAccessRules(new[] { MakeRuleAskingFor("IronBar") });
+
+            DimensionContentValidationUtility.BumpChangeStamp();
+            DimensionAuthoringPreviewSummary preview =
+                DimensionAuthoringPreviewBuilder.Build(template);
+
+            Assert.That(
+                CountOf(preview.Issues, "portal-required-item-unresolved"),
+                Is.EqualTo(0),
+                "IronBar is one of the game's own items, so asking for it is correct content. " +
+                "A check that reports it teaches creators that half the red list can be ignored.");
+        }
+
+        [Test]
+        public void APortalThatOpensOnACooldown_IsNotAskedAboutItsLeftoverOffering()
+        {
+            DimensionTemplateAsset template = Make<DimensionTemplateAsset>();
+            DimensionPortalAccessRuleAsset rule = MakeRuleAskingFor("test:NothingDefinesThis");
+            SerializedObject serialized = new SerializedObject(rule);
+            serialized.FindProperty("activationMode").intValue =
+                (int)DimensionPortalActivationMode.VanillaCooldown;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            template.SetPortalAccessRules(new[] { rule });
+
+            DimensionContentValidationUtility.BumpChangeStamp();
+            DimensionAuthoringPreviewSummary preview =
+                DimensionAuthoringPreviewBuilder.Build(template);
+
+            Assert.That(
+                CountOf(preview.Issues, "portal-required-item-unresolved"),
+                Is.EqualTo(0),
+                "A rule that opens on a cooldown never asks for these, so a name left behind in " +
+                "the list breaks nothing in play and must not block the build.");
+        }
     }
 }
 #endif

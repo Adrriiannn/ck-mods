@@ -26,6 +26,20 @@ namespace ExpandNullforge.Skills
         {
             public Sprite Picture;
             public Sprite PictureAtMaxLevel;
+
+            /// <summary>The answer already built for one of the game's own icons.</summary>
+            /// <remarks>
+            /// <c>SkillUIElement.LateUpdate</c> asks <c>GetIcon</c> once or twice per element per
+            /// frame (<c>ck-db\Pug.Other\SkillUIElement.cs:11,24,29</c>), so building a fresh
+            /// <c>SkillIcon</c> on every answer was a per-frame allocation per claimed skill for as
+            /// long as the skill window was open. The game's answer for one skill is the same
+            /// object every time — it comes out of a serialized list on <c>SkillIconsTable</c> —
+            /// so the built answer is kept beside the icon it was built from and rebuilt only if
+            /// that ever changes.
+            /// </remarks>
+            public SkillIcon Answer;
+
+            public SkillIcon AnsweredFor;
         }
 
         private static readonly Dictionary<int, Pair> icons = new Dictionary<int, Pair>();
@@ -83,6 +97,15 @@ namespace ExpandNullforge.Skills
                 return false;
             }
 
+            // Built once per (skill, the game's own icon) rather than once per ask — see the
+            // Pair.Answer remarks. ReferenceEquals rather than ==: SkillIcon is a plain class, and
+            // the point is whether this is the same object the answer was built from.
+            if (pair.Answer != null && ReferenceEquals(pair.AnsweredFor, theirs))
+            {
+                ours = pair.Answer;
+                return true;
+            }
+
             ours = new SkillIcon
             {
                 skillID = skill,
@@ -93,6 +116,8 @@ namespace ExpandNullforge.Skills
                     ? pair.PictureAtMaxLevel
                     : (theirs != null ? theirs.goldIcon : null)
             };
+            pair.Answer = ours;
+            pair.AnsweredFor = theirs;
             return true;
         }
 
@@ -124,7 +149,7 @@ namespace ExpandNullforge.Skills
                 for (int i = 0; i < rows.Length; i++)
                 {
                     SkillID skill;
-                    if (!System.Enum.TryParse(rows[i].SkillName, false, out skill))
+                    if (!TheGamesOwnSkill(rows[i].SkillName, out skill))
                     {
                         if (report != null)
                         {
@@ -142,6 +167,54 @@ namespace ExpandNullforge.Skills
                 }
             }
         }
+
+        /// <summary>The twelve skills the game has, by the names it gives them.</summary>
+        /// <remarks>
+        /// <c>SkillID</c> has thirteen names; the thirteenth is <c>NUM_SKILLS</c>, the count rather
+        /// than a skill. The names are matched against this list rather than parsed because
+        /// <c>Enum.TryParse</c> takes a number as readily as a name — a row named "12" came back as
+        /// <c>NUM_SKILLS</c> and registered a picture that nothing would ever ask for, with the
+        /// spelling complaint below never printed.
+        /// </remarks>
+        private static readonly string[] TheGamesOwnSkillNames =
+        {
+            "Mining", "Running", "Melee", "Vitality", "Crafting", "Range",
+            "Gardening", "Fishing", "Cooking", "Magic", "Summoning", "Explosives"
+        };
+
+        /// <summary>Answers a skill name, and only one of the game's own twelve.</summary>
+        /// <remarks>
+        /// Reachable from the tests rather than private, for the same reason the world-event biome
+        /// gate is: it is the whole of the refusal, and a refusal nothing can ask about directly is
+        /// a refusal nothing checks.
+        /// </remarks>
+        internal static bool TheGamesOwnSkill(string skillName, out SkillID skill)
+        {
+            skill = default(SkillID);
+            if (string.IsNullOrEmpty(skillName))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < TheGamesOwnSkillNames.Length; i++)
+            {
+                if (!string.Equals(TheGamesOwnSkillNames[i], skillName, System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                SkillID named;
+                if (System.Enum.TryParse(TheGamesOwnSkillNames[i], false, out named))
+                {
+                    skill = named;
+                    return true;
+                }
+
+                return false;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>
@@ -156,7 +229,10 @@ namespace ExpandNullforge.Skills
     /// claim keeps exactly the picture the game gave it.
     /// </para>
     /// <para>
-    /// COST WHEN UNUSED IS ONE BOOLEAN, and only while the skill window is drawing.
+    /// COST WHEN UNUSED IS ONE BOOLEAN, and only while the skill window is drawing. When it IS
+    /// used the cost is a dictionary lookup and a reference test on the same path, because
+    /// <c>SkillUIElement.LateUpdate</c> asks once or twice per element per frame and the answer for
+    /// one skill is built once rather than per ask.
     /// </para>
     /// </remarks>
     [HarmonyPatch(typeof(SkillIconsTable), "GetIcon")]

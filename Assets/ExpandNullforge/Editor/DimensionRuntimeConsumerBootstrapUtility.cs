@@ -6031,8 +6031,13 @@ namespace ExpandNullforge.EditorTools
             builder.AppendLine("    // They are read off the template here and answered where the game asks for them.");
             builder.AppendLine("    ExpandNullforge.Skills.DimensionSkillIconRegistry.AttachFrom(");
             builder.AppendLine("        manifest.SourceTemplate, ExpandNullforge.Foundation.DimensionFrameworkLog.Warning);");
+            // The mod's own name goes with the pet colours because a mob id is an OBJECT name, and
+            // the object the generator wrote is registered under the qualified form. Every other
+            // reader of a mob id qualifies it at generate time; this one is read off the template
+            // at load, so the name has to travel with it or a plainly written id finds nothing.
             builder.AppendLine("    ExpandNullforge.Creatures.DimensionPetSkinRegistry.AttachFrom(");
-            builder.AppendLine("        manifest.SourceTemplate, ExpandNullforge.Foundation.DimensionFrameworkLog.Warning);");
+            builder.AppendLine("        manifest.SourceTemplate, ExpandNullforge.Foundation.DimensionFrameworkLog.Warning,");
+            builder.AppendLine("        " + ToCSharpString(modName) + ");");
             builder.AppendLine();
             builder.AppendLine("    // Register the painted tile map the moment the manifest asset loads — before the");
             builder.AppendLine("    // world generates the dimension area. DimensionTileMapRegistry is a plain static");

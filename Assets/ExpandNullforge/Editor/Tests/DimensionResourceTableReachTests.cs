@@ -76,15 +76,15 @@ namespace ExpandNullforge.EditorTests
         [Test]
         public void SetNumbersFollowTheNamesRatherThanTheOrderTheyArriveIn()
         {
-            DimensionSetBonusRegistry.Register("zeta", new[] { "a" }, 30, 2, OneLine("MeleeDamage"));
-            DimensionSetBonusRegistry.Register("alpha", new[] { "b" }, 30, 2, OneLine("MeleeDamage"));
+            DimensionSetBonusRegistry.Register("zeta", new[] { "a" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
+            DimensionSetBonusRegistry.Register("alpha", new[] { "b" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
 
             Assert.AreEqual(100, DimensionSetBonusRegistry.NumberFor("alpha", 100));
             Assert.AreEqual(101, DimensionSetBonusRegistry.NumberFor("zeta", 100));
 
             DimensionSetBonusRegistry.Clear();
-            DimensionSetBonusRegistry.Register("alpha", new[] { "b" }, 30, 2, OneLine("MeleeDamage"));
-            DimensionSetBonusRegistry.Register("zeta", new[] { "a" }, 30, 2, OneLine("MeleeDamage"));
+            DimensionSetBonusRegistry.Register("alpha", new[] { "b" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
+            DimensionSetBonusRegistry.Register("zeta", new[] { "a" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
 
             Assert.AreEqual(
                 100,
@@ -133,7 +133,7 @@ namespace ExpandNullforge.EditorTests
                     new[] { "MyMod:Helm", "MyMod:Chest" },
                     (int)AreaLevel.Stone,
                     (int)Rarity.Rare,
-                    OneLine("MeleeDamage"));
+                    OneLine("PhysicalMeleeDamageIncrease"));
 
                 int appended = DimensionSetBonusRegistry.AppendTo(
                     table, 100, ResolveModdedPiece, ResolveEffect, null);
@@ -169,7 +169,7 @@ namespace ExpandNullforge.EditorTests
             {
                 table.setBonuses = new List<SetBonusInfo>();
                 DimensionSetBonusRegistry.Register(
-                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("MeleeDamage"));
+                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
 
                 DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
                 DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
@@ -196,14 +196,14 @@ namespace ExpandNullforge.EditorTests
             {
                 table.setBonuses = new List<SetBonusInfo>();
                 DimensionSetBonusRegistry.Register(
-                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("MeleeDamage"));
+                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
                 DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
 
                 // What a mod reload does: this framework's registry is emptied, Core Keeper's table
                 // is not, because it is loaded once for the whole process.
                 DimensionSetBonusRegistry.Clear();
                 DimensionSetBonusRegistry.Register(
-                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("MeleeDamage"));
+                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
                 DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
 
                 Assert.AreEqual(
@@ -236,7 +236,7 @@ namespace ExpandNullforge.EditorTests
                 };
 
                 DimensionSetBonusRegistry.Register(
-                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("MeleeDamage"));
+                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
 
                 List<string> said = new List<string>();
                 int appended = DimensionSetBonusRegistry.AppendTo(
@@ -252,6 +252,102 @@ namespace ExpandNullforge.EditorTests
                     said,
                     "The clash was refused in silence. Nothing else in the process would say why " +
                     "the set never appeared.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(table);
+            }
+        }
+
+        /// <summary>
+        /// The strip takes away this framework's own rows and leaves another mod's alone.
+        /// </summary>
+        /// <remarks>
+        /// The strip used to remove every row carrying a set number this framework had handed out.
+        /// The first free number is the highest <c>SetBonusID</c> plus one, which is the number any
+        /// other mod appending a set picks by exactly the same reasoning — so a second mod's set,
+        /// written at the same number after ours, was deleted by our next append, and the comment
+        /// beside the strip said another mod's sets were safe.
+        /// </remarks>
+        [Test]
+        public void TheStripTakesAwayOurOwnRowsAndNotAnotherModsWithTheSameNumber()
+        {
+            SetBonusesTable table = ScriptableObject.CreateInstance<SetBonusesTable>();
+            try
+            {
+                table.setBonuses = new List<SetBonusInfo>();
+                DimensionSetBonusRegistry.Register(
+                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
+                DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
+                Assert.AreEqual(1, table.setBonuses.Count);
+
+                // Another mod appends after us and reasons about the free number exactly as we do,
+                // so it lands on the same one.
+                SetBonusInfo theirs = new SetBonusInfo
+                {
+                    setBonusID = (SetBonusID)100,
+                    areaLevel = AreaLevel.Stone,
+                    rarity = Rarity.Rare,
+                    availablePieces = new List<ObjectID> { (ObjectID)999999 },
+                    setBonusDatas = new List<SetBonusData>()
+                };
+                table.setBonuses.Add(theirs);
+
+                DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
+
+                CollectionAssert.Contains(
+                    table.setBonuses,
+                    theirs,
+                    "Another mod's set was deleted because it had picked the same free number we " +
+                    "did. Nothing about that row is ours.");
+                Assert.AreEqual(
+                    2,
+                    table.setBonuses.Count,
+                    "Our own row was written twice, or theirs went missing.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(table);
+            }
+        }
+
+        /// <summary>
+        /// Switching the armour-set block off and loading again takes the sets away.
+        /// </summary>
+        /// <remarks>
+        /// The strip used to sit behind an early return on an empty row list, and the patch behind
+        /// an earlier one on "nothing is registered", so the one load that has nothing to append is
+        /// the load that could not clean up. A creator who unticked "Add sets" kept them, in a
+        /// table nothing in the registry could still explain.
+        /// </remarks>
+        [Test]
+        public void SwitchingTheBlockOffAndLoadingAgainTakesTheSetsAway()
+        {
+            SetBonusesTable table = ScriptableObject.CreateInstance<SetBonusesTable>();
+            try
+            {
+                table.setBonuses = new List<SetBonusInfo>();
+                DimensionSetBonusRegistry.Register(
+                    "mine", new[] { "MyMod:Helm" }, 30, 2, OneLine("PhysicalMeleeDamageIncrease"));
+                DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
+                Assert.AreEqual(1, table.setBonuses.Count);
+                Assert.IsTrue(DimensionSetBonusRegistry.AnythingWasWrittenBefore);
+
+                // The reload with the block switched off: the registry empties and nothing is
+                // registered in its place.
+                DimensionSetBonusRegistry.Clear();
+                DimensionSetBonusRegistry.AppendTo(table, 100, ResolveModdedPiece, ResolveEffect, null);
+
+                Assert.AreEqual(
+                    0,
+                    table.setBonuses.Count,
+                    "The sets stayed in the game's table after the block that made them was " +
+                    "switched off. Nothing left in the mod explains them and nothing takes them " +
+                    "away for the rest of the session.");
+                Assert.IsFalse(
+                    DimensionSetBonusRegistry.AnythingWasWrittenBefore,
+                    "The framework still thinks it has rows in the table, so a plain game would " +
+                    "keep loading the table to strip nothing.");
             }
             finally
             {
@@ -283,7 +379,11 @@ namespace ExpandNullforge.EditorTests
             RolePerksTable.Perks ours;
             Assert.IsTrue(
                 DimensionBackgroundRegistry.TryAnswer(
-                    (int)DimensionBackground.Miner, ResolveModdedPiece, null, out ours),
+                    (int)DimensionBackground.Miner,
+                    TheGamesOwnChef(),
+                    ResolveModdedPiece,
+                    null,
+                    out ours),
                 "The background this mod changed was not answered for.");
             Assert.AreEqual(SkillID.Crafting, ours.starterSkill);
             Assert.AreEqual(1, ours.starterItems.Count);
@@ -292,9 +392,122 @@ namespace ExpandNullforge.EditorTests
             RolePerksTable.Perks untouched;
             Assert.IsFalse(
                 DimensionBackgroundRegistry.TryAnswer(
-                    (int)DimensionBackground.Chef, ResolveModdedPiece, null, out untouched),
+                    (int)DimensionBackground.Chef,
+                    TheGamesOwnChef(),
+                    ResolveModdedPiece,
+                    null,
+                    out untouched),
                 "A background nobody named was answered for, so the game's own kit would be " +
                 "replaced by an empty one.");
+        }
+
+        /// <summary>
+        /// A row that fills in one half of a background keeps the game's other half.
+        /// </summary>
+        /// <remarks>
+        /// THE ANSWER REPLACES CORE KEEPER'S WHOLE PERKS STRUCT, so a half nobody filled in used to
+        /// come back as the default rather than as the game's. <c>default(SkillID)</c> is Mining
+        /// and an empty <c>starterItems</c> is an empty bag, so giving Chef a new bag also moved
+        /// Chef to Mining, and giving Chef a new skill also took the cooking pot away — in the
+        /// granted kit and in the creation-screen preview, with nothing said either way. Both
+        /// halves are asserted here because the loss was symmetrical.
+        /// </remarks>
+        [Test]
+        public void ARowThatFillsInOneHalfOfABackgroundKeepsTheGamesOther()
+        {
+            DimensionBackgroundRegistry.Register(
+                (int)DimensionBackground.Chef,
+                string.Empty,
+                new[] { "MyMod:Helm" },
+                new[] { 1 },
+                new[] { 0 });
+
+            List<string> said = new List<string>();
+            RolePerksTable.Perks bagOnly;
+            DimensionBackgroundRegistry.TryAnswer(
+                (int)DimensionBackground.Chef, TheGamesOwnChef(), ResolveModdedPiece, said.Add, out bagOnly);
+
+            Assert.AreEqual(
+                SkillID.Cooking,
+                bagOnly.starterSkill,
+                "Changing only the bag moved the background to another skill. Chef starts you in " +
+                "Cooking and nothing in the row said otherwise.");
+            Assert.AreEqual(1, bagOnly.starterItems.Count, "The listed bag was not used.");
+            Assert.AreEqual((int)(ObjectID)ModdedHelm, (int)bagOnly.starterItems[0].objectID);
+
+            DimensionBackgroundRegistry.Clear();
+            DimensionBackgroundRegistry.Register(
+                (int)DimensionBackground.Chef,
+                "Melee",
+                new string[0],
+                new int[0],
+                new int[0]);
+
+            RolePerksTable.Perks skillOnly;
+            DimensionBackgroundRegistry.TryAnswer(
+                (int)DimensionBackground.Chef, TheGamesOwnChef(), ResolveModdedPiece, said.Add, out skillOnly);
+
+            Assert.AreEqual(SkillID.Melee, skillOnly.starterSkill, "The listed skill was not used.");
+            Assert.AreEqual(
+                2,
+                skillOnly.starterItems.Count,
+                "Changing only the skill emptied the bag. Chef starts with a cooking pot and " +
+                "eight mushrooms and nothing in the row said otherwise.");
+        }
+
+        /// <summary>
+        /// Chef as Core Keeper has it: Cooking, a cooking pot and eight mushrooms.
+        /// </summary>
+        /// <remarks>
+        /// Read off <c>MonoBehaviour/RolePerksTable.asset</c> row 3 in the ripped assets — skill 8
+        /// (Cooking), object 4013 and eight of 5500 — which is also what
+        /// <c>wiki-research/life-skills.md</c> says Chef starts with. It stands in for the answer
+        /// <c>RolePerksTable.GetPerks</c> hands the postfix.
+        /// </remarks>
+        private static RolePerksTable.Perks TheGamesOwnChef()
+        {
+            return new RolePerksTable.Perks
+            {
+                role = CharacterRole.Chef,
+                starterSkill = SkillID.Cooking,
+                starterItems = new List<ObjectData>
+                {
+                    new ObjectData { objectID = (ObjectID)4013, amount = 1, variation = 0 },
+                    new ObjectData { objectID = (ObjectID)5500, amount = 8, variation = 0 }
+                }
+            };
+        }
+
+        /// <summary>
+        /// The game's own kit is copied, not handed back, so nothing this mod does writes into it.
+        /// </summary>
+        /// <remarks>
+        /// <c>RolePerksTable</c> is one asset reached as an inspector reference on five prefabs and
+        /// never reloaded, so a list added to here would carry the addition into every later
+        /// character in the session.
+        /// </remarks>
+        [Test]
+        public void TheGamesOwnStarterKitIsCopiedRatherThanAddedTo()
+        {
+            RolePerksTable.Perks theirs = TheGamesOwnChef();
+
+            DimensionBackgroundRegistry.Register(
+                (int)DimensionBackground.Chef,
+                "Melee",
+                new[] { "MyMod:Helm" },
+                new[] { 1 },
+                new[] { 0 });
+
+            RolePerksTable.Perks ours;
+            DimensionBackgroundRegistry.TryAnswer(
+                (int)DimensionBackground.Chef, theirs, ResolveModdedPiece, null, out ours);
+
+            Assert.AreEqual(
+                2,
+                theirs.starterItems.Count,
+                "The game's own list was written into. It belongs to an asset the game keeps for " +
+                "the whole session, so anything put in it stays there.");
+            Assert.AreNotSame(theirs.starterItems, ours.starterItems);
         }
 
         [Test]
@@ -310,7 +523,11 @@ namespace ExpandNullforge.EditorTests
             List<string> said = new List<string>();
             RolePerksTable.Perks ours;
             DimensionBackgroundRegistry.TryAnswer(
-                (int)DimensionBackground.Fighter, ResolveModdedPiece, said.Add, out ours);
+                (int)DimensionBackground.Fighter,
+                TheGamesOwnChef(),
+                ResolveModdedPiece,
+                said.Add,
+                out ours);
 
             Assert.AreEqual(
                 2,
@@ -333,12 +550,17 @@ namespace ExpandNullforge.EditorTests
 
             RolePerksTable.Perks first;
             DimensionBackgroundRegistry.TryAnswer(
-                (int)DimensionBackground.Ranger, name => ObjectID.None, null, out first);
+                (int)DimensionBackground.Ranger,
+                TheGamesOwnChef(),
+                name => ObjectID.None,
+                null,
+                out first);
             Assert.AreEqual(0, first.starterItems.Count);
 
             RolePerksTable.Perks second;
             DimensionBackgroundRegistry.TryAnswer(
                 (int)DimensionBackground.Ranger,
+                TheGamesOwnChef(),
                 name => (ObjectID)ModdedHelm,
                 null,
                 out second);
@@ -479,6 +701,56 @@ namespace ExpandNullforge.EditorTests
             Assert.IsFalse(DimensionEnvironmentEventRegistry.TheEventCheckCanSeeThisBiome(""));
         }
 
+        /// <summary>
+        /// A biome written as a number, or as one of the names that is not a biome, is refused too.
+        /// </summary>
+        /// <remarks>
+        /// <c>Enum.TryParse</c> takes a number as readily as a name, so the refusal that the whole
+        /// custom-biome correction rests on was walked past by typing 1000 instead of a name — and
+        /// 1000 is the shape a framework biome id takes. It also accepted the enum's own end marker
+        /// and the two names Core Keeper marks obsolete and its generator never lays.
+        /// </remarks>
+        [Test]
+        public void ABiomeWrittenAsANumberOrAsAnObsoleteNameIsRefusedLikeAnyOtherStranger()
+        {
+            Assert.IsFalse(
+                DimensionEnvironmentEventRegistry.TheEventCheckCanSeeThisBiome("1000"),
+                "A biome id written as a number walked past the refusal. That is exactly the " +
+                "shape a biome this mod added has, and the rule it produces never matches.");
+            Assert.IsFalse(DimensionEnvironmentEventRegistry.TheEventCheckCanSeeThisBiome("3"));
+            Assert.IsFalse(
+                DimensionEnvironmentEventRegistry.TheEventCheckCanSeeThisBiome("__MAX_VALUE__"),
+                "The enum's own end marker is not a biome a player can stand in.");
+            Assert.IsFalse(
+                DimensionEnvironmentEventRegistry.TheEventCheckCanSeeThisBiome("Obsidian"),
+                "Obsidian is marked 'Not used in full release world generation' in the game's own " +
+                "Biome enum, so a rule aimed at it can never fire.");
+            Assert.IsFalse(
+                DimensionEnvironmentEventRegistry.TheEventCheckCanSeeThisBiome("GreatWall"),
+                "GreatWall carries the same obsolete note as Obsidian.");
+
+            Assert.AreEqual(
+                Biome.None,
+                DimensionEnvironmentEventRegistry.ResolveBiomeId("1000"),
+                "A number came back as a biome rather than as nothing, so it would be written " +
+                "into the rule and compared against a value BiomeLookup can never return.");
+
+            // The nine that are real still answer, which is what stops this from being a refusal
+            // of everything.
+            string[] real =
+            {
+                "Slime", "Larva", "Stone", "Nature", "Sea", "Desert", "Crystal", "Passage",
+                "Excavation"
+            };
+            for (int i = 0; i < real.Length; i++)
+            {
+                Assert.AreNotEqual(
+                    Biome.None,
+                    DimensionEnvironmentEventRegistry.ResolveBiomeId(real[i]),
+                    real[i] + " is one of the game's own nine and was refused.");
+            }
+        }
+
         // ---- the game's own terrain --------------------------------------------------------
 
         [Test]
@@ -545,6 +817,49 @@ namespace ExpandNullforge.EditorTests
             Assert.AreEqual(4242, (int)rule.outputTile.tileset);
         }
 
+        /// <summary>
+        /// A rule registered word for word twice is queued once; one that differs is queued again.
+        /// </summary>
+        /// <remarks>
+        /// The generated consumer's <c>Shutdown()</c> clears only its own "already registered"
+        /// flag, so a consumer reloaded without the framework reloading re-runs every
+        /// <c>Register</c> against a registry nothing emptied. The other five tables replace by key
+        /// and survive that; this one appended, so every reload put another copy of every rule at
+        /// the front of Core Keeper's table and into the native array the generator keeps per
+        /// world. The second half of this test is the objection the old comment raised: two rules
+        /// differing only in the block they lay are two rules, and both are kept.
+        /// </remarks>
+        [Test]
+        public void TheSameTerrainRuleTwiceIsOneRuleAndADifferentOneIsTwo()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                DimensionWorldTerrainRuleRegistry.Register(
+                    (int)PugWorldGen.CoreKeeper.Biome.Stone, 0, 0, 0, 0,
+                    (int)WorldGen.TileTypeMapping.ResourceIndex.Resource4,
+                    (int)PugTilemap.TileType.ore,
+                    1234567);
+            }
+
+            Assert.AreEqual(
+                1,
+                DimensionWorldTerrainRuleRegistry.PendingCount,
+                "Three loads of the same rule left three copies. Nothing looks wrong in the world " +
+                "— the same block is laid twice — so the list simply grows for the session.");
+
+            DimensionWorldTerrainRuleRegistry.Register(
+                (int)PugWorldGen.CoreKeeper.Biome.Stone, 0, 0, 0, 0,
+                (int)WorldGen.TileTypeMapping.ResourceIndex.Resource4,
+                (int)PugTilemap.TileType.ore,
+                7654321);
+
+            Assert.AreEqual(
+                2,
+                DimensionWorldTerrainRuleRegistry.PendingCount,
+                "Two rules that lay different blocks were treated as one rule. They are not: " +
+                "every matching rule puts its answer down.");
+        }
+
         // ---- skill pictures ----------------------------------------------------------------
 
         [Test]
@@ -585,6 +900,95 @@ namespace ExpandNullforge.EditorTests
             }
         }
 
+        /// <summary>
+        /// The answer for one skill is built once rather than on every ask.
+        /// </summary>
+        /// <remarks>
+        /// <c>SkillUIElement.LateUpdate</c> asks <c>GetIcon</c> once or twice per element per
+        /// frame, so a fresh <c>SkillIcon</c> per answer was an allocation per claimed skill per
+        /// frame for as long as the skill window was open. The game's answer for one skill is the
+        /// same object every time — it comes out of a serialized list — so the built answer is kept
+        /// beside it.
+        /// </remarks>
+        [Test]
+        public void TheAnswerForOneSkillIsBuiltOnceRatherThanOnEveryAsk()
+        {
+            Sprite mine = Sprite.Create(
+                new Texture2D(4, 4), new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+            try
+            {
+                DimensionSkillIconRegistry.Register(SkillID.Mining, mine, null);
+                SkillIcon theirs = new SkillIcon { skillID = SkillID.Mining };
+
+                SkillIcon first;
+                SkillIcon second;
+                DimensionSkillIconRegistry.TryAnswer(SkillID.Mining, theirs, out first);
+                DimensionSkillIconRegistry.TryAnswer(SkillID.Mining, theirs, out second);
+
+                Assert.AreSame(
+                    first,
+                    second,
+                    "A second ask built a second answer. This is asked from LateUpdate, so that " +
+                    "is one allocation per claimed skill per frame while the window is open.");
+
+                // A different icon from the game is a different question and is answered afresh.
+                SkillIcon other = new SkillIcon { skillID = SkillID.Mining };
+                SkillIcon third;
+                DimensionSkillIconRegistry.TryAnswer(SkillID.Mining, other, out third);
+                Assert.AreNotSame(first, third);
+            }
+            finally
+            {
+                Object.DestroyImmediate(mine);
+            }
+        }
+
+        /// <summary>
+        /// A skill written as a number is refused rather than registered against NUM_SKILLS.
+        /// </summary>
+        /// <remarks>
+        /// <c>Enum.TryParse("12")</c> on <c>SkillID</c> comes back as <c>NUM_SKILLS</c>, which is
+        /// the count of the skills rather than one of them, so the picture registered against it
+        /// was one nothing would ever ask for and the spelling complaint was never printed. Checked
+        /// through <c>AttachFrom</c> because that is the only caller that turns a written name into
+        /// a skill.
+        /// </remarks>
+        [Test]
+        public void ASkillWrittenAsANumberIsRefusedRatherThanRegisteredAgainstTheCount()
+        {
+            // NUM_SKILLS is 12 and is not a skill. Nothing ever asks GetIcon for it, so a picture
+            // registered against it is a control that reaches nothing, and the spelling complaint
+            // that would have told the creator so is never printed.
+            Assert.AreEqual(
+                12,
+                (int)SkillID.NUM_SKILLS,
+                "The game's skill count moved, so the number this test uses has to move too.");
+
+            SkillID parsed;
+            Assert.IsFalse(
+                DimensionSkillIconRegistry.TheGamesOwnSkill("12", out parsed),
+                "A skill written as a number was taken as a skill. Enum.TryParse answers 12 with " +
+                "NUM_SKILLS, which is the count of the skills rather than one of them.");
+            Assert.IsFalse(
+                DimensionSkillIconRegistry.TheGamesOwnSkill("NUM_SKILLS", out parsed),
+                "NUM_SKILLS is the count, not a skill.");
+            Assert.IsFalse(DimensionSkillIconRegistry.TheGamesOwnSkill("Woodcutting", out parsed));
+            Assert.IsFalse(DimensionSkillIconRegistry.TheGamesOwnSkill("", out parsed));
+
+            string[] real =
+            {
+                "Mining", "Running", "Melee", "Vitality", "Crafting", "Range",
+                "Gardening", "Fishing", "Cooking", "Magic", "Summoning", "Explosives"
+            };
+            for (int i = 0; i < real.Length; i++)
+            {
+                Assert.IsTrue(
+                    DimensionSkillIconRegistry.TheGamesOwnSkill(real[i], out parsed),
+                    real[i] + " is one of the game's own twelve and was refused.");
+                Assert.AreEqual(i, (int)parsed, real[i] + " answered the wrong skill.");
+            }
+        }
+
         [Test]
         public void ARowWithNoPictureAtAllClaimsNothing()
         {
@@ -607,6 +1011,59 @@ namespace ExpandNullforge.EditorTests
                 DimensionPetSkinRegistry.HasAny,
                 "A pet with no colours was claimed, which would answer the converter with an " +
                 "empty skin list instead of letting the game's own null through.");
+        }
+
+        /// <summary>
+        /// A pet id written without the mod in front of it still finds the pet.
+        /// </summary>
+        /// <remarks>
+        /// The generator stamps a creature's object name with the mod in front of it, and that is
+        /// the only key <c>API.Authoring.GetObjectID</c> answers to. Every other reader of a mob id
+        /// qualifies it while generating; this one is read off the template at load. The wizard
+        /// seeds the id already qualified, so the ordinary flow worked — and a creator who typed a
+        /// plain id, which every other feature accepts, got a pet that still converted with no
+        /// skins, which is the bug this table was opened up to fix.
+        /// </remarks>
+        [Test]
+        public void APetIdWrittenWithoutTheModInFrontOfItStillFindsThePet()
+        {
+            GradientMapDataBlock colour = ScriptableObject.CreateInstance<GradientMapDataBlock>();
+            try
+            {
+                DimensionPetSkinRegistry.Register("fluff", new[] { colour }, "MyMod");
+
+                PetInfosTable.PetSkinInfo info;
+                Assert.IsTrue(
+                    DimensionPetSkinRegistry.TryAnswer(
+                        (ObjectID)ModdedHelm,
+                        name => string.Equals(name, "MyMod:fluff", System.StringComparison.Ordinal)
+                            ? (ObjectID)ModdedHelm
+                            : ObjectID.None,
+                        out info),
+                    "A pet whose id was written without the mod in front of it was not found, so " +
+                    "it converts with no skins at all — silently, with the patch reporting that " +
+                    "it fired.");
+                Assert.AreEqual(1, info.skins.Count);
+
+                // A name that was already qualified is asked for exactly as written and nothing is
+                // stuck in front of it twice.
+                DimensionPetSkinRegistry.Clear();
+                DimensionPetSkinRegistry.Register("MyMod:fluff", new[] { colour }, "MyMod");
+
+                PetInfosTable.PetSkinInfo already;
+                Assert.IsTrue(
+                    DimensionPetSkinRegistry.TryAnswer(
+                        (ObjectID)ModdedHelm,
+                        name => string.Equals(name, "MyMod:fluff", System.StringComparison.Ordinal)
+                            ? (ObjectID)ModdedHelm
+                            : ObjectID.None,
+                        out already),
+                    "An id that already carried the mod's name was mangled.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(colour);
+            }
         }
 
         [Test]
@@ -694,7 +1151,7 @@ namespace ExpandNullforge.EditorTests
                 RolePerksTable.Perks unused;
                 Assert.IsFalse(
                     DimensionBackgroundRegistry.TryAnswer(
-                        background, ResolveModdedPiece, null, out unused),
+                        background, TheGamesOwnChef(), ResolveModdedPiece, null, out unused),
                     "Background " + background + " was answered for by an empty registry, so " +
                     "every one of the game's own kits would be replaced by an empty one.");
             }

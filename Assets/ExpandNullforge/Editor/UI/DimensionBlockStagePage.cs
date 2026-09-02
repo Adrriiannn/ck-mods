@@ -614,6 +614,17 @@ namespace ExpandNullforge.EditorTools
             detailHost.Add(BuildWhatItDoes(type));
             detailHost.Add(BuildWhatCanBeMined(type));
             detailHost.Add(BuildReadyForTheGame());
+
+            // THE CARD, on the page it was written for and never reached. Everything a block
+            // rename needs already existed and was reachable by tests only: the token-collision
+            // refusal that catches "Eerie Stone" against "Eerie-Stone", the saved-world warning,
+            // the pin, and the pair of answers. This is the call site that makes them a screen.
+            VisualElement identity = DimensionIdentityCard.Build(
+                template, selected, false, () => Refresh(template));
+            if (identity != null)
+            {
+                detailHost.Add(identity);
+            }
         }
 
         /// <summary>
@@ -640,12 +651,20 @@ namespace ExpandNullforge.EditorTools
             VisualElement group = DimensionsApiControls.Group("Basics", "name and kind");
             VisualElement body = DimensionsApiControls.BodyOf(group);
 
-            body.Add(DimensionsApiControls.Bound(
-                serialized,
-                "blockName",
+            // SHOWN, NOT EDITED HERE. A block's name is not only what players read: the number a
+            // saved world writes into every tile of it is worked out from this, and the two block
+            // items in players' chests are named after it. It was a bound text box that committed
+            // on every keystroke and swept nothing. The card at the foot of this page refuses a
+            // name another block already is, says what a played world loses, and offers the two
+            // answers a block rename has — keep the identity, or start fresh.
+            Label blockName = new Label(selected.BlockName);
+            blockName.AddToClassList("dim-readonly-value");
+            body.Add(DimensionsApiControls.Field(
                 "Name",
                 "What players see this called. The wall version adds the word Block, and the " +
-                "ground version is named after it too."));
+                "ground version is named after it too. To change it, use \"Its name, and what " +
+                "points at it\" at the foot of this page.",
+                blockName));
 
             Label kind = new Label(type.DisplayName);
             kind.AddToClassList("dim-readonly-value");

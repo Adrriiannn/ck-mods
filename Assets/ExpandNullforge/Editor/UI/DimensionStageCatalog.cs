@@ -626,8 +626,13 @@ namespace ExpandNullforge.EditorTools
                 G("Extras", null,
                     F("simpleTraits", "Traits", "The small switches: burns, floats, fears light, and the rest of the one-line behaviours."),
                     F("eliteVariant", "Elite Variant", "An occasional stronger version, the way the game's own mobs have elites."),
-                    F("pet", "Pet", "Whether this mob can be tamed and follow a player."),
-                    F("pet.colours", "Colours", "Gradient maps this pet can be recoloured into. The first is the one it hatches with. Leave it empty for a pet with one look."),
+                    // The whole pet block is drawn here, children included: no chooser is written
+                    // for it and ControlFor answers a Generic property with null, so Bound falls
+                    // back to a PropertyField and its colours come with it. A second
+                    // F("pet.colours", ...) row put the same list on the page twice, in two
+                    // editors neither of which knew about the other. The colours field carries its
+                    // own [Tooltip], which is the text that is drawn inside this row.
+                    F("pet", "Pet", "Whether this mob can be tamed and follow a player, and the colours it can be recoloured into."),
                     F("behaviorScriptId", "Borrowed Behaviour", "Take one of the game's own creature behaviours wholesale, by name.")),
                 NotesGroup(),
             };
@@ -815,7 +820,7 @@ namespace ExpandNullforge.EditorTools
                     F("armourSets.sets", "Sets", "Each row is one set: its pieces, which tier of the world it belongs to, how good it is, and what wearing enough of them gives. Two to five pieces is what the game's own sets use. The number on each line is worked out from the tier and the rarity, not typed.")),
                 G("Backgrounds", "what a new character starts with",
                     F("backgrounds.changesWhatBackgroundsStartYouWith", "Change it", "Off leaves all eleven backgrounds exactly as the game has them."),
-                    F("backgrounds.backgrounds", "Backgrounds", "Each row changes one of the game's eleven: the skill it starts you at level 3 in, and up to two things in the bag. There is no twelfth background and there cannot be one.")),
+                    F("backgrounds.backgrounds", "Backgrounds", "Each row changes one of the game's eleven: the skill it starts you at level 3 in, and up to two things in the bag. Leave either half of a row empty to keep what the game already gives that background. There is no twelfth background and there cannot be one.")),
                 G("When the world acts on its own", "cave-ins, swarms, tentacles",
                     F("worldEvents.changesWhenTheWorldActs", "Change it", "Off leaves all four events exactly as the game has them."),
                     F("worldEvents.events", "Events", "Each row re-aims one of the four: which of the game's biomes, how far from the core, what the ground has to be made of, and the cooldowns. Only the game's own biomes can be named. Your own blocks can be counted in the ground.")),

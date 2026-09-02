@@ -87,10 +87,10 @@ namespace ExpandNullforge.Authoring
         [Tooltip("Which of the game's eleven backgrounds this row is about.")]
         [SerializeField] private DimensionBackground background = DimensionBackground.Explorer;
 
-        [Tooltip("The skill it starts you at level 3 in, named as the game names it: Mining, Running, Melee, Vitality, Crafting, Range, Gardening, Fishing, Cooking, Magic, Summoning, Explosives.")]
+        [Tooltip("The skill it starts you at level 3 in, named as the game names it: Mining, Running, Melee, Vitality, Crafting, Range, Gardening, Fishing, Cooking, Magic, Summoning, Explosives. Leave it empty to keep the skill the game already starts this background in.")]
         [SerializeField] private string skillName = string.Empty;
 
-        [Tooltip("What is in the bag on the first morning. Two at most: the character-creation screen has two lines to write them on, and every one of the game's own backgrounds uses two or none.")]
+        [Tooltip("What is in the bag on the first morning. Two at most: the character-creation screen has two lines to write them on, and every one of the game's own backgrounds uses two or none. Leave it empty to keep the bag the game already gives this background; listing anything replaces the whole bag.")]
         [SerializeField] private DimensionBackgroundItem[] startsWith = new DimensionBackgroundItem[0];
 
         public DimensionBackground Background { get { return background; } }

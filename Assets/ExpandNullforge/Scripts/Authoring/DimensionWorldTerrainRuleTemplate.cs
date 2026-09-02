@@ -118,10 +118,12 @@ namespace ExpandNullforge.Authoring
     /// what makes it worth having and it is also the reason to be sparing with it.
     /// </para>
     /// <para>
-    /// MEASURED, THE GAME'S OWN TABLE IS 75 RULES. Twenty-three lay the ground and walls of each
-    /// biome, nine lay water, twenty put ore and ancient crystal into the resource slots, thirteen
-    /// handle explosive walls, and the rest cover the Great Wall, roof holes and the Excavation
-    /// site.
+    /// MEASURED, THE GAME'S OWN TABLE IS 75 RULES. Counted by what each rule lays, off
+    /// <c>Assets/Resources/TileTypeMapping.asset</c> in the ripped assets: twenty-one lay ground,
+    /// twenty lay walls, fifteen lay ore, ten lay water, six lay ancient crystal, and one each lays
+    /// a pit, a hole in the roof and the Great Wall. That is all 75. Twenty-one of them — the ore
+    /// and the ancient crystal — name a resource slot; twelve are keyed on the explosive-wall
+    /// material rather than on a biome's own stone.
     /// </para>
     /// </remarks>
     [Serializable]

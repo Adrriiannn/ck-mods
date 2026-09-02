@@ -22,10 +22,13 @@ namespace ExpandNullforge.Creatures
     /// </para>
     /// <para>
     /// THE ANSWER IS SUPPLIED, NOT THE TABLE EDITED, and here that is not just hygiene.
-    /// <c>PetInfosTable</c> builds a private <c>Dictionary</c> the first time it is asked and never
-    /// rebuilds it outside the editor, so a row appended after the first question would be invisible
-    /// for the rest of the session and there is no reflection-free way to clear it. Answering on the
-    /// way past has no such window, and the game's own asset is left exactly as it was.
+    /// <c>PetInfosTable.GetPetSkinInfo</c> builds a private <c>Dictionary</c> the first time it is
+    /// asked and NEVER rebuilds it — <c>OnValidate</c> clears <c>petTalentsLookUp</c> and nothing
+    /// clears <c>petSkinsLookUp</c>, not even in the editor
+    /// (<c>ck-db\Pug.Base\PetInfosTable.cs:19-21,37-41</c>). So a row appended after the first
+    /// question would be invisible for the rest of the session and there is no reflection-free way
+    /// to clear it. Answering on the way past has no such window, and the game's own asset is left
+    /// exactly as it was.
     /// </para>
     /// <para>
     /// NAMES ARE ANSWERED LATE AND NOT KEPT UNTIL THEY ANSWER. A pet this mod adds has no object
@@ -38,6 +41,23 @@ namespace ExpandNullforge.Creatures
         private sealed class Row
         {
             public string PetName;
+
+            /// <summary>
+            /// The same name with the mod in front of it, for a row that was written without one.
+            /// </summary>
+            /// <remarks>
+            /// The generator stamps a creature's object name <c>naming.QualifyGenerated(id)</c>
+            /// (<c>Editor\DimensionCreatureGenerator.cs:483</c>), and that qualified name is the
+            /// only key <c>API.Authoring.GetObjectID</c> answers to. Every other consumer of a mob
+            /// id runs it through <c>DimensionObjectNamespace.Qualify</c> at generate time; this
+            /// one cannot, because it is read off the template at load. The new-asset wizard seeds
+            /// the id already qualified, so the ordinary flow worked — but a creator who typed a
+            /// plain <c>fluff</c>, which every other feature accepts, got a pet that still
+            /// converted with no skins at all: exactly the bug this table was opened up to fix,
+            /// while the patch roster reported the patch as having fired.
+            /// </remarks>
+            public string QualifiedPetName;
+
             public List<GradientMapDataBlock> Colours;
         }
 
@@ -58,7 +78,16 @@ namespace ExpandNullforge.Creatures
         /// <summary>
         /// Gives one pet its colours. Registering the same pet twice replaces the earlier claim.
         /// </summary>
-        public static void Register(string petName, GradientMapDataBlock[] colours)
+        /// <param name="petName">The mob's id, as the creator wrote it.</param>
+        /// <param name="colours">The gradient maps it can be recoloured into.</param>
+        /// <param name="modName">
+        /// The mod's own name, so an id written without one still finds the object. Empty is
+        /// allowed and means the id is taken exactly as written — see <see cref="Row.QualifiedPetName"/>.
+        /// </param>
+        public static void Register(
+            string petName,
+            GradientMapDataBlock[] colours,
+            string modName = null)
         {
             if (string.IsNullOrEmpty(petName) || colours == null || colours.Length == 0)
             {
@@ -68,6 +97,10 @@ namespace ExpandNullforge.Creatures
             Row row = new Row
             {
                 PetName = petName,
+                QualifiedPetName =
+                    string.IsNullOrEmpty(modName) || petName.IndexOf(':') >= 0
+                        ? null
+                        : modName + ":" + petName,
                 Colours = new List<GradientMapDataBlock>(colours.Length)
             };
 
@@ -113,7 +146,10 @@ namespace ExpandNullforge.Creatures
         /// the talent and skill pictures: a <c>GradientMapDataBlock</c> is a Unity object that only
         /// exists once the bundle is loaded, so it cannot be baked into a number.
         /// </remarks>
-        public static void AttachFrom(DimensionTemplateAsset template, System.Action<string> report)
+        public static void AttachFrom(
+            DimensionTemplateAsset template,
+            System.Action<string> report,
+            string modName = null)
         {
             if (template == null)
             {
@@ -147,7 +183,7 @@ namespace ExpandNullforge.Creatures
                     continue;
                 }
 
-                Register(mob.MobId, pet.Colours);
+                Register(mob.MobId, pet.Colours, modName);
             }
         }
 
@@ -179,6 +215,15 @@ namespace ExpandNullforge.Creatures
             {
                 Row row = Rows[i];
                 ObjectID resolved = resolvePet == null ? ObjectID.None : resolvePet(row.PetName);
+                if (resolved == ObjectID.None &&
+                    resolvePet != null &&
+                    !string.IsNullOrEmpty(row.QualifiedPetName))
+                {
+                    // The id as written found nothing, so it is asked again with the mod in front
+                    // of it — which is the name the generator actually stamped on the object.
+                    resolved = resolvePet(row.QualifiedPetName);
+                }
+
                 if (resolved == ObjectID.None || resolved != pet)
                 {
                     continue;

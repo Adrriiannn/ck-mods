@@ -407,6 +407,34 @@ namespace ExpandNullforge.Authoring
                         rule.RuleId));
                 }
 
+                // WHAT THE PORTAL ASKS FOR, CHECKED BEFORE THE BUILD RATHER THAN AFTER IT.
+                // The offering row was drawn as a bare text box and read by nothing until the
+                // generate ran, so a misspelt name shipped a door with a slot no item on earth
+                // fits. Gated on UsesRequiredItems the same way the row above is gated on
+                // IsItemPortal: a rule that opens on a cooldown never asks for these, so a name
+                // left behind in the list is not a defect. An empty name is the "asks for nothing
+                // here yet" state and is skipped, exactly as the drop targets below are.
+                if (rule.UsesRequiredItems)
+                {
+                    DimensionPortalRequiredItemTemplate[] offerings = rule.RequiredItems;
+                    for (int j = 0; j < offerings.Length; j++)
+                    {
+                        if (string.IsNullOrEmpty(offerings[j].ItemId) ||
+                            universe.ResolvesAsItem(offerings[j].ItemId))
+                        {
+                            continue;
+                        }
+
+                        issues.Add(Error(
+                            "portal-required-item-unresolved",
+                            "A portal rule asks for '" + offerings[j].ItemId +
+                            "' before it opens, and nothing defines that. No player could ever " +
+                            "fill the slot, so that portal stays shut for good.",
+                            "Portal",
+                            rule.RuleId));
+                    }
+                }
+
                 DimensionPortalDropTarget[] dropTargets = rule.DropTargets;
                 for (int j = 0; j < dropTargets.Length; j++)
                 {

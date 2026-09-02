@@ -1134,59 +1134,37 @@ namespace ExpandNullforge.EditorTools
         /// A bound control for a property of the rule, labelled and explained.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// The shared helper takes a path from the root of an object, which array rows do not have
-        /// to hand — so rows pass the property itself and this fills in the same chrome.
+        /// to hand. They do not need it: a property already carries its own full path, so this
+        /// hands that over and the row is the shared row.
+        /// </para>
+        /// <para>
+        /// IT USED TO HAVE ITS OWN <c>switch (property.propertyType)</c>, and that made these rows
+        /// the one place in the studio that never asked <c>DimensionsApiControls</c> anything. The
+        /// worst-served field in the tree sits here — the portal's offering, a bare box naming an
+        /// item, checked by nothing before this change — so a mark added to that field later would
+        /// have been drawn everywhere except the page a creator actually fills it in on. The switch
+        /// is gone rather than mirrored: the shared control answers string, int, float and bool
+        /// with the same four controls this did, and answers colours, object references and
+        /// vectors as well, which this did not.
+        /// </para>
         /// </remarks>
         private static VisualElement BoundField(
             SerializedProperty property,
             string label,
             string tooltip)
         {
-            VisualElement control;
-            switch (property.propertyType)
+            if (property == null)
             {
-                case SerializedPropertyType.String:
-                {
-                    TextField field = new TextField();
-                    field.BindProperty(property);
-                    control = field;
-                    break;
-                }
-
-                case SerializedPropertyType.Integer:
-                {
-                    IntegerField field = new IntegerField();
-                    field.BindProperty(property);
-                    control = field;
-                    break;
-                }
-
-                case SerializedPropertyType.Float:
-                {
-                    FloatField field = new FloatField();
-                    field.BindProperty(property);
-                    control = field;
-                    break;
-                }
-
-                case SerializedPropertyType.Boolean:
-                {
-                    Toggle field = new Toggle();
-                    field.BindProperty(property);
-                    control = field;
-                    break;
-                }
-
-                default:
-                {
-                    PropertyField field = new PropertyField(property, string.Empty);
-                    field.BindProperty(property);
-                    control = field;
-                    break;
-                }
+                return DimensionsApiControls.Field(label, tooltip, null);
             }
 
-            return DimensionsApiControls.Field(label, tooltip, control);
+            return DimensionsApiControls.Bound(
+                property.serializedObject,
+                property.propertyPath,
+                label,
+                tooltip);
         }
 
         /// <summary>

@@ -74,6 +74,20 @@ namespace ExpandNullforge.WorldRules
         private static readonly List<RuleRow> Rows = new List<RuleRow>();
 
         /// <summary>Queues one rule. Call from the generated bootstrap.</summary>
+        /// <remarks>
+        /// A RULE ALREADY QUEUED WORD FOR WORD IS NOT QUEUED AGAIN. The generated consumer's
+        /// <c>Shutdown()</c> only clears its own "already registered" flag, so a consumer reloaded
+        /// without the framework reloading re-runs every <c>Register</c> on a registry nothing
+        /// emptied. Five of the six tables replace by key and survive that; this one appended, so
+        /// each reload put another copy of every rule at the front of Core Keeper's table and into
+        /// the native array the generator keeps per world. Output was the same block laid twice, so
+        /// nothing looked wrong and the list grew for the session.
+        ///
+        /// The comparison is all eight numbers, which is exactly the objection the old comment
+        /// raised: two rules differing only in the block they lay differ here too, and both are
+        /// kept. Only a rule identical in every answer is dropped, and a second copy of that could
+        /// never lay anything the first did not.
+        /// </remarks>
         public static void Register(
             int inBiome,
             int madeOf,
@@ -84,6 +98,22 @@ namespace ExpandNullforge.WorldRules
             int layTilePart,
             int layBlockId)
         {
+            for (int i = 0; i < Rows.Count; i++)
+            {
+                RuleRow have = Rows[i];
+                if (have.InBiome == inBiome &&
+                    have.MadeOf == madeOf &&
+                    have.OpenFloor == openFloor &&
+                    have.HoleInTheRoof == holeInTheRoof &&
+                    have.GreatWall == greatWall &&
+                    have.ResourceSlot == resourceSlot &&
+                    have.LayTilePart == layTilePart &&
+                    have.LayBlockId == layBlockId)
+                {
+                    return;
+                }
+            }
+
             Rows.Add(new RuleRow
             {
                 InBiome = inBiome,
@@ -118,10 +148,9 @@ namespace ExpandNullforge.WorldRules
         /// remarks for why the front of the list is the winning end.
         /// </para>
         /// <para>
-        /// A rule queued twice is kept twice on purpose: two identical rules lay the same block
-        /// twice on the same tile, which is harmless, and dropping duplicates would mean deciding
-        /// that two rules differing only in the block they lay were the same rule, which they are
-        /// not.
+        /// Two rules that differ in any answer are both kept and both play — that is how the game
+        /// lays a ground tile and a wall tile from one label. A rule identical in all eight answers
+        /// never reaches here twice; see <see cref="Register"/>.
         /// </para>
         /// </remarks>
         internal static List<TileTypeMapping.MappingRule> BuildEditedList(
@@ -194,6 +223,9 @@ namespace ExpandNullforge.WorldRules
         /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
         /// framework cannot ask Harmony what it bound. One static increment is the whole of the
         /// evidence, and it costs one add on a path the game was already walking.
+        ///
+        /// COUNTED IN THE PREFIX ONLY. Both halves used to add, so one world load reported two and
+        /// the number could not be read as "how many times this patch ran".
         /// </remarks>
         internal static int Fired;
 
@@ -242,7 +274,7 @@ namespace ExpandNullforge.WorldRules
         [HarmonyPostfix]
         private static void After()
         {
-            Fired++;
+            // Deliberately does not add to Fired — see the field's remarks. The prefix counts.
             PutBackWhatIsStashed();
         }
 

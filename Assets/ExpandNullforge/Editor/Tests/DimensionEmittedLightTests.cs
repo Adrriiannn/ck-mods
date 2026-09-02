@@ -127,6 +127,12 @@ namespace ExpandNullforge.EditorTests
             return AssetDatabase.LoadAssetAtPath<GameObject>(TestRoot + "/testlightVisual.prefab");
         }
 
+        /// <summary>The object's own prefab — the one that points at the visual above.</summary>
+        private static GameObject LoadEntity()
+        {
+            return AssetDatabase.LoadAssetAtPath<GameObject>(TestRoot + "/testlight.prefab");
+        }
+
         private static ManagedLight[] EveryLightOn(GameObject prefab)
         {
             return prefab == null
@@ -335,15 +341,34 @@ namespace ExpandNullforge.EditorTests
             SetBool("emittedLight.givesOffLight", false);
             Run();
 
-            // TWO SHAPES BOTH SATISFY THIS, and the stronger one is no file. An object with no
+            // THE HALF THAT IS ASSERTED FIRST IS THE REFERENCE, because the file going and the
+            // object still pointing at it is its own bug — a missing-asset reference on the thing
+            // a player walks up to — and it is the half a delete can get wrong on its own. The
+            // object above had a visual for one reason, its light; with the light off it has none.
+            Assert.IsNotNull(LoadEntity(), "The object's own prefab is still written either way.");
+            Assert.IsNull(
+                LoadEntity().GetComponent<ObjectAuthoring>().graphicalPrefab,
+                "The object still points at something to draw where it stands. Whether the file " +
+                "is there or not, a light it no longer asks for would come back with it.");
+
+            // TWO SHAPES BOTH SATISFY THE REST, and the stronger one is no file. An object with no
             // picture, no use and no light has nothing left to draw, so the generator takes the
             // prefab away rather than leaving an empty one — which is also what stops it lighting
             // the floor from an earlier build. An empty prefab passes too, for a caller that keeps
             // one for another reason.
+            // BOTH SHAPES ARE CHECKED, rather than the first one passing the test. Assert.Pass
+            // throws, so an early exit here would leave the two assertions below unreachable and
+            // the empty-prefab case untested — which is what an earlier version of this test did.
             GameObject visual = LoadVisual();
             if (visual == null)
             {
-                Assert.Pass("Nothing is drawn for it at all, so there is nowhere for a light to be.");
+                GameObject entity = LoadEntity();
+                Assert.That(entity, Is.Not.Null, "The object's own prefab should still be there.");
+                Assert.That(
+                    entity.GetComponent<ObjectAuthoring>().graphicalPrefab,
+                    Is.Null,
+                    "Nothing is drawn for it, so the object must not still point at a prefab.");
+                return;
             }
 
             Assert.AreEqual(0, EveryLightOn(visual).Length, "No ManagedLight is left behind.");
@@ -351,6 +376,51 @@ namespace ExpandNullforge.EditorTests
                 0,
                 visual.GetComponentsInChildren<Light>(true).Length,
                 "And no bare Light either.");
+        }
+
+        /// <summary>
+        /// Turning the light off twice says nothing the second time and leaves nothing behind.
+        /// </summary>
+        /// <remarks>
+        /// The delete has to be a thing that happened once, not a line the creator reads on every
+        /// generate for the rest of the object's life. This is also the guard on the delete firing
+        /// for an object that never had a visual at all: the third pass below is exactly that
+        /// object, and it must be silent.
+        /// </remarks>
+        [Test]
+        public void TakingTheLeftOverVisualAwayIsSaidOnceAndNotEveryTimeAfter()
+        {
+            SetBool("emittedLight.givesOffLight", true);
+            Run();
+
+            SetBool("emittedLight.givesOffLight", false);
+            DimensionWorldObjectGenerationReport first = Run();
+            Assert.IsTrue(
+                SomethingWasTakenAway(first),
+                "Taking away a prefab the object still pointed at has to be said. Silently " +
+                "un-lighting something a creator lit is the thing this delete exists to stop " +
+                "being silent.");
+
+            DimensionWorldObjectGenerationReport second = Run();
+            Assert.IsFalse(
+                SomethingWasTakenAway(second),
+                "The second generate said it again. There was nothing left to take away, so an " +
+                "object that has never had a visual would be told about one on every build.");
+            Assert.IsNull(LoadVisual());
+        }
+
+        /// <summary>Whether a report says a left-over visual was removed.</summary>
+        private static bool SomethingWasTakenAway(DimensionWorldObjectGenerationReport report)
+        {
+            for (int i = 0; report != null && i < report.Warnings.Count; i++)
+            {
+                if (report.Warnings[i].Contains("was taken away"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

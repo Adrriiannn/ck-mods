@@ -744,12 +744,27 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>Whether one folder is <paramref name="ancestor"/> or sits inside it.</summary>
+        /// <remarks>
+        /// BOTH SIDES ARE PUT IN ONE SPELLING FIRST, because they arrive in two. The folder comes
+        /// from <c>Path.GetDirectoryName</c>, which normalises every separator to a backslash on
+        /// Windows; the ancestor comes from <c>Path.Combine(Application.dataPath, …)</c>, and
+        /// <c>Application.dataPath</c> is spelled with forward slashes, so <c>Path.Combine</c>
+        /// leaves <c>E:/…/Assets\ExpandNullforge</c>. Compared as written, one never starts with
+        /// the other, so this framework's own <c>Editor</c> and <c>Editor/Tests</c> folders — whose
+        /// asmdefs of course name the framework — were counted as CONSUMER MODS. Both are
+        /// Editor-only, so the consumer scan then reported two mods with nothing shipped and
+        /// <c>TheGeneratedConsumerModsUseNothingTheSandboxDenies</c> was red on a project where
+        /// both real consumer mods were clean.
+        /// </remarks>
         private static bool IsWithin(string folder, string ancestor)
         {
             if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(ancestor))
             {
                 return false;
             }
+
+            folder = folder.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            ancestor = ancestor.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
             if (folder.Length < ancestor.Length ||
                 !folder.StartsWith(ancestor, StringComparison.OrdinalIgnoreCase))
@@ -758,8 +773,7 @@ namespace ExpandNullforge.EditorTools
             }
 
             return folder.Length == ancestor.Length ||
-                folder[ancestor.Length] == Path.DirectorySeparatorChar ||
-                folder[ancestor.Length] == Path.AltDirectorySeparatorChar;
+                folder[ancestor.Length] == Path.DirectorySeparatorChar;
         }
 
         /// <summary>

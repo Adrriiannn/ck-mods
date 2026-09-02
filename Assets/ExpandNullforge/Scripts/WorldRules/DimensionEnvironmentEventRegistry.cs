@@ -367,16 +367,23 @@ namespace ExpandNullforge.WorldRules
         /// game's own zero and matches no player standing anywhere, which is the correct reading of
         /// "a biome that does not exist".
         /// </para>
+        /// <para>
+        /// AND THE NAME IS MATCHED AGAINST A WRITTEN LIST, NOT PARSED. <c>Enum.TryParse</c> accepts
+        /// a number as readily as a name, so a row that said "1000" — the shape a framework biome
+        /// id takes — came back as <c>(Biome)1000</c> and walked straight past the refusal this
+        /// method exists to make, ending up as the silent never-matching rule the refusal is for.
+        /// It also accepted <c>None</c>, <c>__MAX_VALUE__</c>, and <c>Obsidian</c> and
+        /// <c>GreatWall</c>, which Core Keeper marks
+        /// <c>[Obsolete("Not used in full release world generation")]</c>
+        /// (<c>ck-db\Pug.Base\Biome.cs</c>). Nine names are real biomes a player can stand in, and
+        /// they are the nine the framework's own message already lists, so the list is what is
+        /// compared against.
+        /// </para>
         /// </remarks>
         internal static Biome ResolveBiomeId(string biomeId)
         {
-            if (string.IsNullOrEmpty(biomeId))
-            {
-                return Biome.None;
-            }
-
-            Biome vanilla;
-            return System.Enum.TryParse(biomeId, false, out vanilla) ? vanilla : Biome.None;
+            Biome real;
+            return TheGamesOwnBiome(biomeId, out real) ? real : Biome.None;
         }
 
         /// <summary>
@@ -384,17 +391,56 @@ namespace ExpandNullforge.WorldRules
         /// </summary>
         /// <remarks>
         /// Pure, so the editor and the runtime ask the same question and cannot drift. See
-        /// <see cref="ResolveBiomeId"/> for why a custom biome is not one of them.
+        /// <see cref="ResolveBiomeId"/> for why a custom biome — and a number, and the two obsolete
+        /// names — are not among them.
         /// </remarks>
         public static bool TheEventCheckCanSeeThisBiome(string biomeId)
         {
+            Biome real;
+            return TheGamesOwnBiome(biomeId, out real);
+        }
+
+        /// <summary>
+        /// The nine biomes of Core Keeper's own that a player can be standing in.
+        /// </summary>
+        /// <remarks>
+        /// <c>Biome</c> has thirteen names. <c>None</c> is the absence of one, <c>__MAX_VALUE__</c>
+        /// is the enum's own end marker, and <c>Obsidian</c> and <c>GreatWall</c> both carry
+        /// <c>[Obsolete("Not used in full release world generation")]</c>. Nine are left, and they
+        /// are the nine the refusal message names.
+        /// </remarks>
+        private static readonly string[] TheGamesOwnBiomeNames =
+        {
+            "Slime", "Larva", "Stone", "Nature", "Sea", "Desert", "Crystal", "Passage", "Excavation"
+        };
+
+        /// <summary>Answers a biome name, and only one of the nine a player can stand in.</summary>
+        private static bool TheGamesOwnBiome(string biomeId, out Biome biome)
+        {
+            biome = Biome.None;
             if (string.IsNullOrEmpty(biomeId))
             {
                 return false;
             }
 
-            Biome vanilla;
-            return System.Enum.TryParse(biomeId, false, out vanilla) && vanilla != Biome.None;
+            for (int i = 0; i < TheGamesOwnBiomeNames.Length; i++)
+            {
+                if (!string.Equals(TheGamesOwnBiomeNames[i], biomeId, System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                Biome named;
+                if (System.Enum.TryParse(TheGamesOwnBiomeNames[i], false, out named))
+                {
+                    biome = named;
+                    return true;
+                }
+
+                return false;
+            }
+
+            return false;
         }
     }
 
@@ -431,6 +477,12 @@ namespace ExpandNullforge.WorldRules
         /// process can tell the two apart: the mod sandbox denies <c>HarmonyLib.Harmony</c>, so the
         /// framework cannot ask Harmony what it bound. One static increment is the whole of the
         /// evidence, and it costs one add on a path the game was already walking.
+        ///
+        /// COUNTED IN THE PREFIX ONLY. Both halves used to add, so one world load reported two and
+        /// the number could not be read as "how many times this patch ran". Counting at the top
+        /// also keeps the one distinction the stash-and-restore design exists to survive: a prefix
+        /// that ran and an original that then threw leaves the count at one, where counting in both
+        /// would have left it at one too and looked identical to a clean run only by accident.
         /// </remarks>
         internal static int Fired;
 
@@ -485,7 +537,7 @@ namespace ExpandNullforge.WorldRules
         [HarmonyPostfix]
         private static void After()
         {
-            Fired++;
+            // Deliberately does not add to Fired — see the field's remarks. The prefix counts.
             PutBackWhatIsStashed();
         }
 

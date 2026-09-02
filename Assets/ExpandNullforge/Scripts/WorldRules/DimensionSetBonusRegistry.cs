@@ -18,12 +18,23 @@ namespace ExpandNullforge.WorldRules
     /// table in a prefix, and let the game's own baking code do the rest.
     /// </para>
     /// <para>
-    /// THE TOOLTIP IS THE SAME ASSET, SO IT COMES ALONG FOR FREE. <c>UIMouse</c> carries its own
-    /// <c>setBonusesTable</c> reference rather than loading it, but there is exactly one such asset
-    /// in the game — <c>Resources/SetBonusesTable.asset</c>, guid
+    /// THE TOOLTIP IS THE SAME ASSET, AND THAT IS TRUE OF THE ROWS BUT NOT OF ITS LOOKUP.
+    /// <c>UIMouse</c> carries its own <c>setBonusesTable</c> reference rather than loading it, but
+    /// there is exactly one such asset in the game — <c>Resources/SetBonusesTable.asset</c>, guid
     /// <c>44aaba0691b626c4c82b0f332f9a23b0</c>, referenced by exactly one prefab,
     /// <c>Resources/Global Objects (Main Manager).prefab</c>. One file is one loaded instance, so
-    /// appending here is what the hover panel reads too.
+    /// the rows appended here are the rows the hover panel reads.
+    /// </para>
+    /// <para>
+    /// THE ONE THING THAT DOES NOT COME ALONG, SAID PLAINLY. <c>GetSetBonusID</c> builds a private
+    /// <c>objectIDToSetBonus</c> dictionary the first time it is asked and nothing ever clears it —
+    /// there is no <c>OnValidate</c> reset the way <c>PetInfosTable</c> has for its talents
+    /// (<c>ck-db\Pug.Other\SetBonusesTable.cs:10-27</c>). If anything asks that question before the
+    /// first world is created, the map is built without this framework's rows and stays that way
+    /// for the process; and after an in-editor reload with a changed set list, a second world reads
+    /// the first world's piece-to-set map. Nothing here can clear it without reflection, which the
+    /// sandbox denies. It has not been seen happening in a running game, and it is written down
+    /// rather than claimed away because it is the same trap this file refuses to take on for pets.
     /// </para>
     /// <para>
     /// APPEND AT THE END, NEVER INSERT. <c>UpdateSetBonusDatas</c> runs right after this prefix and
@@ -45,7 +56,9 @@ namespace ExpandNullforge.WorldRules
     /// kept for the whole process, and the system that reads it is created again for every world.
     /// Rows this framework wrote earlier are stripped before anything is appended, so writing twice
     /// leaves exactly what writing once left — and so does a mod reload, which empties this
-    /// registry but cannot empty Core Keeper's table.
+    /// registry but cannot empty Core Keeper's table. The strip runs even when there is nothing
+    /// left to put back, so switching the block off and reloading takes the sets away instead of
+    /// leaving them behind with nothing to explain them.
     /// </para>
     /// </remarks>
     public static class DimensionSetBonusRegistry
@@ -101,17 +114,51 @@ namespace ExpandNullforge.WorldRules
         private static readonly List<string> AppendedSetIds = new List<string>();
 
         /// <summary>
-        /// Every set number this framework has ever written into the game's table this session.
+        /// Every row this framework has ever put into the game's table this session, by identity.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// DELIBERATELY NOT CLEARED BY <see cref="Clear"/>. The table is Core Keeper's, loaded once
         /// and kept for the whole process; the registry is this mod's and is emptied when the mod
         /// reloads. Forgetting the rows already in the table would mean writing them a second time
         /// on the next load, and the game's item-to-set lookup throws on the repeat. So the rows
         /// this framework put there are stripped before anything is appended, which makes a reload
         /// leave exactly what a first load leaves.
+        /// </para>
+        /// <para>
+        /// THE ROWS THEMSELVES, NOT THEIR NUMBERS, AND THAT IS THE CORRECTION. This used to hold
+        /// the set NUMBERS and strip every row carrying one, under a comment saying another mod's
+        /// sets were safe. They were not: <see cref="DimensionSetBonusesPatch.FirstFreeNumber"/> is
+        /// the highest <c>SetBonusID</c> plus one, which is the number any other mod appending a
+        /// set picks by exactly the same reasoning — so a second mod's set written at 63 was
+        /// deleted by this framework's next append. A row is this framework's only if this
+        /// framework is holding the object it added.
+        /// </para>
         /// </remarks>
-        private static readonly HashSet<int> numbersWeHaveUsed = new HashSet<int>();
+        private static readonly List<SetBonusInfo> rowsWeHaveWritten = new List<SetBonusInfo>();
+
+        /// <summary>The table those rows were written into.</summary>
+        /// <remarks>
+        /// One <c>SetBonusesTable</c> exists in a running game and it is loaded once for the whole
+        /// process, so this never changes there. It is held because the record only describes rows
+        /// inside one table: handed a different one, what we are holding says nothing about it and
+        /// would otherwise read as "there is still something of ours to take away" forever.
+        /// </remarks>
+        private static SetBonusesTable tableWeHaveWrittenInto;
+
+        /// <summary>Whether this framework has ever written a row into the game's table.</summary>
+        /// <remarks>
+        /// Read by the patch so a load that switches the armour-set block OFF still comes in to
+        /// take away what an earlier load left. Without it, unticking "Add sets" and reloading left
+        /// the sets in Core Keeper's table with nothing left in this registry to explain them: the
+        /// patch returned on <c>!HasAny</c> and <see cref="AppendTo"/> returned on an empty row
+        /// list, both before the strip. For a player with no content pack this is false forever, so
+        /// nothing new is loaded and nothing new runs.
+        /// </remarks>
+        internal static bool AnythingWasWrittenBefore
+        {
+            get { return rowsWeHaveWritten.Count > 0; }
+        }
 
         /// <summary>Queues one set. Call from the generated bootstrap; names resolve at load.</summary>
         public static void Register(
@@ -291,7 +338,7 @@ namespace ExpandNullforge.WorldRules
             System.Func<string, ConditionID> resolveEffect,
             System.Action<string> report)
         {
-            if (table == null || Rows.Count == 0)
+            if (table == null)
             {
                 return 0;
             }
@@ -301,20 +348,46 @@ namespace ExpandNullforge.WorldRules
                 table.setBonuses = new List<SetBonusInfo>();
             }
 
+            // A different table knows nothing about the rows we are holding — see the field's
+            // remarks. ReferenceEquals rather than ==, because the question is which object this
+            // is and not whether Unity considers it alive.
+            if (!ReferenceEquals(tableWeHaveWrittenInto, table))
+            {
+                rowsWeHaveWritten.Clear();
+                tableWeHaveWrittenInto = table;
+            }
+
             // Rows this framework wrote on an earlier world or an earlier load of the mod come out
-            // first. Without this, a second write would give one set two rows and the game's own
-            // item-to-set lookup would throw on the repeated piece as the world was being built.
-            // Only numbers this framework handed out are removed, so another mod's sets are safe.
+            // first, and they come out even when there is nothing left to put back — a creator who
+            // unticks "Add sets" and reloads is saying the sets should be gone. Without this, a
+            // second write would give one set two rows and the game's own item-to-set lookup would
+            // throw on the repeated piece as the world was being built.
+            //
+            // Matched by IDENTITY, not by set number: another mod appending a set picks its number
+            // the same way this one does, so removing "every row carrying a number we handed out"
+            // removed that mod's set too. A row is ours only if we are holding the object.
             for (int i = table.setBonuses.Count - 1; i >= 0; i--)
             {
                 SetBonusInfo row = table.setBonuses[i];
-                if (row != null && numbersWeHaveUsed.Contains((int)row.setBonusID))
+                for (int w = 0; w < rowsWeHaveWritten.Count; w++)
                 {
+                    if (!ReferenceEquals(rowsWeHaveWritten[w], row))
+                    {
+                        continue;
+                    }
+
                     table.setBonuses.RemoveAt(i);
+                    rowsWeHaveWritten.RemoveAt(w);
+                    break;
                 }
             }
 
             AppendedSetIds.Clear();
+
+            if (Rows.Count == 0)
+            {
+                return 0;
+            }
 
             HashSet<int> claimed = new HashSet<int>();
             for (int i = 0; i < table.setBonuses.Count; i++)
@@ -466,7 +539,7 @@ namespace ExpandNullforge.WorldRules
 
                 table.setBonuses.Add(info);
                 AppendedSetIds.Add(row.SetId);
-                numbersWeHaveUsed.Add(number);
+                rowsWeHaveWritten.Add(info);
                 appended++;
             }
 
@@ -561,7 +634,11 @@ namespace ExpandNullforge.WorldRules
         {
             Fired++;
 
-            if (!DimensionSetBonusRegistry.HasAny)
+            // Also entered with nothing to add, but only once something has been added before: a
+            // load that switches the block off has to come in and take the earlier rows away, and
+            // a game with no content pack has written nothing and so loads nothing here.
+            if (!DimensionSetBonusRegistry.HasAny &&
+                !DimensionSetBonusRegistry.AnythingWasWrittenBefore)
             {
                 return;
             }

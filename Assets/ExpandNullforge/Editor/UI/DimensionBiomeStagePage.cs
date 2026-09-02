@@ -38,10 +38,6 @@ namespace ExpandNullforge.EditorTools
         private DimensionTemplateAsset template;
         private BiomeTemplateAsset selected;
 
-        // The id is the key a saved world stores for every zone of this biome, so it is shown
-        // locked until the creator says they mean it. Per biome, and re-locked on selection.
-        private bool biomeIdUnlocked;
-
         internal DimensionBiomeStagePage(
             System.Action<BiomeTemplateAsset> createBiome,
             System.Action<DimensionFrameworkAuthoringAssetActionResult> runAction,
@@ -136,8 +132,6 @@ namespace ExpandNullforge.EditorTools
                 card.RegisterCallback<MouseDownEvent>(evt =>
                 {
                     selected = biome;
-                    // The id lock is per biome; moving to another one re-locks it.
-                    biomeIdUnlocked = false;
                     evt.StopPropagation();
                     DeferredRefresh();
                 });
@@ -221,6 +215,19 @@ namespace ExpandNullforge.EditorTools
             detailHost.Add(BuildFeelGroup(serialized));
             detailHost.Add(BuildGrowsGroup(serialized));
             detailHost.Add(BuildUsageGroup());
+
+            // THE SAME CARD EVERY OTHER PAGE GETS, and this page needed it most. A biome is one
+            // of the two names a saved world writes into itself, and it was the one kind of thing
+            // whose id could be retyped with no sweep, no rewrite and no refusal at all — the card
+            // has had one call site since it was written, and this was not it.
+            // The name a player reads is already the first control in "Basics", so the card points
+            // back at it rather than drawing a second editor over the same property.
+            VisualElement identity = DimensionIdentityCard.Build(
+                template, selected, true, DeferredRefresh);
+            if (identity != null)
+            {
+                detailHost.Add(identity);
+            }
         }
 
         private VisualElement BuildIdentityGroup(SerializedObject serialized)
@@ -299,36 +306,32 @@ namespace ExpandNullforge.EditorTools
 
             TextField id = new TextField("Id");
             id.BindProperty(serialized.FindProperty("biomeId"));
-            id.SetEnabled(biomeIdUnlocked);
+
+            // TYPING IS NOT RENAMING. A bound field commits on every keystroke, so replacing
+            // "Caverns" with "Hollow" wrote "H", "Ho", "Hol", "Holl", "Hollo" on the way — five
+            // real serialized values, any of which a generate started in between would have baked.
+            // Delayed, the field commits once, when the creator says they are done.
+            id.isDelayed = true;
+
+            // AND IT IS NO LONGER UNLOCKABLE HERE. The lock and its dialogue were the whole of a
+            // biome rename: unlocked, this was a plain bound text box that rewrote nothing, swept
+            // nothing and refused nothing — for the one id in this framework a played world stores
+            // against every piece of ground. The card at the foot of this page does all three, and
+            // two controls over one property with neither aware of the other is the fault that put
+            // the card there in the first place. So this stays a display, and says where to go.
+            id.SetEnabled(false);
             id.style.flexGrow = 1f;
             Decorate(id, "A short name for this biome inside your mod. It is what the map, your " +
                          "dungeons and your creatures use to point at it, so keep it stable once " +
                          "people have played.");
             row.Add(id);
 
-            if (!biomeIdUnlocked)
-            {
-                Button change = DimensionsApiControls.GhostButton("Change it", () =>
-                {
-                    bool confirmed = EditorUtility.DisplayDialog(
-                        "Change this biome's id?",
-                        "A world that has already been played stores this id against every piece of " +
-                        "ground this biome claims. Changing it leaves those pieces pointing at a " +
-                        "biome that no longer exists, and the map, the ores and the title card stop " +
-                        "matching there.\n\n" +
-                        "Before anyone has played it, changing it costs nothing.",
-                        "Let me change it",
-                        "Leave it alone");
-                    if (!confirmed)
-                    {
-                        return;
-                    }
-
-                    biomeIdUnlocked = true;
-                    DeferredRefresh();
-                });
-                row.Add(change);
-            }
+            Label where = new Label(
+                "To change it, use \"Its name, and what points at it\" at the foot of this page. " +
+                "It says what else would be rewritten, and what a world somebody has already " +
+                "played would lose.");
+            where.AddToClassList("dim-note");
+            row.Add(where);
 
             return row;
         }

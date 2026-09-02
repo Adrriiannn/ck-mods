@@ -829,20 +829,38 @@ namespace ExpandNullforge.EditorTools
                 "listed uses if the light matters.");
         }
 
-        /// <summary>Says what is wrong with an authored light, if anything is.</summary>
-        /// <remarks>
-        /// Both ways of asking for a light that lights nothing are here together. Reaching nowhere
-        /// was reported before; being asked for at no brightness was not, and it produces the same
-        /// complete-looking subtree that lights nothing — a light with a reach and no brightness is
-        /// not visibly different in the prefab from one that works.
-        /// </remarks>
         /// <summary>
         /// Takes away a visual prefab written by an earlier generate that nothing asks for now.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// The object stops pointing at it first and the file goes second, so a half-done delete
         /// leaves a dangling file rather than a dangling reference. Says so only when something was
         /// actually removed: an object that never had one is the ordinary case and needs no line.
+        /// </para>
+        /// <para>
+        /// NOTHING READS A VISUAL PREFAB FOR AN OBJECT THAT DRAWS NOTHING, which is what makes the
+        /// delete right rather than merely tidy. On the game's side every reader is written for the
+        /// null: <c>GraphicalObjectConversion</c> only creates the graphical entity when
+        /// <c>graphicalPrefab</c> is set (<c>ck-db\Pug.Other\Pug\ECS\Hybrid\GraphicalObjectConversion.cs:35-47</c>),
+        /// <c>ObjectAuthoring.ObjectAuthoringToObjectInfo</c> writes a null <c>prefab</c> into the
+        /// object's own record (<c>:56</c>), and <c>SittableConverter</c>,
+        /// <c>InteractablePostConverter</c> and <c>LocalInteractableConverter</c> all test it first.
+        /// That is exactly the shape one of Core Keeper's own objects with nothing to draw has. On
+        /// this side the two readers — <c>DimensionObjectSpine.ThereIsSomewhereToSit</c> and
+        /// <c>DimensionQueryCompanions.ThereIsSomethingToUseOnIt</c> — both answer false on a null,
+        /// which is the true answer for an object with no picture and no use.
+        /// </para>
+        /// <para>
+        /// AND THE FILE IS THE ONLY THING THAT HAS TO GO. <c>AssetDatabase.DeleteAsset</c> takes the
+        /// <c>.meta</c> with it, so no orphan sidecar is left. The mod's file list is not a record
+        /// to keep in step: <c>ModBuilder.UpdateAssetHashes</c> clears
+        /// <c>ModBuilderSettings.assets</c> and refills it from a folder scan on every build, and
+        /// <c>CheckAssetsForChanges</c> walks the assets that are there now, so a deleted file
+        /// simply stops appearing. Nothing else in the tree points at a <c>…Visual.prefab</c> by
+        /// path; the entity prefab's own reference is the only one, and it is cleared above before
+        /// the file goes.
+        /// </para>
         /// </remarks>
         private static void ClearAnyVisualLeftFromBefore(
             GameObject root,
@@ -862,7 +880,10 @@ namespace ExpandNullforge.EditorTools
                 objectAuthoring.graphicalPrefab = null;
             }
 
-            string path = folder.TrimEnd('/') + "/" + assetStem + "Visual.prefab";
+            // The same expression BuildVisualPrefab writes with, through the same constant. Spelled
+            // out here as a literal it would have been a second copy of the file name, and the two
+            // only have to disagree once for the delete to miss the file it was written for.
+            string path = folder.TrimEnd('/') + "/" + assetStem + VisualSuffix + ".prefab";
             bool hadAFile = UnityEditor.AssetDatabase
                 .LoadAssetAtPath<GameObject>(path) != null;
             if (hadAFile)
@@ -879,6 +900,13 @@ namespace ExpandNullforge.EditorTools
             }
         }
 
+        /// <summary>Says what is wrong with an authored light, if anything is.</summary>
+        /// <remarks>
+        /// Both ways of asking for a light that lights nothing are here together. Reaching nowhere
+        /// was reported before; being asked for at no brightness was not, and it produces the same
+        /// complete-looking subtree that lights nothing — a light with a reach and no brightness is
+        /// not visibly different in the prefab from one that works.
+        /// </remarks>
         private static void ReportWhatIsWrongWithTheLight(
             DimensionEmittedLightTemplate emittedLight,
             System.Action<string> report)

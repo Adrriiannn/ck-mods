@@ -2699,7 +2699,7 @@ namespace ExpandNullforge.EditorTools
                     rule,
                     title,
                     Field("displayName", "Display name"),
-                    Field("ruleId", "Rule ID"),
+                    NameField("ruleId", "Rule ID"),
                     Field("portalId", "Portal ID"),
                     Field("presentationId", "Presentation ID"),
                     Field("fromDimensionId", "From dimension"),
@@ -2933,7 +2933,7 @@ namespace ExpandNullforge.EditorTools
                 biome,
                 "Selected Biome",
                 Field("displayName", "Display name"),
-                Field("biomeId", "Biome ID"),
+                NameField("biomeId", "Biome ID"),
                 Field("mapColor", "Map color"),
                 Field("priority", "Priority"),
                 Field("enabled", "Enabled"),
@@ -3483,8 +3483,8 @@ namespace ExpandNullforge.EditorTools
                     scene,
                     BuildAssetEditorTitle(titlePrefix, scene.DisplayName, scene.SceneId, i),
                     Field("displayName", "Display name"),
-                    Field("sceneId", "Scene ID"),
-                    Field("templateId", "Template ID"),
+                    NameField("sceneId", "Scene ID"),
+                    NameField("templateId", "Template ID"),
                     Field("kind", "Kind"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
                     Field("placementMode", "Placement mode"),
@@ -4548,13 +4548,13 @@ namespace ExpandNullforge.EditorTools
             List<SerializedFieldSpec> fields = new List<SerializedFieldSpec>
             {
                 Field("displayName", "Display name"),
-                Field("itemId", "Item ID"),
+                NameField("itemId", "Item ID"),
                 Field("archetype", "Archetype"),
                 Field("description", "Description"),
                 Field("iconSprite", "Icon sprite (16x16)"),
                 Field("smallIconSprite", "Small icon (in-hand, 10x10)"),
                 Field("iconId", "Icon ID (fallback)"),
-                Field("objectId", "Object ID")
+                NameField("objectId", "Object ID")
             };
 
             if (RequiresComponent(required, DimensionItemAuthoringComponents.InventoryItem))
@@ -4743,7 +4743,7 @@ namespace ExpandNullforge.EditorTools
                     recipe,
                     BuildAssetEditorTitle("Recipe", recipe.DisplayName, recipe.RecipeId, i),
                     Field("displayName", "Display name"),
-                    Field("recipeId", "Recipe ID"),
+                    NameField("recipeId", "Recipe ID"),
                     Field("outputItemId", "Output item ID"),
                     Field("outputAmount", "Output amount"),
                     Field("craftingStationId", "Crafting station ID"),
@@ -4773,8 +4773,8 @@ namespace ExpandNullforge.EditorTools
                     workbench,
                     BuildAssetEditorTitle("Workbench", workbench.DisplayName, workbench.WorkbenchId, i),
                     Field("displayName", "Display name"),
-                    Field("workbenchId", "Workbench ID"),
-                    Field("objectId", "Object ID"),
+                    NameField("workbenchId", "Workbench ID"),
+                    NameField("objectId", "Object ID"),
                     Field("iconId", "Icon ID"),
                     Field("recipes", "Recipes"),
 
@@ -4815,7 +4815,7 @@ namespace ExpandNullforge.EditorTools
                     lootTable,
                     BuildAssetEditorTitle("Loot Table", lootTable.DisplayName, lootTable.LootTableId, i),
                     Field("displayName", "Display name"),
-                    Field("lootTableId", "Loot table ID"),
+                    NameField("lootTableId", "Loot table ID"),
                     Field("allowEmptyRoll", "Allow empty roll"),
                     Field("enabled", "Enabled"),
                     Field("entries", "Entries"),
@@ -4843,8 +4843,8 @@ namespace ExpandNullforge.EditorTools
                     animal,
                     BuildAssetEditorTitle("Animal", animal.DisplayName, animal.AnimalId, i),
                     Field("displayName", "Display name"),
-                    Field("animalId", "Animal ID"),
-                    Field("objectId", "Object ID"),
+                    NameField("animalId", "Animal ID"),
+                    NameField("objectId", "Object ID"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
                     Field("creatureStats", "Stats (every number, exactly as typed)"),
                     Field("combat", "Combat and behaviour"),
@@ -4891,7 +4891,7 @@ namespace ExpandNullforge.EditorTools
                     container,
                     BuildAssetEditorTitle("Container", container.DisplayName, container.ContainerId, i),
                     Field("displayName", "Display name"),
-                    Field("containerId", "Container ID"),
+                    NameField("containerId", "Container ID"),
                     Field("description", "Description"),
                     Field("rarityId", "Rarity"),
                     Field("labelItComesWith", "The label floating above it"),
@@ -4977,7 +4977,7 @@ namespace ExpandNullforge.EditorTools
                     plant,
                     BuildAssetEditorTitle("Plant", plant.DisplayName, plant.PlantId, i),
                     Field("displayName", "Display name"),
-                    Field("plantId", "Plant ID"),
+                    NameField("plantId", "Plant ID"),
                     Field("description", "Description"),
                     Field("rarityId", "Rarity"),
                     Field("seedIcon", "Seed icon"),
@@ -5034,7 +5034,7 @@ namespace ExpandNullforge.EditorTools
                     worldObject,
                     BuildAssetEditorTitle("Object", worldObject.DisplayName, worldObject.ObjectIdentifier, i),
                     Field("displayName", "Display name"),
-                    Field("objectIdentifier", "Object ID"),
+                    NameField("objectIdentifier", "Object ID"),
                     Field("description", "Description"),
                     Field("rarityId", "Rarity"),
                     Field("sprite", "Sprite"),
@@ -5193,7 +5193,7 @@ namespace ExpandNullforge.EditorTools
                     explosion,
                     BuildAssetEditorTitle("Explosion", explosion.DisplayName, explosion.ExplosionId, i),
                     Field("displayName", "Display name"),
-                    Field("explosionId", "Explosion ID"),
+                    NameField("explosionId", "Explosion ID"),
                     Field("sprite", "Sprite"),
                     Field("lifetimeSeconds", "Lasts (seconds)"),
                     Field("radius", "How far it reaches"),
@@ -5245,7 +5245,7 @@ namespace ExpandNullforge.EditorTools
                     projectile,
                     BuildAssetEditorTitle("Projectile", projectile.DisplayName, projectile.ProjectileId, i),
                     Field("displayName", "Display name"),
-                    Field("projectileId", "Projectile ID"),
+                    NameField("projectileId", "Projectile ID"),
                     Field("sprite", "Sprite"),
                     Field("speed", "Speed"),
                     Field("lifetimeSeconds", "Lifetime (seconds)"),
@@ -5360,7 +5360,7 @@ namespace ExpandNullforge.EditorTools
                     vehicle,
                     BuildAssetEditorTitle("Vehicle", vehicle.DisplayName, vehicle.VehicleId, i),
                     Field("displayName", "Display name"),
-                    Field("vehicleId", "Vehicle ID"),
+                    NameField("vehicleId", "Vehicle ID"),
                     Field("description", "Description"),
                     Field("kind", "How it moves"),
                     Field("sprite", "Picture"),
@@ -5406,7 +5406,7 @@ namespace ExpandNullforge.EditorTools
                 DrawSerializedAsset(
                     condition,
                     "Condition: " + condition.DisplayName,
-                    Field("conditionName", "Id"),
+                    NameField("conditionName", "Id"),
                     Field("displayName", "Called"),
                     Field("enabled", "Generated"),
                     Field("effect", "What it does"));
@@ -5458,8 +5458,8 @@ namespace ExpandNullforge.EditorTools
                     critter,
                     BuildAssetEditorTitle("Critter", critter.DisplayName, critter.CritterId, i),
                     Field("displayName", "Display name"),
-                    Field("critterId", "Critter ID"),
-                    Field("objectId", "Object ID"),
+                    NameField("critterId", "Critter ID"),
+                    NameField("objectId", "Object ID"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
                     Field("visual", "Visual"),
                     Field("audio", "Audio"),
@@ -5503,7 +5503,7 @@ namespace ExpandNullforge.EditorTools
                     dungeon,
                     BuildAssetEditorTitle("Dungeon", dungeon.DisplayName, dungeon.DungeonId, i),
                     Field("displayName", "Display name"),
-                    Field("dungeonId", "Dungeon ID"),
+                    NameField("dungeonId", "Dungeon ID"),
                     Field("biomeId", "Biome it appears in"),
                     Field("radius", "How far out it can appear"),
                     Field("minDistanceFromCentre", "Never closer to the centre than"),
@@ -5536,8 +5536,8 @@ namespace ExpandNullforge.EditorTools
                     mob,
                     BuildAssetEditorTitle("Mob", mob.DisplayName, mob.MobId, i),
                     Field("displayName", "Display name"),
-                    Field("mobId", "Mob ID"),
-                    Field("objectId", "Object ID"),
+                    NameField("mobId", "Mob ID"),
+                    NameField("objectId", "Object ID"),
                     Field("allowedBiomeIds", "Allowed biome IDs"),
                     Field("creatureStats", "Stats (every number, exactly as typed)"),
                     Field("combat", "Combat and behaviour"),
@@ -5579,8 +5579,8 @@ namespace ExpandNullforge.EditorTools
                     boss,
                     BuildAssetEditorTitle("Boss", boss.DisplayName, boss.BossId, i),
                     Field("displayName", "Display name"),
-                    Field("bossId", "Boss ID"),
-                    Field("objectId", "Object ID"),
+                    NameField("bossId", "Boss ID"),
+                    NameField("objectId", "Object ID"),
                     Field("arenaSceneId", "Arena scene ID"),
                     Field("summoningItemId", "Summoning item ID"),
                     Field("creatureStats", "Stats (every number, exactly as typed)"),
@@ -5811,16 +5811,40 @@ namespace ExpandNullforge.EditorTools
             public bool IncludeChildren;
             public bool ScopeToDimensionDataBlock;
 
+            /// <summary>
+            /// The field commits when the creator leaves it, not on every keystroke.
+            /// </summary>
+            /// <remarks>
+            /// Only the name fields ask for this, and they have to. A bound id field writes a real
+            /// serialized value per character: typing "EmberBolt" over "Blade" takes the asset
+            /// through "B", "Bl", "Bla", "Blad" and the rest, and a generate started in between
+            /// bakes whichever of them was current. Everything else in these panels is a number, a
+            /// toggle or a block where an intermediate value costs nothing, so nothing else sets
+            /// it.
+            /// </remarks>
+            public bool CommitsOnLeaving;
+
             public SerializedFieldSpec(
                 string propertyName,
                 string label,
                 bool includeChildren,
                 bool scopeToDimensionDataBlock)
+                : this(propertyName, label, includeChildren, scopeToDimensionDataBlock, false)
+            {
+            }
+
+            public SerializedFieldSpec(
+                string propertyName,
+                string label,
+                bool includeChildren,
+                bool scopeToDimensionDataBlock,
+                bool commitsOnLeaving)
             {
                 PropertyName = propertyName;
                 Label = label;
                 IncludeChildren = includeChildren;
                 ScopeToDimensionDataBlock = scopeToDimensionDataBlock;
+                CommitsOnLeaving = commitsOnLeaving;
             }
         }
 
@@ -5837,6 +5861,20 @@ namespace ExpandNullforge.EditorTools
         private static SerializedFieldSpec Field(string propertyName, string label, bool includeChildren)
         {
             return new SerializedFieldSpec(propertyName, label, includeChildren, false);
+        }
+
+        /// <summary>
+        /// A name field: the same row, committed once when the creator leaves it.
+        /// </summary>
+        /// <remarks>
+        /// Used for the id of every kind of thing this window edits. See
+        /// <see cref="SerializedFieldSpec.CommitsOnLeaving"/> for what a per-keystroke id field
+        /// costs; the safe rename itself lives on the studio's own page, and this is the guard that
+        /// stops the plain panels writing half-typed names underneath it.
+        /// </remarks>
+        private static SerializedFieldSpec NameField(string propertyName, string label)
+        {
+            return new SerializedFieldSpec(propertyName, label, true, false, true);
         }
 
         private static SerializedFieldSpec DimensionDataBlockField(string propertyName, string label)
@@ -6093,6 +6131,20 @@ namespace ExpandNullforge.EditorTools
                         label,
                         field.IncludeChildren);
                     GUI.enabled = previousGuiEnabled;
+                }
+                else if (field.CommitsOnLeaving &&
+                         property.propertyType == SerializedPropertyType.String)
+                {
+                    // The one row shape that must not write per keystroke. Falls through to the
+                    // ordinary field for anything that is not a string, so a spec that names a
+                    // field which later stops being one degrades to today's behaviour rather than
+                    // drawing nothing.
+                    EditorGUI.BeginChangeCheck();
+                    string typed = EditorGUILayout.DelayedTextField(label, property.stringValue);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        property.stringValue = typed;
+                    }
                 }
                 else
                 {

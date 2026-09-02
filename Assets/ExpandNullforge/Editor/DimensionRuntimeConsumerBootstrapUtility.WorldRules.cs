@@ -507,6 +507,13 @@ namespace ExpandNullforge.EditorTools
         /// <summary>
         /// The number behind a part-of-a-block name — wall, ground, water, ore — or -1.
         /// </summary>
+        /// <remarks>
+        /// A NAME, NOT A NUMBER. <c>Enum.TryParse</c> takes "129" as readily as "ore" and hands
+        /// back whatever that number happens to be, including numbers <c>TileType</c> has no name
+        /// for at all — and a part the game has no name for is a rule that lays nothing, written
+        /// with no complaint. The parse is therefore only trusted when the name it was given is
+        /// one <c>TileType</c> actually declares.
+        /// </remarks>
         private static int ResolveTilePartName(string tilePart)
         {
             if (string.IsNullOrEmpty(tilePart))
@@ -515,7 +522,15 @@ namespace ExpandNullforge.EditorTools
             }
 
             PugTilemap.TileType named;
-            return System.Enum.TryParse(tilePart, false, out named) ? (int)named : -1;
+            if (!System.Enum.TryParse(tilePart, false, out named))
+            {
+                return -1;
+            }
+
+            return System.Enum.IsDefined(typeof(PugTilemap.TileType), named) &&
+                   string.Equals(named.ToString(), tilePart, System.StringComparison.Ordinal)
+                ? (int)named
+                : -1;
         }
 
         /// <summary>

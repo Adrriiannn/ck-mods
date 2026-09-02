@@ -318,6 +318,45 @@ namespace ExpandNullforge.EditorTools
             }
 
             detailHost.Add(BuildEverythingElse(serialized, collection));
+
+            // ---- the last card: its name, and what points at it ----
+            // Below everything else because it is where a creator ends up, not where they start:
+            // "what uses this" is the question asked once the thing is built, and renaming or
+            // deleting it is the rarest thing done on the page. One insertion here covers every
+            // collection on every stage, because there is one page.
+            VisualElement identity = DimensionIdentityCard.Build(
+                template,
+                selected,
+                NamesTheDisplayName(groups),
+                DeferredRefresh);
+            if (identity != null)
+            {
+                detailHost.Add(identity);
+            }
+        }
+
+        /// <summary>
+        /// Whether a card above already offers the name a player reads.
+        /// </summary>
+        /// <remarks>
+        /// Nearly every collection's first card does. The identity card at the foot then says where
+        /// that control is instead of drawing a second one for the same value — the same rule
+        /// <see cref="BuildEverythingElse"/> follows for a curated block's parent.
+        /// </remarks>
+        private static bool NamesTheDisplayName(IReadOnlyList<DimensionGroupDescriptor> groups)
+        {
+            for (int i = 0; i < groups.Count; i++)
+            {
+                for (int f = 0; f < groups[i].Fields.Count; f++)
+                {
+                    if (groups[i].Fields[f].Path == "displayName")
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -348,6 +387,20 @@ namespace ExpandNullforge.EditorTools
             // aware of the other.
             HashSet<string> curatedParents = DimensionCuratedPaths.ParentsOf(named);
 
+            // AND THE IDS ARE NOT DRAWN HERE EITHER, for the same reason and a worse one. No id is
+            // a curated card field, so every one of them landed in this fold as a live-bound
+            // PropertyField — one keystroke, one committed rename — directly above the card that
+            // exists to stop exactly that. Worse, it is a second editor over the same property that
+            // knows nothing about the sweep, so every refusal the rename makes could be walked
+            // around by typing in the fold instead. The row stays, saying where the control is.
+            HashSet<string> identities = new HashSet<string>();
+            List<DimensionIdentityField> renameable =
+                DimensionIdentityCatalog.Of(serialized.targetObject);
+            for (int i = 0; i < renameable.Count; i++)
+            {
+                identities.Add(renameable[i].Property);
+            }
+
             Foldout foldout = new Foldout { text = "Everything else", value = false };
             foldout.AddToClassList("dim-everything-else");
 
@@ -360,6 +413,18 @@ namespace ExpandNullforge.EditorTools
                 string path = iterator.propertyPath;
                 if (path == "m_Script" || named.Contains(path) || path.Contains("."))
                 {
+                    continue;
+                }
+
+                if (identities.Contains(path))
+                {
+                    Label sentAway = new Label(
+                        iterator.displayName +
+                        " — edited at the foot of this page, under \"Its name, and what points " +
+                        "at it\", where changing it can say what else it would change.");
+                    sentAway.AddToClassList("dim-note");
+                    foldout.Add(sentAway);
+                    shown++;
                     continue;
                 }
 
