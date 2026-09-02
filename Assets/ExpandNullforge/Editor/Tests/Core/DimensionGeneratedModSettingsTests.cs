@@ -1,6 +1,7 @@
+using ExpandNullforge.EditorTools;
 using NUnit.Framework;
 
-namespace ExpandNullforge.EditorTools.Tests
+namespace ExpandNullforge.EditorTests
 {
     /// <summary>
     /// The two switches on a creator's mod that decide whether it runs at all.

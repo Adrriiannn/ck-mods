@@ -167,3 +167,34 @@ suite and still reports a pass. `Docs/running-the-tests.md` has the command and 
   (`Scripts/DimensionRuntimeTestAssemblyInfo.cs`) and `DimensionPortalEditorTestAssemblyInfo.cs`
   sitting in `Editor/Core` are all known and all left. Moving an assembly-info file is the kind of
   change whose only failure mode is silent.
+
+## Namespaces do not mirror folders, and should not
+
+Measured 2026-09-02: 975 of 1,192 files sit in a folder whose leaf name differs from their
+namespace leaf, across 83 pairs — `Service` → `ExpandNullforge.Foundation`, `Creatures` →
+`ExpandNullforge.Authoring`, `Generation` → `ExpandNullforge.Api`. The cleanup plan carried a rule
+saying namespaces mirror folders "as it already does everywhere". That was never true: the figure
+was 717 before any file moved, and the restructure took it to 975.
+
+**The rule was wrong, not the tree.** The two track different things and both are right:
+
+- A **namespace** says which layer a type belongs to — the published contract (`.Api`), the data a
+  creator authors (`.Authoring`), the runtime (`.Foundation`, `.Portals`, `.Creatures`), the editor
+  (`.EditorTools`). It is a compile-time contract.
+- A **folder** says what the file is about, so a maintainer can find it. It is a navigation aid.
+
+Renaming namespaces to match folders would break every `using` in the tree and, worse, would break
+**`ExpandNullforge.Api` — the namespace consumer mods import**. Both shipped consumer mods and every
+future one would stop compiling, to satisfy a convention that buys nothing.
+
+What IS worth keeping true, and is:
+
+- **`API/` is one namespace, `ExpandNullforge.Api`, all 277 files.** It is the published surface; a
+  second namespace in there would be a second contract nobody agreed to.
+- **Nothing under `Editor/` ships**, whatever its namespace says. 46 editor files still declare
+  `ExpandNullforge.Authoring` because they were moved out of the shipped assembly as a move rather
+  than a rewrite, and kept the namespace they had. What ships is decided by folder name walked to the
+  mod root, and it is guarded by a test — not by the namespace.
+- **Test files use `ExpandNullforge.EditorTests` or `ExpandNullforge.EditorTools`**, and nothing
+  else. A third variant existed briefly and meant one file was never reached by a filter on either.
+  Two is already one too many; do not add a third.
