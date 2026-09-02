@@ -26,10 +26,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void CreateScratchFolder()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeGroundFogTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             tileset = ScriptableObject.CreateInstance<DimensionTilesetAsset>();
 
@@ -50,10 +47,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(tileset);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private DimensionGroundFogReport Run()

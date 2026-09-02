@@ -26,10 +26,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeArtilleryTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             projectile = ScriptableObject.CreateInstance<DimensionProjectileAsset>();
             SerializedObject serialized = new SerializedObject(projectile);
@@ -46,10 +43,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(projectile);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private void Set(System.Action<SerializedObject> write)

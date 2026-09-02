@@ -5,9 +5,9 @@
 //
 // IT SITS BEHIND THE EDITOR BOUNDARY, and that is where the ten thousand lines below belong: a
 // preset is POURED INTO the ordinary fields when an author picks one, and the creature keeps no
-// reference to it, so nothing at run time can ever ask this table a question. On the shipped side
-// of the boundary it is ten thousand lines compiled into every mod built with this framework and
-// read by nothing there.
+// reference to it, so nothing at run time can ever ask this table a question. Move it to the
+// shipped side and it becomes ten thousand lines compiled into every mod built with this
+// framework and read by nothing there.
 using System;
 
 namespace ExpandNullforge.Authoring

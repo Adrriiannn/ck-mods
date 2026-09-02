@@ -9,6 +9,16 @@ namespace ExpandNullforge.EditorTools
     /// supported range is caught. These are read-only checks — they never touch the global
     /// service registration, which the live editor may already own.
     /// </summary>
+    /// <remarks>
+    /// IT PINS SOMETHING THE RUNTIME NOW DOES. Until the D7 decision this file was pinning a
+    /// helper nothing called: the two places the service really asks the question wrote the
+    /// comparison out inline, as <c>MinimumApiVersion &gt; CurrentApiVersion</c> in the manifest
+    /// validation and <c>&lt;=</c> in the readiness check, and neither looked at the bottom of the
+    /// range at all — a content pack declaring version 0 was accepted as compatible by both. Both
+    /// now call <see cref="DimensionApiCompatibility.IsApiVersionSupported"/>, so the third
+    /// assertion below — that a version under the minimum is refused — is a claim about the
+    /// running framework instead of about a helper with no callers.
+    /// </remarks>
     internal sealed class DimensionApiCompatibilityTests
     {
         [Test]

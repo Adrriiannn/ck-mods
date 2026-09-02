@@ -495,7 +495,11 @@ namespace ExpandNullforge.EditorTools
                     {
                         "groundLightEnabled",
                         "groundLightColor",
-                        "groundLightIntensity",
+
+                        // groundLightIntensity is NOT here. The serialized field went when the
+                        // flicker was found to overwrite it in the first frame; the reset has
+                        // nothing to write and FindProperty answers null, so naming it here fails
+                        // the layer's own reset test.
                         "groundLightRange",
                         "groundLightMinimumIntensity",
                         "groundLightMaximumIntensity",

@@ -176,10 +176,10 @@ namespace ExpandNullforge.EditorTools
         /// A SEPARATE ENTRY, AND NOT A SHORTCUT. <see cref="Apply"/> cannot be pointed at a creature
         /// however tempting it looks: it builds its OWN graphical prefab out of one still picture
         /// and assigns it over <c>ObjectAuthoring.graphicalPrefab</c>, which is where the creature
-        /// generator has already put the animated body it built at
-        /// <c>DimensionCreatureGenerator.cs:532</c>. Calling it on a creature throws that body away
+        /// generator has already put the animated body it built in
+        /// <c>DimensionCreatureGenerator.Art.cs</c>. Calling it on a creature throws that body away
         /// and replaces an animal with a photograph of one. Whoever is tempted to simplify these
-        /// two back into one should read that line first.
+        /// two back into one should read that assignment first.
         /// </para>
         /// <para>
         /// WHAT IT DOES ADD is exactly the half a creature is missing: the interactable child, its

@@ -47,7 +47,8 @@ namespace ExpandNullforge.Creatures
             /// </summary>
             /// <remarks>
             /// The generator stamps a creature's object name <c>naming.QualifyGenerated(id)</c>
-            /// (<c>Editor\DimensionCreatureGenerator.cs:483</c>), and that qualified name is the
+            /// (<c>Editor/Generators/Creatures/DimensionCreatureGenerator.Art.cs</c>), and that
+            /// qualified name is the
             /// only key <c>API.Authoring.GetObjectID</c> answers to. Every other consumer of a mob
             /// id runs it through <c>DimensionObjectNamespace.Qualify</c> at generate time; this
             /// one cannot, because it is read off the template at load. The new-asset wizard seeds

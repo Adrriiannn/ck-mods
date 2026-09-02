@@ -35,10 +35,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeWorldRuleTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
         }
 
         [TearDown]
@@ -46,10 +43,7 @@ namespace ExpandNullforge.EditorTests
         {
             DimensionUpgradeCostRegistry.Clear();
             DimensionPlayerOverrideRegistry.Clear();
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         // -------------------------------------------------------- the settings files ---

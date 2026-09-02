@@ -454,8 +454,9 @@ namespace ExpandNullforge.EditorTools
             if (returnPortal || itemPortal)
             {
                 // Return portals are permanent fixtures; instant item portals are transient and
-                // despawn on their own timer. Neither may be broken or picked up (breaking the shared
-                // entry object hands players a free placed portal).
+                // despawn on their own timer. Neither may be broken or picked up, which is what
+                // the four calls below settle: leave them off and breaking the shared entry object
+                // would hand players a free placed portal.
                 EnsureComponent<IndestructibleAuthoring>(root);
                 EnsureComponent<DontDropSelfAuthoring>(root);
                 EnsureComponent<DontDropContainedAuthoring>(root);

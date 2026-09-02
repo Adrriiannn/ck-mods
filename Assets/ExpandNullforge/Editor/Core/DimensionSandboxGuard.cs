@@ -64,8 +64,9 @@ namespace ExpandNullforge.EditorTools
         /// means the scan found nothing to look at, not that there is nothing wrong.
         /// </summary>
         /// <remarks>
-        /// The ship set is 662 files — measured by walking it, not remembered; this note said 687
-        /// and no run had ever agreed with it. The largest planned change to the set, moving the
+        /// The ship set is 743 files — measured by walking it, not remembered. It said 687, then
+        /// 662, and neither number had ever been re-walked after the tree grew. The largest
+        /// planned change to the set, moving the
         /// authoring engine behind the Editor boundary, takes out about forty. One
         /// <c>"includePlatforms": ["Editor"]</c> line in <c>ExpandNullforge.asmdef</c> takes it to
         /// zero instead, and every check that walks the set then reports clean having read nothing.
@@ -90,6 +91,13 @@ namespace ExpandNullforge.EditorTools
         /// fails the consumer's mod exactly the way one in ours would fail this one. The files are
         /// found by name rather than listed one by one: a hand-written list names the ten partials
         /// that exist when it is written, and an eleventh is scanned by nobody.
+        /// </remarks>
+        /// <remarks>
+        /// THIS IS A FOLDER TO SEARCH THROUGH, not the folder the partials sit in. They sat
+        /// directly here until the restructure put all thirty-two in
+        /// <c>ExpandNullforge/Editor/Bootstrap</c>; the search steps through subfolders so that
+        /// move — and the next one — costs nothing. Narrowing this to the folder they are in today
+        /// would put the same trap back one level down.
         /// </remarks>
         public const string GeneratedSourceEmitterFolder = "ExpandNullforge/Editor";
 

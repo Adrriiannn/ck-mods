@@ -25,10 +25,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeWorldObjectTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             worldObject = ScriptableObject.CreateInstance<DimensionWorldObjectAsset>();
             Set("objectIdentifier", "testobject");
@@ -43,10 +40,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(worldObject);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private void Set(string field, string value)

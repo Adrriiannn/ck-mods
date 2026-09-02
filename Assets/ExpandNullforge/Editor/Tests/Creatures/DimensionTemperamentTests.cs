@@ -34,19 +34,13 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeTemperamentTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
         }
 
         [TearDown]
         public void Cleanup()
         {
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private static DimensionCreatureStatsTemplate Stats()

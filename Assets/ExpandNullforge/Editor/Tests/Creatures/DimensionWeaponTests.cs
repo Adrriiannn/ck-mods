@@ -25,10 +25,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeWeaponTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             item = ScriptableObject.CreateInstance<DimensionItemAsset>();
             Set("itemId", "testsword");
@@ -44,10 +41,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(item);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private void Set(string field, string value)

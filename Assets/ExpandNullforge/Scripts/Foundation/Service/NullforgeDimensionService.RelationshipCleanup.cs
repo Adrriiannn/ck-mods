@@ -7,19 +7,24 @@ namespace ExpandNullforge.Foundation
 {
   public sealed partial class NullforgeDimensionService
   {
-    private bool IsProtectedMarkerId(string markerId)
-    {
-      return false;
-    }
-
+    // THE ONLY PROTECTED ID THE FRAMEWORK HAS. There were five of these predicates. Four —
+    // marker, anchor, portal, starter — returned false, and eight branches consulted them and
+    // produced a "…-protected" refusal that could never fire. Whoever read one of those branches
+    // came away believing the built-ins were safe. They were not: any mod, and any bug here, could
+    // remove them and be told it worked.
+    //
+    // The four are gone, and so are their eight branches, because there is nothing left for them
+    // to protect. The framework ships no built-in portal, marker, anchor or starter — the content
+    // that had them was amputated, and BuiltIns.cs declares no id of those four kinds. A predicate
+    // that guards nothing and says it guards something is worse than the absence of one.
+    //
+    // If the framework ever ships built-in content of one of those kinds again, this method is the
+    // template: name the id as a constant in BuiltIns.cs, write the one-line string.Equals here,
+    // and put the branch back at the two places that kind is mutated — the manifest validation and
+    // the direct register/remove path. Both are named in Docs/protected-ids-decision.md.
     private bool IsProtectedMapLayerId(string layerId)
     {
       return string.Equals(layerId, BuiltInOverworldMapLayerId, StringComparison.Ordinal);
-    }
-
-    private bool IsProtectedAnchorId(string anchorId)
-    {
-      return false;
     }
 
     private bool IsValidAnchorKind(DimensionAnchorKind kind)

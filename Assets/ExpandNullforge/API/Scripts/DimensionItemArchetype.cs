@@ -178,7 +178,8 @@ namespace ExpandNullforge.Api
                 // anything that has none, QueueHitSystem then never finds a level entity and never
                 // assigns the swing any damage, and InventoryUtility.CanBeRepaired fails on its
                 // first clause. Without it a generated pickaxe mines nothing and can never be
-                // repaired, which is what every framework tool does without it.
+                // repaired — which is what every tool this framework made did, until
+                // WeaponDamage joined the list below.
                 case DimensionItemArchetype.Tool:
                     return Always |
                            DimensionItemAuthoringComponents.InventoryItem |

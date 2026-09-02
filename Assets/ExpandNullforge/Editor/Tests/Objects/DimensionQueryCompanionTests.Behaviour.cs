@@ -245,12 +245,33 @@ namespace ExpandNullforge.EditorTools
                 "The physics package no longer serializes " + path + " under that name, so the " +
                 "generator has been writing into nothing.");
 
+            // READ AXIS BY AXIS, NOT AS A Vector3. The physics package stores these as its own
+            // float3, and SerializedProperty.vector3Value on anything that is not literally a
+            // Vector3 logs "Mismatched types in GetValue - return value is junk" as an ERROR and
+            // hands back nonsense. NUnit fails a test on an unhandled error log, so all three
+            // shape tests here failed with a Unity console message and no assertion of ours in
+            // it — which reads as a broken test rather than the wrong accessor. The x/y/z children
+            // are floats under either type.
+            AssertAxis(property, "x", expected.x, path);
+            AssertAxis(property, "y", expected.y, path);
+            AssertAxis(property, "z", expected.z, path);
+        }
+
+        private static void AssertAxis(
+            UnityEditor.SerializedProperty vector,
+            string axis,
+            float expected,
+            string path)
+        {
+            UnityEditor.SerializedProperty leaf = vector.FindPropertyRelative(axis);
             Assert.That(
-                property.vector3Value.x, Is.EqualTo(expected.x).Within(0.0005f), path + ".x");
+                leaf,
+                Is.Not.Null,
+                path + " has no " + axis + " under it, so it is not the three-float value this " +
+                "test reads. The physics package changed shape.");
+
             Assert.That(
-                property.vector3Value.y, Is.EqualTo(expected.y).Within(0.0005f), path + ".y");
-            Assert.That(
-                property.vector3Value.z, Is.EqualTo(expected.z).Within(0.0005f), path + ".z");
+                leaf.floatValue, Is.EqualTo(expected).Within(0.0005f), path + "." + axis);
         }
 
         [Test]

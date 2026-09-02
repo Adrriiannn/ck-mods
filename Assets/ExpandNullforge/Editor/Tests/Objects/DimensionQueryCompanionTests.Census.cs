@@ -162,10 +162,10 @@ namespace ExpandNullforge.EditorTools
         /// </summary>
         /// <remarks>
         /// <para>
-        /// THIS TEST MUST NOT AUDIT ITSELF. Calling <c>CloseTheGaps</c> and then
-        /// <c>WhatIsStillMissing</c> does exactly that: the second runs the identical row logic and
-        /// PERFORMS EVERY FILL while it looks — its own remark says so — so replacing the body of
-        /// <c>CloseTheGaps</c> with nothing leaves this test green. The listing has done the work the
+        /// THIS TEST MUST NOT AUDIT ITSELF. Calling <c>CloseTheGaps</c> and then a lister that
+        /// runs the identical row logic does exactly that, because such a lister PERFORMS EVERY
+        /// FILL while it looks. There was one, it is gone, and while it was here replacing the body
+        /// of <c>CloseTheGaps</c> with nothing left this test green. The listing has done the work the
         /// listing is reporting on, the sentence list comes back empty and the only other
         /// assertion iterates zero times, and the one guard named for proving the companions work
         /// is the one thing in the file that cannot fail when the companions stop working.
@@ -207,6 +207,22 @@ namespace ExpandNullforge.EditorTools
             List<string> broken = new List<string>();
             int gapsTheSweepClosed = 0;
             int probesWithAGapBeforeTheSweep = 0;
+
+            // CORE KEEPER'S OWN OnValidate THROWS HERE, AND NOTHING ON THIS SIDE CAN STOP IT.
+            // InventoryAuthoring.slotRequirements is a List with no initialiser, Unity runs
+            // OnValidate the instant AddComponent returns, and its first line reads
+            // slotRequirements.Count. The list is null for exactly that instant — the row fills it
+            // on the very next statement — so Unity logs a NullReferenceException from inside the
+            // game's component and NUnit fails the test on the unhandled error, with nothing of
+            // ours in the stack. It reads as a broken test and it is a Core Keeper quirk that
+            // anyone adding that component by hand in the Inspector also sees.
+            //
+            // The switch is put back in the finally so it cannot leak into the next test in the
+            // fixture and hide a real error there.
+            bool wasIgnoring = UnityEngine.TestTools.LogAssert.ignoreFailingMessages;
+            UnityEngine.TestTools.LogAssert.ignoreFailingMessages = true;
+            try
+            {
 
             foreach (string component in DimensionQueryCompanions.CoveredAuthoringComponents())
             {
@@ -338,6 +354,12 @@ namespace ExpandNullforge.EditorTools
                 "container, door, crafting station, vehicle, crop and boss would ship with none " +
                 "of the companion components and none of the sentences: they would generate " +
                 "cleanly and do nothing.");
+
+            }
+            finally
+            {
+                UnityEngine.TestTools.LogAssert.ignoreFailingMessages = wasIgnoring;
+            }
         }
 
         [Test]

@@ -37,6 +37,21 @@ namespace ExpandNullforge.Foundation
       public NetworkTick ScheduledTick;
     }
 
+    // ONE FIELD PER SET THE PREFLIGHT REALLY FILLS. Four more were declared here —
+    // ResourceNodeIds, EnvironmentProfileIds, TableIds, EntryIds — and the preflight's object
+    // initialiser named none of them, so every one was a null nothing wrote and nothing read. They
+    // were the only CS0649 warnings in the whole ship set. A null set on a validation context is
+    // worse than an absent one: the first thing that reaches for it takes a
+    // NullReferenceException in the middle of a manifest check.
+    //
+    // WHAT THEY WERE THE RESIDUE OF, KEPT HERE SO DELETING THEM DOES NOT ERASE IT. The resource
+    // node, environment profile and generation table registries were amputated. Their ids are
+    // still authored on BiomeTemplateAsset, still carried into DimensionRuntimeManifestSnapshot,
+    // still filtered in the biome internals and still counted in DimensionBiomeGenerationBudget —
+    // and nothing acts on any of them. That is the open decision the plan records as D4: restore
+    // the service partials, or take the authoring surface away end to end. These four fields were
+    // not that decision and could not stand in for it; four compiler warnings are a poor way to
+    // remember an amputated feature, and this sentence is a better one.
     private sealed class ManifestValidationContext
     {
       public Dictionary<string, bool> ContentPackIds;
@@ -52,15 +67,11 @@ namespace ExpandNullforge.Foundation
       public Dictionary<string, bool> SceneTemplateIds;
       public Dictionary<string, bool> SceneIds;
       public Dictionary<string, bool> EncounterIds;
-      public Dictionary<string, bool> ResourceNodeIds;
       public Dictionary<string, bool> ProgressFlagIds;
       public Dictionary<string, bool> WorldEventIds;
       public Dictionary<string, bool> GenerationPassIds;
       public Dictionary<string, bool> AssetReferenceIds;
-      public Dictionary<string, bool> EnvironmentProfileIds;
       public Dictionary<string, bool> BiomeIds;
-      public Dictionary<string, bool> TableIds;
-      public Dictionary<string, bool> EntryIds;
       public Dictionary<string, bool> OwnershipKeys;
     }
 

@@ -90,18 +90,26 @@ namespace ExpandNullforge.EditorTools
             Assert.That(DimensionItemObjectRegistry.GetPending(), Is.EqualTo(new[] { "mod:b" }));
         }
 
+        /// <summary>
+        /// Calling the reporter over and over leaves the pending list exactly as it was.
+        /// </summary>
+        /// <remarks>
+        /// RENAMED FROM ReportMissing_LogsEachItemOnlyOnce, which this never checked. There is no
+        /// <c>LogAssert</c> here and no assertion about the console at all — what it holds is that
+        /// the reporter does not mutate. Whether the once-only console rule really holds is
+        /// untested; the name now stops implying it does.
+        /// </remarks>
         [Test]
-        public void ReportMissing_LogsEachItemOnlyOnce()
+        public void RepeatedReportMissingCallsLeaveThePendingListAlone()
         {
             DimensionItemObjectRegistry.Declare("pack", new[] { "mod:ghost" });
 
-            // A per-frame retry must not spam the console.
+            // A per-frame retry must not spam the console, and must not quietly drop the item
+            // while trying not to.
             DimensionItemObjectRegistry.ReportMissing();
             DimensionItemObjectRegistry.ReportMissing();
             DimensionItemObjectRegistry.ReportMissing();
 
-            // The item is still pending; the assertion is that repeated reporting is safe and
-            // does not change state.
             Assert.That(DimensionItemObjectRegistry.PendingCount, Is.EqualTo(1));
             Assert.That(DimensionItemObjectRegistry.GetPending(), Is.EqualTo(new[] { "mod:ghost" }));
         }

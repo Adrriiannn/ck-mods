@@ -135,12 +135,6 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (IsProtectedPortalId(portalId))
-      {
-        result = DimensionOperationResult.Failed("portal-protected", "Built-in dimension portals cannot be removed.");
-        return false;
-      }
-
       DimensionPortalDefinition portal;
       if (!portals.TryGetValue(portalId, out portal))
       {

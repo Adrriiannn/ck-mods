@@ -27,19 +27,13 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeCritterTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
         }
 
         [TearDown]
         public void Cleanup()
         {
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private static GameObject Generate(string id, bool canBeCaught)

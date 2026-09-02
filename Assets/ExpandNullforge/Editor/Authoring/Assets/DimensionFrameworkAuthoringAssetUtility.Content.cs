@@ -35,11 +35,12 @@ namespace ExpandNullforge.EditorTools
             biome.ApplyFallbackLocalBounds(
                 new Vector2Int(-64 + index * 128, -64),
                 new Vector2Int(64 + index * 128, 64));
-            // Ground and Walls start EMPTY. Pre-filled with ids of the shape
-            // "<mod>:GroundBiome1Block", which no block a modder can make ever produces — a
-            // generated block's id is "<mod>:<block name>.ground.block" — a new biome opens
-            // with two entries that can never resolve, and the world builds dirt while the page
-            // shows a full list. An empty list says "you have not picked yet", which is true.
+            // Ground and Walls start EMPTY — the three arrays below are empty on purpose. They
+            // were once pre-filled with ids of the shape "<mod>:GroundBiome1Block", which no block
+            // a modder can make ever produces — a generated block's id is
+            // "<mod>:<block name>.ground.block" — so a new biome opened with two entries that
+            // could never resolve, and the world built dirt while the page showed a full list. An
+            // empty list says "you have not picked yet", which is true.
             biome.ApplySemanticTerrainPreset(
                 new string[0],
                 new string[0],

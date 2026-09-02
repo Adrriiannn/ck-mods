@@ -25,10 +25,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeAutomationTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             worldObject = ScriptableObject.CreateInstance<DimensionWorldObjectAsset>();
             SerializedObject serialized = new SerializedObject(worldObject);
@@ -45,10 +42,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(worldObject);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private void SetAutomation(System.Action<SerializedProperty> write)

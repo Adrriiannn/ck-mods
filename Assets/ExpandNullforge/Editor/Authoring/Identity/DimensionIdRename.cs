@@ -573,7 +573,8 @@ namespace ExpandNullforge.EditorTools
             // NOT DONE, SAID HERE RATHER THAN NOWHERE. The words a player reads are written into
             // the mod's text file keyed on the generated object name, and the only rows a generate
             // ever retires are ones left by an older way of spelling keys
-            // (DimensionLocalizationCsv.cs:70-75). Nothing in the game reads the dead pair, so this
+            // (DimensionLocalizationCsv, in the block that answers to retiredKeys). Nothing in the
+            // game reads the dead pair, so this
             // is a warning and not a refusal — but a rename that says nothing about it is a rename
             // that quietly grows the file every time it is used.
             if (plan.Field.BecomesAGameObject)

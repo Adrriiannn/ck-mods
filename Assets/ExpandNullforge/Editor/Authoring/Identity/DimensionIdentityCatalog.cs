@@ -159,12 +159,15 @@ namespace ExpandNullforge.EditorTools
         // literals here, and that is how the plant row below came to name a file the plant
         // generator never writes: nothing tied the two together, so nothing could disagree out
         // loud. The one that stays a literal is "Items", because the item generator composes it
-        // inline (DimensionItemGenerator.cs:2652) and has no constant to borrow.
+        // inline in DimensionItemGenerator.Components.cs and has no constant to borrow.
         //
         // The file suffixes are read off the same generators: the creature generator writes four
-        // files per creature (:367 the prefab, :1182 "Visual", :1454 "MapMarker", :1516
-        // "SummonCircle"), and the plant generator writes SIX (:292, :302, :329, :343, :355, :366)
-        // — none of them the bare plant id.
+        // files per creature — the prefab, "Visual", "MapMarker", "SummonCircle" — and the plant
+        // generator writes SIX, none of them the bare plant id.
+        //
+        // NO LINE NUMBERS. They were here, they were right when written, and the file split moved
+        // every one of them without moving the citation. A member name survives a move; a line
+        // number reads as freshly checked when it is not.
         private static readonly string[] Plain = { string.Empty };
 
         private static readonly string[] CreatureFiles =

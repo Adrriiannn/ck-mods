@@ -39,7 +39,7 @@ Nothing here is rated **Stable**, and that is deliberate.
 ## How a mod is made
 
 The authoring window walks eleven studios in order
-(`Editor/UI/Shell/DimensionJourney.cs:50-60`). Each one owns a part of the mod, and the last one builds
+(`Editor/UI/Shell/DimensionJourney.cs`). Each one owns a part of the mod, and the last one builds
 it:
 
 **Dimension → Portal Studio → Tileset Studio → Biome Studio → Layout Studio → Item Studio →
@@ -72,7 +72,7 @@ recipe; Core Keeper stores it on the item that comes out, so it is stamped there
 Swing arcs, charged attacks, the shape of a melee hit, and projectiles with their own flight,
 bounce, spread and impact. Attack, impact, wind-up and heavy-swing sounds are chosen **by name** —
 you type the sound's name and the framework hashes it the same way the game does
-(`Scripts/Authoring/Fields/DimensionSoundNames.cs:29-31`, Unity's own `Animator.StringToHash`), so all
+(`DimensionSoundNames.Hash` in `Scripts/Authoring/Fields/DimensionSoundNames.cs`, Unity's own `Animator.StringToHash`), so all
 1,400-odd of the game's sounds are available without a lookup table.
 
 ### Bombs — *Implemented (unproven)*
@@ -90,13 +90,13 @@ game's own remote explosive and cannot be pointed at yours.
 
 A piece of armour can carry its own paperdoll art. The art is a separate data block the item points
 at by address, which is a thing mods are allowed to register
-(`Editor/Generators/Objects/DimensionEquipmentSkinGenerator.cs:46`). The sheet is a fixed 234x156 layout.
+(`DimensionEquipmentSkinGenerator.EnsureSkin`). The sheet is a fixed 234x156 layout.
 
 ### Instruments and music sheets — *Implemented (unproven)*
 
 An object can be an instrument (note sound, octave-up sound, which key it starts on) or a music
 sheet naming a track per instrument. Both write the game's own components
-(`Editor/Generators/Shared/DimensionObjectSpine.cs:6304-6340`), and the generator tells you if you made a silent
+(`Editor/Generators/Shared/DimensionObjectSpine.Music.cs`), and the generator tells you if you made a silent
 instrument or a blank sheet.
 
 ## Recipes and workbenches

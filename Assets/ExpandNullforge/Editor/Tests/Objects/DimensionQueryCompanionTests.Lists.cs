@@ -618,9 +618,11 @@ namespace ExpandNullforge.EditorTools
         /// <para>
         /// NOTHING ELSE CHECKS THAT THE SWEEP RAN AT ALL. Every row in the companion table only
         /// does anything if something calls <c>CloseTheGaps</c> over the finished object, and
-        /// fifty files write Core Keeper surfaces without any call reaching them: two of the
-        /// generators, the tileset block, ore and farming path, and
-        /// the runtime bootstrap. Writing the list down turns "nobody
+        /// fifty files write Core Keeper surfaces without any call reaching them: sixteen parts of
+        /// the spine, eight passes of the four generators whose trunk sweeps for them, the four
+        /// parts of the sweep itself, three of the runtime bootstrap, three of the interaction
+        /// visual, two of the dungeon assembler, the tileset block, ore and farming path, and
+        /// eleven standalone builders and converters. Writing the list down turns "nobody
         /// checked" into "somebody said why", and the test below fails both ways: a new unswept
         /// file, and a name here that has started sweeping or stopped writing surfaces.
         /// </para>

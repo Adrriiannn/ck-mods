@@ -23,7 +23,8 @@ no runner to configure.
    and is meant to be.
 3. `Run All`, or select `ExpandNullforge.Editor.Tests` and `Run Selected`.
 
-Expect roughly 1,260 tests across 114 files. The tileset ones read and recompose whole sprite
+Expect roughly 1,400 tests across 141 files. Counted 2026-09-02: 1,403 `[Test]` methods and
+15 `[TestCase]` rows on top of them. The tileset ones read and recompose whole sprite
 sheets, so a first run takes noticeably longer than the rest put together.
 
 **From a terminal**, with the editor closed (Unity will not open a project twice):
@@ -57,7 +58,7 @@ That is worth having and it is not much. Specifically, green says nothing about:
   throughout.
 - **Whether a Harmony patch that binds also runs.** Two of those have been found by reading.
 - **Whether a system that is created is also scheduled.**
-- **Anything about the UI.** Two test files of 114 touch it at all.
+- **Anything about the UI.** Three test files of 141 touch it at all.
 
 The one class of failure the suite genuinely does catch before the game does is the sandbox: a
 denied reference in shipped source or in a built assembly fails
@@ -71,14 +72,17 @@ the whole mod with nothing said but "Compilation failed".
 Three things can be established offline, and were:
 
 **Everything compiles.** All four projects build with 0 errors. The two warnings-carrying projects
-report the same three pre-existing `MSB3277` reference conflicts they reported before this work.
+report only warnings raised inside Unity's own packages — Entities, NetCode, Addressables and the
+SDK's `MSB3277` reference conflicts. Nothing in this framework raises one.
 
-**Nothing is missing from the build.** `ExpandNullforge.Editor.Tests.csproj` has 114
-`<Compile Include>` entries and the folder has 114 `.cs` files, and the two sets are equal in both
+**Nothing is missing from the build.** `ExpandNullforge.Editor.Tests.csproj` has 141
+`<Compile Include>` entries and the folder has 141 `.cs` files, and the two sets are equal in both
 directions — no test file is excluded from the build, and no include points at a file that is gone.
-The same check on `ExpandNullforge.Editor.csproj` gives 158 = 158.
+The same check on `ExpandNullforge.Editor.csproj` gives 311 = 311. Across all four projects it is
+1,195 = 1,195.
 
-**No test is vacuous by construction.** A sweep over all 1,260 `[Test]` methods
+**No test is vacuous by construction.** A sweep over all `[Test]` methods — 1,260 of them when the
+sweep was run, 1,403 today
 (`Assert.Pass` / `Assert.Ignore` / no assertion at all / every assertion inside a loop) returned:
 
 | Shape | Count | Verdict |
@@ -102,7 +106,7 @@ a sibling already says.
 compiled into a console harness and run against this project:
 
 - `DimensionSandboxGuard` and `DimensionSandboxAssemblyGuard`, over the real tree: deny list 7
-  namespaces / 16 types / 2 members; ship set 662 files; **0** findings in framework source, **0**
+  namespaces / 16 types / 2 members; ship set 743 files; **0** findings in framework source, **0**
   in the emitter literals, **0** in the consumer mods, **0** in all four built assemblies
   (`ExpandNullforge.dll`, `ExpandNullforge.API.dll`, `MPTest.dll`, `Nullforge.dll`). The reader
   still reads: pointed at `ExpandNullforge.Editor.dll`, which uses `System.IO` freely and never
@@ -167,8 +171,19 @@ world bootstrap. Nothing in this framework causes it and no Harmony patch is app
 runs by test class are reliable; the full suite needs the Unity GUI, or a project-level
 `UNITY_DISABLE_AUTOMATIC_SYSTEM_BOOTSTRAP` define, which nobody has decided on.
 
-**The numbers a run reports**, so a shrunken one is obvious: 5,904 test cases in the project,
-**1,355** in `ExpandNullforge.Editor.Tests.dll`, 846 of them under `ExpandNullforge.EditorTests`.
+**The numbers a run reports**, so a shrunken one is obvious. Measured 2026-08-30: 5,904 test cases
+in the project, **1,355** in `ExpandNullforge.Editor.Tests.dll`, 846 of them under
+`ExpandNullforge.EditorTests`. The file split has grown all three since; the last count of the
+assembly gave 1,417 = 561 + 856. Treat these as a floor, not an expectation — the number to check
+`total` against is the one you counted for the filter you are actually running.
+
+**ONE FILTER DOES NOT REACH THE WHOLE SUITE.** The 141 test files sit in two namespaces: 69 in
+`ExpandNullforge.EditorTests`, 72 in `ExpandNullforge.EditorTools` (one of those,
+`DimensionGeneratedModSettingsTests`, in `ExpandNullforge.EditorTools.Tests`). Neither is a subset
+of the other and the folders are mixed, so a run filtered on one name silently leaves out about
+half the suite and still writes `result="Passed"`. Filter on both, or filter by test class, and
+count what you expect first. The asmdef's `rootNamespace` is `ExpandNullforge.EditorTools`, so a
+file created through Unity lands in that one.
 
 The older claim in this file that no test in this project has ever been run was simply wrong —
 nobody had tried.

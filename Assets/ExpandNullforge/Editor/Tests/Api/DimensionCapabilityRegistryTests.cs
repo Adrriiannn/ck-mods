@@ -15,8 +15,9 @@ namespace ExpandNullforge.EditorTools
     /// <c>DimensionCapabilityRegistry.All()</c> has no production caller today — these four
     /// readings are the only ones in the tree. It had one, a menu item that printed a maturity
     /// report, and that menu item was deleted as redundant with the dashboard. <c>TryGet</c> and
-    /// <c>Describe</c> are still live (<c>Editor\DimensionFrameworkAuthoringWindow.cs:1588,1599</c>
-    /// and <c>Scripts\Authoring\DimensionContentValidation.cs:727,739</c>), so the registry itself
+    /// <c>Describe</c> are still live — <c>DimensionFrameworkAuthoringWindow.Navigation.cs</c>,
+    /// <c>DimensionStageMaturity</c> and <c>DimensionContentValidation</c> all call both — so the
+    /// registry itself
     /// is not dead. Said here so the coverage below is not mistaken for evidence that anything
     /// asks for the whole list.
     /// </remarks>

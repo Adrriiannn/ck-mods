@@ -15,8 +15,9 @@ by string.** That is the gap the deletion opens.
 
 ```csharp
 // placement — mutually exclusive, each one sets the mode and the footprint together.
-// ApplyAutomaticPlacement is the third of this family and is NOT deleted: it is still on the
-// asset at SceneTemplateAsset.cs:273 and DimensionFrameworkAuthoringAssetUtility.cs:440 calls it.
+// ApplyAutomaticPlacement is the third of this family and is NOT deleted: it is still declared on
+// SceneTemplateAsset, and DimensionFrameworkAuthoringAssetUtility.Content.cs calls it when it
+// creates a scene.
 void ApplyExactPlacement(Vector2Int exactLocalPosition, Vector2Int footprintSize);
 void ApplyPreferredPlacement(Vector2Int preferredLocalMin,
                              Vector2Int preferredLocalMaxExclusive,

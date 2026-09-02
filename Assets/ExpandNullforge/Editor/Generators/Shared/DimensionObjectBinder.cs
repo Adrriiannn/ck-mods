@@ -206,7 +206,8 @@ namespace ExpandNullforge.EditorTools
 
                 // The id the creature is GENERATED under, which is the one anything naming it
                 // will type. Each of the four carries its own — mobId, bossId, animalId, critterId
-                // — and the generator qualifies that one (DimensionCreatureGenerator.cs:483). They
+                // — and the generator qualifies that one through naming.QualifyGenerated in
+                // DimensionCreatureGenerator.Art.cs. They
                 // also carry a separate "objectId", seeded to a different string entirely when the
                 // asset is created ("mod:mob1" against "mod:mob1Object"), so reading that one made
                 // every reference to this mod's own creatures look like a reference to nothing.

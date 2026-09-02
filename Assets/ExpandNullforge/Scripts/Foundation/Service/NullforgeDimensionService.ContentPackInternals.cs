@@ -61,7 +61,11 @@ namespace ExpandNullforge.Foundation
 
       missingDependencyIds.Sort(StringComparer.Ordinal);
 
-      bool apiCompatible = contentPack.MinimumApiVersion <= DimensionApi.CurrentApiVersion;
+      // The same question the manifest validation asks, asked the same way. It was
+      // "MinimumApiVersion <= CurrentApiVersion" here and ">" there, which agreed by accident and
+      // left the bottom of the range unchecked in both.
+      bool apiCompatible =
+          DimensionApiCompatibility.IsApiVersionSupported(contentPack.MinimumApiVersion);
       if (!contentPack.Enabled)
       {
         return new DimensionContentPackReadinessResult(
@@ -88,8 +92,12 @@ namespace ExpandNullforge.Foundation
             contentPack.MinimumApiVersion,
             DimensionApi.CurrentApiVersion,
             missingDependencyIds,
-            "content-pack-api-too-new",
-            "The content pack requires a newer Dimension API version.");
+            contentPack.MinimumApiVersion > DimensionApi.CurrentApiVersion
+                ? "content-pack-api-too-new"
+                : "content-pack-api-not-supported",
+            contentPack.MinimumApiVersion > DimensionApi.CurrentApiVersion
+                ? "The content pack requires a newer Dimension API version."
+                : "The content pack declares a Dimension API version this build does not support.");
       }
 
       if (missingDependencyIds.Count > 0)

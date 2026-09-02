@@ -76,14 +76,6 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (IsProtectedStarterId(starterId))
-      {
-        result = DimensionOperationResult.Failed(
-            "starter-protected",
-            "Built-in dimension starters cannot be removed.");
-        return false;
-      }
-
       if (!starters.Remove(starterId))
       {
         result = DimensionOperationResult.Failed(
@@ -326,11 +318,6 @@ namespace ExpandNullforge.Foundation
              left.RequireOwnership == right.RequireOwnership &&
              string.Equals(left.RequiredOwnerContentPackId, right.RequiredOwnerContentPackId, StringComparison.Ordinal) &&
              left.RequireEnabledOwnerContentPack == right.RequireEnabledOwnerContentPack;
-    }
-
-    private static bool IsProtectedStarterId(string starterId)
-    {
-      return false;
     }
   }
 }

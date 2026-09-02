@@ -27,10 +27,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeSkinTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             // Held in memory rather than written as an asset. A SerializedObject write made right
             // after AssetDatabase.CreateAsset does not stick - the first tests in this class ran
@@ -66,10 +63,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(sheet);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private void Set(string field, string value)

@@ -129,6 +129,11 @@ namespace ExpandNullforge.EditorTools
         /// after the production sweep has run, so what it reports is what the sweep left behind.
         /// </para>
         /// <para>
+        /// THE MUTATING LISTER WAS DELETED RATHER THAN KEPT. It had no callers left once the guard
+        /// stopped auditing itself, and a dead method carrying a doc that says the guard uses it is
+        /// worse than no method: the next person reads the doc, not the call sites.
+        /// </para>
+        /// <para>
         /// It also marks the rows that CLAIM to fill their own gap. Four rows carry both a fill and
         /// a sentence, and a caller that excused any spoken-about gap excused those four as well —
         /// gut one of their fills and the entry simply changed from "says nothing" to "says", which

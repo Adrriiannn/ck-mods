@@ -23,7 +23,7 @@ namespace ExpandNullforge.EditorTools.Generation
     /// and the assertion made there are about the same pixels.
     /// </para>
     /// </remarks>
-    internal static class DimensionTilesetGoldenTest
+    internal static class DimensionTilesetGoldenRegenMenu
     {
         [MenuItem("Dimensions API/Debug/Golden Test — Regenerate Dirt GEN")]
         private static void Run()

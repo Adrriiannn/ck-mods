@@ -279,7 +279,12 @@ namespace ExpandNullforge.EditorTools
             try
             {
                 emitters = Directory.Exists(folder)
-                    ? Directory.GetFiles(folder, GeneratedSourceEmitterPrefix + "*.cs", SearchOption.TopDirectoryOnly)
+                    // SEARCHED THROUGH THE SUBFOLDERS, not just the top of Editor. The partials
+                    // sat directly in ExpandNullforge/Editor when this was written and the
+                    // restructure moved all thirty-two into ExpandNullforge/Editor/Bootstrap. A
+                    // top-only search then matched none of them, so this returned the "was not
+                    // checked at all" finding and the emitted-source deny scan stopped running.
+                    ? Directory.GetFiles(folder, GeneratedSourceEmitterPrefix + "*.cs", SearchOption.AllDirectories)
                     : new string[0];
             }
             catch (Exception)

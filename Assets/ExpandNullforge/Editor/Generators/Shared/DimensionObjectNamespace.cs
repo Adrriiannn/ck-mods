@@ -86,9 +86,9 @@ namespace ExpandNullforge.EditorTools
         /// what the emitter registers as "ours" cannot drift apart.
         /// </para>
         /// <para>
-        /// THERE IS DELIBERATELY NO OVERLOAD THAT OWNS NOTHING. One is what
-        /// makes a workbench recipe ship <c>moddedObjectID = "EmberBolt"</c> while the item generator
-        /// has registered the object as <c>MyMod:EmberBolt</c>: <see cref="QualifyReference"/> is
+        /// THERE IS DELIBERATELY NO OVERLOAD THAT OWNS NOTHING. Add one and a reference ships as
+        /// <c>EmberBolt</c> while the item generator has registered the object as
+        /// <c>MyMod:EmberBolt</c>, and the two never meet: <see cref="QualifyReference"/> is
         /// <c>Owns(id) ? Qualify(...) : id</c>, so with an empty ownership set it is the identity
         /// function and the station's lookup misses. Passing <c>null</c> here is still legal for the
         /// rare run that genuinely cannot know, but it has to be written out on purpose rather than

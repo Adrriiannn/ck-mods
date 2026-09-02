@@ -18,13 +18,13 @@ The scan was run outside Unity and its output is reproduced below verbatim.
 
 ## Two corrections to the census
 
-The dead-code census listed two groups as inert that are not. Both are read, by cast, in
-`Editor/Generators/Shared/DimensionObjectSpine.cs`:
+The dead-code census listed two groups as inert that are not. Both are read, by cast, in the
+partials of `Editor/Generators/Shared/DimensionObjectSpine`:
 
 | Claimed inert | Actually |
 |---|---|
-| `DimensionWeaponTemplate.SwingArc`, `.Flourish`, `.CastPurpose` | Read at `DimensionObjectSpine.cs:3167`, `:3168`, `:3328` — `melee.arcAngle = (ArcAngle)(int)weapon.SwingArc`, `melee.attackFXType = (AttackFXType)(int)weapon.Flourish`, `cast.useType = (CastItemUseType)(int)weapon.CastPurpose`. **Live. Do not delete.** |
-| The six `DimensionInstrumentTemplate` track names (the plan said eight; there are six — `harpTrack`, `fluteTrack`, `celloTrack`, `ocarinaTrack`, `drumkitTrack`, `pianoTrack`, at `Scripts/Authoring/Objects/DimensionInstrumentTemplate.cs:49,53,57,61,65,69`) | Written at `DimensionObjectSpine.cs:7526–7531` onto the music sheet's `SFXTableIDField`s, and `SheetIsBlank` / `SheetIsIncomplete` / `HasNoOctave` / `TracksWritten` are all read at `:7523`, `:7548`, `:7555`, `:7560`, `:7563`. **Live. Do not delete.** |
+| `DimensionWeaponTemplate.SwingArc`, `.Flourish`, `.CastPurpose` | Read in `DimensionObjectSpine.Weapons.cs` — `melee.arcAngle = (ArcAngle)(int)weapon.SwingArc`, `melee.attackFXType = (AttackFXType)(int)weapon.Flourish`, `cast.useType = (CastItemUseType)(int)weapon.CastPurpose`. **Live. Do not delete.** |
+| The six `DimensionInstrumentTemplate` track names (the plan said eight; there are six — `harpTrack`, `fluteTrack`, `celloTrack`, `ocarinaTrack`, `drumkitTrack`, `pianoTrack`, on `Scripts/Authoring/Objects/DimensionInstrumentTemplate.cs`) | Written in `DimensionObjectSpine.Music.cs` onto the music sheet's `SFXTableIDField`s, and `SheetIsBlank` / `SheetIsIncomplete` / `HasNoOctave` / `TracksWritten` are all read there too. **Live. Do not delete.** |
 
 These are the enum-cast pattern the plan warns about elsewhere: the member is never named because
 the whole enum is converted with `(int)`, so a name-based reference check reports zero.

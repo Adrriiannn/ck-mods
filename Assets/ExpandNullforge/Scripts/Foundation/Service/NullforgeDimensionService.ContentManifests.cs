@@ -17,9 +17,16 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (contentPack.MinimumApiVersion > DimensionApi.CurrentApiVersion)
+      // ASKED, NOT RE-DERIVED. This read "MinimumApiVersion > CurrentApiVersion" and so did the
+      // readiness check thirty files away, and neither of them checked the bottom of the range at
+      // all — a pack declaring version 0, or -3, was accepted as compatible. The rule that says
+      // otherwise was already written down, in DimensionApiCompatibility, with a test on it and no
+      // caller. Routing both through it is what makes that test about something.
+      if (!DimensionApiCompatibility.IsApiVersionSupported(contentPack.MinimumApiVersion))
       {
-        result = DimensionOperationResult.Failed("content-pack-api-too-new", "The content pack requires a newer Dimension API version.");
+        result = contentPack.MinimumApiVersion > DimensionApi.CurrentApiVersion
+            ? DimensionOperationResult.Failed("content-pack-api-too-new", "The content pack requires a newer Dimension API version.")
+            : DimensionOperationResult.Failed("content-pack-api-not-supported", "The content pack declares a Dimension API version this build does not support.");
         return false;
       }
 

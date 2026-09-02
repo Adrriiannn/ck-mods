@@ -105,13 +105,6 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (IsProtectedMarkerId(marker.MarkerId) &&
-          !MarkerAnchorEquals(previous, marker))
-      {
-        result = DimensionOperationResult.Failed("marker-protected", "Built-in dimension markers cannot be moved to another anchor.");
-        return false;
-      }
-
       if (MarkerEquals(previous, marker))
       {
         result = DimensionOperationResult.Ok();
@@ -178,12 +171,6 @@ namespace ExpandNullforge.Foundation
       if (string.IsNullOrEmpty(markerId))
       {
         result = DimensionOperationResult.Failed("marker-id-empty", "A marker id is required.");
-        return false;
-      }
-
-      if (IsProtectedMarkerId(markerId))
-      {
-        result = DimensionOperationResult.Failed("marker-protected", "Built-in dimension markers cannot be removed.");
         return false;
       }
 
@@ -320,12 +307,6 @@ namespace ExpandNullforge.Foundation
         return false;
       }
 
-      if (IsProtectedAnchorId(anchor.AnchorId) && !AnchorLocationEquals(previous, anchor))
-      {
-        result = DimensionOperationResult.Failed("anchor-protected", "Built-in dimension anchors cannot be moved or changed to another kind.");
-        return false;
-      }
-
       if (AnchorEquals(previous, anchor))
       {
         result = DimensionOperationResult.Ok();
@@ -397,12 +378,6 @@ namespace ExpandNullforge.Foundation
       if (string.IsNullOrEmpty(anchorId))
       {
         result = DimensionOperationResult.Failed("anchor-id-empty", "An anchor id is required.");
-        return false;
-      }
-
-      if (IsProtectedAnchorId(anchorId))
-      {
-        result = DimensionOperationResult.Failed("anchor-protected", "Built-in dimension anchors cannot be removed.");
         return false;
       }
 

@@ -19,10 +19,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeEmittedLightTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             worldObject = ScriptableObject.CreateInstance<DimensionWorldObjectAsset>();
             SetString("objectIdentifier", "testlight");
@@ -37,10 +34,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(worldObject);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         /// <summary>Writes one answer onto the asset the way the inspector writes it.</summary>

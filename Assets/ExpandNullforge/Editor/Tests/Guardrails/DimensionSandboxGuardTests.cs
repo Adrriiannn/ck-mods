@@ -242,7 +242,7 @@ namespace ExpandNullforge.EditorTools
         /// This is the third hole of the same shape in this class: the deny list and the emitter
         /// list each already fail rather than pass when they come back empty, and the ship set —
         /// the largest of the three — did not. One <c>"includePlatforms": ["Editor"]</c> line in
-        /// <c>ExpandNullforge.asmdef</c> takes the count from 662 to 0, and before this test both
+        /// <c>ExpandNullforge.asmdef</c> takes the count from 743 to 0, and before this test both
         /// this fixture and <c>DimensionBurstBudgetTests</c> read that as nothing to report.
         /// </remarks>
         [Test]

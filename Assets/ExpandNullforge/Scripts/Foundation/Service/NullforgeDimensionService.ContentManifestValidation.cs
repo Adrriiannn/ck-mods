@@ -217,10 +217,6 @@ namespace ExpandNullforge.Foundation
           return DimensionOperationResult.Failed("marker-already-registered", "A marker with that id is already registered.");
         }
 
-        if (IsProtectedMarkerId(marker.MarkerId) && !MarkerAnchorEquals(existing, marker))
-        {
-          return DimensionOperationResult.Failed("marker-protected", "Built-in dimension markers cannot be moved to another anchor.");
-        }
       }
 
       if (string.IsNullOrEmpty(marker.DimensionId))
@@ -272,10 +268,6 @@ namespace ExpandNullforge.Foundation
           return DimensionOperationResult.Failed("anchor-already-registered", "An anchor with that id is already registered.");
         }
 
-        if (IsProtectedAnchorId(anchor.AnchorId) && !AnchorLocationEquals(existing, anchor))
-        {
-          return DimensionOperationResult.Failed("anchor-protected", "Built-in dimension anchors cannot be moved or changed to another kind.");
-        }
       }
 
       if (string.IsNullOrEmpty(anchor.DimensionId))

@@ -225,6 +225,12 @@ namespace ExpandNullforge.EditorTools
                 "GetComponent", "GetComponents", "GetComponentInChildren",
                 "RemoveComponentIfPresent", "TryRemoveComponent", "HasComponent", "List",
 
+                // The companion table's own one-letter constructor for a Need. N<T>("T") builds a
+                // predicate that ASKS whether a running entity has T; it touches no object and
+                // adds nothing. It was the one caller this scan could not classify, and this test
+                // failed on it every time it was run — which, until now, was never.
+                "N",
+
                 // The ECS side: reading, querying and removing a runtime component. None of these
                 // puts one on anything.
                 "GetComponentData", "TryGetComponentData", "HasComponentData", "IsComponentEnabled",

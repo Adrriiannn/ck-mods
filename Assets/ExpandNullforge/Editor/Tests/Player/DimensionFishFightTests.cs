@@ -45,20 +45,14 @@ namespace ExpandNullforge.EditorTests
         public void Setup()
         {
             DimensionFishFightRegistry.Clear();
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeFishFightTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
         }
 
         [TearDown]
         public void Cleanup()
         {
             DimensionFishFightRegistry.Clear();
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private static FishingTable NewTable()

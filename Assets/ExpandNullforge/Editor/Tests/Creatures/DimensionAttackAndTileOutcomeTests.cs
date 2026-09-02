@@ -26,10 +26,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeAttackTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             // In memory, not as an asset: a SerializedObject write made right after CreateAsset
             // does not stick, and the test would then run against an item full of defaults.
@@ -46,10 +43,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(worldObject);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private void SetString(string field, string value)
@@ -130,14 +124,23 @@ namespace ExpandNullforge.EditorTests
 
         // ---- what attacking sounds like ----
 
+        /// <summary>
+        /// An attack-sound template nobody filled in leaves the object with no sound component.
+        /// </summary>
+        /// <remarks>
+        /// RENAMED FROM AuthoredAttackSoundsReachTheGame, which is not what the body does. It
+        /// builds an untouched template and asserts nothing is written — the silence half. The
+        /// half the old name promised, that a template with sounds in it puts
+        /// <c>CustomAttackSoundAuthoring</c> on with those sounds in it, has no test here and is
+        /// worth adding; it is written down rather than left for the name to imply.
+        /// </remarks>
         [Test]
-        public void AuthoredAttackSoundsReachTheGame()
+        public void AnUntouchedAttackSoundTemplateWritesNothing()
         {
             GameObject root = new GameObject("sounded");
             try
             {
                 DimensionAttackSoundsTemplate sounds = new DimensionAttackSoundsTemplate();
-                SerializedObject holder = new SerializedObject(worldObject);
                 Assert.IsFalse(sounds.HasAnySound, "an untouched template asks for nothing");
 
                 DimensionObjectSpine.ApplyAttackSounds(root, sounds);

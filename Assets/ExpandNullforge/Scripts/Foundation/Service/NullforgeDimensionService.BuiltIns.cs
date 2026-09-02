@@ -42,6 +42,21 @@ namespace ExpandNullforge.Foundation
     private const string TargetAreaGenerationReadyRetryCode = "target-area-generation-ready-retry";
     private const string BuiltInTravelRequirementAccessProviderId = "expandnullforge:travel-requirement-access";
     private const string BuiltInProgressFlagRequirementEvaluatorId = "expandnullforge:progress-flag-requirements";
+    // THE ONLY BUILT-IN ID ANYTHING REFUSES TO REMOVE, and the list of what that leaves open. Three
+    // things here are protected: the overworld map layer below, the overworld dimension
+    // (IsProtectedDimensionId) and this framework's own content pack (IsProtectedContentPackId).
+    //
+    // PORTALS, MARKERS, ANCHORS AND STARTERS THIS FRAMEWORK REGISTERS ARE REMOVABLE, like anybody
+    // else's. That is deliberate and it is written here because it did not used to be readable
+    // anywhere: four predicates named IsProtectedPortalId, IsProtectedMarkerId,
+    // IsProtectedAnchorId and IsProtectedStarterId returned false, and eight branches consulted
+    // them and raised a "…-protected" refusal nothing could reach. They are gone. The framework
+    // ships no built-in content of those four kinds — there is no id below to protect — and a
+    // guard over an empty set that reads as a guarantee is the worse of the two states.
+    //
+    // Ship built-in content of one of those kinds and this is where its id goes, beside this one,
+    // with a predicate to match. Docs/protected-ids-decision.md names both mutation points per
+    // kind, so the branches go back where they came from.
     private const string BuiltInOverworldMapLayerId = "corekeeper:map-layer-overworld";
     private const uint StableHashOffset = 2166136261u;
     private const uint StableHashPrime = 16777619u;

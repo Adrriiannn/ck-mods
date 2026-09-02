@@ -26,10 +26,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeCookingTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             ingredient = Make("testberry", "Test Berry");
             dish = Make("testpie", "Test Pie");
@@ -48,10 +45,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(dish);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         private static DimensionItemAsset Make(string id, string name)

@@ -204,7 +204,7 @@ namespace ExpandNullforge.Diagnostics
         /// <remarks>
         /// It reaches further than the workbench generator — a container or a world object that a
         /// drill can craft at gets <c>CraftingAuthoring</c> too
-        /// (<c>DimensionObjectSpine.cs:1317</c>) — and that costs nothing: both of those finish
+        /// (<c>DimensionObjectSpine.Machines.cs</c>) — and that costs nothing: both of those finish
         /// through <c>FinishAWorldObject</c>, which adds the type, so the rule cannot fail on one.
         /// </remarks>
         private static readonly Need ItIsAStation = N<CraftingCD>("CraftingCD");
@@ -331,15 +331,17 @@ namespace ExpandNullforge.Diagnostics
             // SupportConditionsConverter off SupportsConditionsAuthoring, and exactly four
             // generators call DimensionObjectSpine.ApplyInitialConditions, which is the only thing
             // in this framework that adds that authoring component: containers
-            // (DimensionContainerGenerator.cs:276), creatures (DimensionCreatureGenerator.cs:651),
-            // items (DimensionItemGenerator.cs:1627) and world objects
-            // (DimensionWorldObjectGenerator.cs:385). CloseTheGaps does not add it either — it is
+            // (DimensionContainerGenerator), creatures (DimensionCreatureGenerator), items
+            // (DimensionItemGenerator) and world objects (DimensionWorldObjectGenerator); the
+            // method itself is in DimensionObjectSpine.Items.cs.
+            // CloseTheGaps does not add it either — it is
             // in the companion pass's "needs nothing beside it" list. So a crop, a critter, a
             // station and a vehicle carry the type and never carry a condition buffer, the trigger
             // above cannot fire on one of them, and nothing said anything when the pairing came
             // apart. The type reaches all four through
-            // DimensionQueryCompanions.CarriesWhatItIsOntoTheRunningObject (:2109), called directly
-            // by the plant generator (DimensionPlantGenerator.cs:647) and by FinishACritter and
+            // DimensionQueryCompanions.CarriesWhatItIsOntoTheRunningObject, which is declared in
+            // DimensionQueryCompanions.Sweeps.cs, called directly
+            // by the plant generator and by FinishACritter and
             // both FinishAWorldObject overloads for the other three.
             //
             // WHAT A MISSING TYPE COSTS EACH OF THEM, MEASURED, AND IT IS NOT ONE SENTENCE FOUR
@@ -352,15 +354,15 @@ namespace ExpandNullforge.Diagnostics
             // and there are only two of those:
             //   ck-db/Pug.Other/AttackSystem.cs:943 withholds the hit effect on the thing it hit
             //   when its type is PlaceablePrefab. A station and a vehicle are authored
-            //   PlaceablePrefab (DimensionWorkbenchGenerator.cs:224,
-            //   DimensionVehicleGenerator.cs:211), so without the component they show a player the
+            //   PlaceablePrefab — DimensionWorkbenchGenerator and DimensionVehicleGenerator both
+            //   stamp objectType — so without the component they show a player the
             //   sparks and the flying number the game holds back for a building.
             //   ck-db/Pug.Other/EntityUtility.cs:1675 reads the same value into flag2, and both
             //   branches that use it (:1696, :1720) sit behind isCreated2 — the RECEIVER's own
             //   condition buffers. None of these four has one, so that reader cannot tell the
             //   difference either way.
             // A crop is authored NonObtainable and a critter Critter
-            // (DimensionPlantGenerator.cs:892, DimensionCritterGenerator.cs:220). Neither equals
+            // (DimensionPlantGenerator and DimensionCritterGenerator). Neither equals
             // PlaceablePrefab and neither does the zero, so nothing in the game reads the
             // difference on those two today, and their rows say so instead of borrowing the
             // station's sentence. Overstating what was found is what the wide rule was removed for.

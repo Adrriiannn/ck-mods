@@ -132,10 +132,11 @@ namespace ExpandNullforge.EditorTools
                         : entry.ItemId;
 
                     // The chance decides the odds, and is made true when the table is built. That
-                    // leaves the share nothing to divide, so the share is not drawn. A table
-                    // authored while it still was carries whatever was typed into it, and a number
-                    // that reaches nothing is exactly the thing this framework refuses
-                    // to leave unsaid.
+                    // leaves the share nothing to divide, so the share is not drawn at all. It was
+                    // the other way round once — the share decided and the chance was thrown away
+                    // — and a table authored back then still carries whatever share was typed into
+                    // it. A number that reaches nothing is exactly the thing this framework
+                    // refuses to leave unsaid, so the row below says so.
                     if (entry.Weight != 1)
                     {
                         Debug.LogWarning(

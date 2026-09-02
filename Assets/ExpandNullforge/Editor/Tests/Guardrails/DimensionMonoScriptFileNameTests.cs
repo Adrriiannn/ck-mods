@@ -22,12 +22,21 @@ namespace ExpandNullforge.EditorTools
     /// does nothing.
     /// </para>
     /// <para>
-    /// THE PROJECT ALREADY STATES THIS RULE, at <c>Scripts/Authoring/Assets/DimensionItemAsset.cs:7-8</c>,
+    /// THE PROJECT ALREADY STATES THIS RULE, in the note at the top of
+    /// <c>Scripts/Authoring/Assets/DimensionItemAsset.cs</c>,
     /// and only for ScriptableObjects. There were no ScriptableObject offenders and fourteen
     /// MonoBehaviour ones, every one of them added to a root that goes through
     /// <c>PrefabUtility.SaveAsPrefabAsset</c> by <c>DimensionCreatureGenerator</c> or
     /// <c>DimensionPlantGenerator</c>. All fourteen were given a file of their own in the
     /// file-splitting stage, so the list below is empty and every offender is a new one.
+    /// </para>
+    /// <para>
+    /// IT COUNTS A CLASS THAT REACHES UNITY THROUGH CORE KEEPER. A view that says
+    /// <c>: EntityMonoBehaviour</c> or <c>: Cattle</c> never writes the word
+    /// <c>MonoBehaviour</c>, and while this test matched that word literally, six of ours were
+    /// outside it. <see cref="VanillaScriptBases"/> names the game's own script bases and
+    /// <see cref="EveryUnityBoundClass"/> follows the chain, so a subclass of one of ours counts
+    /// too.
     /// </para>
     /// <para>
     /// IT FAILS BOTH WAYS. A class not on the list is a new offender. A name on the list that no
@@ -69,6 +78,7 @@ namespace ExpandNullforge.EditorTools
 
             List<string> newOffenders = new List<string>();
             HashSet<string> stillOffending = new HashSet<string>();
+            HashSet<string> unityBound = EveryUnityBoundClass(sources);
 
             for (int i = 0; i < sources.Count; i++)
             {
@@ -78,8 +88,7 @@ namespace ExpandNullforge.EditorTools
 
                 foreach (Match match in ClassDeclaration.Matches(text))
                 {
-                    string bases = match.Groups["bases"].Value;
-                    if (!DerivesFromAUnityScript(bases))
+                    if (!unityBound.Contains(match.Groups["name"].Value))
                     {
                         continue;
                     }
@@ -135,34 +144,114 @@ namespace ExpandNullforge.EditorTools
         }
 
         /// <summary>
-        /// Whether a base-type list names one of the two things Unity resolves through a
-        /// <c>MonoScript</c>.
+        /// Core Keeper's own script bases, each one a <c>MonoBehaviour</c> the game reaches through
+        /// a <c>MonoScript</c> exactly as it reaches ours.
         /// </summary>
         /// <remarks>
-        /// The first entry in a base list is the base class, but an interface can be written first
-        /// only in invalid C#, so every entry is checked rather than the first. A base named
-        /// <c>SomethingMonoBehaviour</c> would be a false positive; there is none, and the word
-        /// boundary keeps it that way.
+        /// <para>
+        /// WITHOUT THIS THE GUARD COVERED FORTY-NINE OF FIFTY-FIVE. It matched the literal words
+        /// <c>MonoBehaviour</c> and <c>ScriptableObject</c> in a base list, so six of our classes —
+        /// the ones that reach Unity through a Core Keeper base instead of a Unity one — were
+        /// invisible to it. All six happened to be in a file named for them, so the invariant held
+        /// at fifty-five while the check stopped at forty-nine, which is the worst shape a guard
+        /// can be in: correct today, silent tomorrow.
+        /// </para>
+        /// <para>
+        /// Each name here was read out of the decompiled game rather than assumed. Every one of
+        /// them is <c>: EntityMonoBehaviour</c>, and <c>EntityMonoBehaviour</c> is
+        /// <c>: PoolableSimple</c>, which is <c>: MonoBehaviour</c>. Adding a name that is not
+        /// really a script would make the guard demand a file for something Unity never binds; the
+        /// cost of that is a false failure, which is the safe direction, and it is still worth
+        /// checking before adding one.
+        /// </para>
         /// </remarks>
-        private static bool DerivesFromAUnityScript(string bases)
-        {
-            string[] parts = bases.Split(',');
-            for (int i = 0; i < parts.Length; i++)
+        private static readonly HashSet<string> VanillaScriptBases =
+            new HashSet<string>(System.StringComparer.Ordinal)
             {
-                string one = parts[i].Trim();
-                int dot = one.LastIndexOf('.');
-                if (dot >= 0)
-                {
-                    one = one.Substring(dot + 1);
-                }
+                "EntityMonoBehaviour", "PoolableSimple",
+                "Cattle", "CraftingBuilding", "NPC", "VendingMachine", "WorldLabel",
+            };
 
-                if (one == "MonoBehaviour" || one == "ScriptableObject")
+        /// <summary>
+        /// Every shipped class Unity resolves through a <c>MonoScript</c>, base chains included.
+        /// </summary>
+        /// <remarks>
+        /// Resolved by repeated passes rather than by reading the first base only: our own views
+        /// derive from each other — <c>DimensionCreatureView</c>, <c>DimensionPlantView</c> and
+        /// <c>DimensionPortal</c> are all bases of something else here — so a single pass would
+        /// answer for a subclass before it had answered for the class it is under. The loop ends
+        /// when a pass adds nothing, which is at most as many passes as the chain is deep.
+        /// </remarks>
+        private static HashSet<string> EveryUnityBoundClass(List<string> sources)
+        {
+            Dictionary<string, List<string>> basesOf =
+                new Dictionary<string, List<string>>(System.StringComparer.Ordinal);
+
+            for (int i = 0; i < sources.Count; i++)
+            {
+                string text = File.ReadAllText(sources[i]);
+                foreach (Match match in ClassDeclaration.Matches(text))
                 {
-                    return true;
+                    string name = match.Groups["name"].Value;
+                    if (!basesOf.ContainsKey(name))
+                    {
+                        basesOf.Add(name, new List<string>());
+                    }
+
+                    // The first entry in a base list is the base class, but an interface can be
+                    // written first only in invalid C#, so every entry is kept rather than the
+                    // first. A base named SomethingMonoBehaviour would be a false positive; there
+                    // is none, and comparing whole names keeps it that way.
+                    string[] parts = match.Groups["bases"].Value.Split(',');
+                    for (int b = 0; b < parts.Length; b++)
+                    {
+                        string one = parts[b].Trim();
+                        int dot = one.LastIndexOf('.');
+                        if (dot >= 0)
+                        {
+                            one = one.Substring(dot + 1);
+                        }
+
+                        int generic = one.IndexOf('<');
+                        if (generic >= 0)
+                        {
+                            one = one.Substring(0, generic);
+                        }
+
+                        basesOf[name].Add(one.Trim());
+                    }
                 }
             }
 
-            return false;
+            HashSet<string> bound = new HashSet<string>(System.StringComparer.Ordinal);
+            bool grew = true;
+            while (grew)
+            {
+                grew = false;
+                foreach (KeyValuePair<string, List<string>> declared in basesOf)
+                {
+                    if (bound.Contains(declared.Key))
+                    {
+                        continue;
+                    }
+
+                    for (int b = 0; b < declared.Value.Count; b++)
+                    {
+                        string one = declared.Value[b];
+                        if (one != "MonoBehaviour" && one != "ScriptableObject" &&
+                            !VanillaScriptBases.Contains(one) && !bound.Contains(one))
+                        {
+                            continue;
+                        }
+
+                        bound.Add(declared.Key);
+                        grew = true;
+                        break;
+                    }
+                }
+            }
+
+            return bound;
         }
     }
 }

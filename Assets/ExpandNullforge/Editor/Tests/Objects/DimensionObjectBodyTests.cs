@@ -41,10 +41,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgeBodyTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
         }
 
         [TearDown]
@@ -60,10 +57,7 @@ namespace ExpandNullforge.EditorTests
 
             temporaries.Clear();
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         // ---- every use now has a body of the framework's own ----

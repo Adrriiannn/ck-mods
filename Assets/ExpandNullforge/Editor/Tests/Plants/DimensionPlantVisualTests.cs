@@ -37,10 +37,7 @@ namespace ExpandNullforge.EditorTests
         [SetUp]
         public void Setup()
         {
-            if (!AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.CreateFolder("Assets", "NullforgePlantVisualTests");
-            }
+            DimensionTestScratchFolder.Ensure(TestRoot);
 
             plant = ScriptableObject.CreateInstance<DimensionPlantAsset>();
             SetString("plantId", "testcrop");
@@ -56,10 +53,7 @@ namespace ExpandNullforge.EditorTests
                 Object.DestroyImmediate(plant);
             }
 
-            if (AssetDatabase.IsValidFolder(TestRoot))
-            {
-                AssetDatabase.DeleteAsset(TestRoot);
-            }
+            DimensionTestScratchFolder.Remove(TestRoot);
         }
 
         // ---- how many pictures a crop needs ----

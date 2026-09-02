@@ -140,9 +140,10 @@ namespace ExpandNullforge.EditorTools
             DimensionStacking rule = DimensionWhatItIsRules.StackingFor(kind);
             string it = DimensionWhatItIsRules.Describe(kind);
 
-            // The shared-timer check lives beside the write, in DimensionObjectSpine.ApplyItemEffects,
-            // which both this generator and the world-object generator go through. Here, a world
-            // object could never reach it.
+            // The shared-timer check is deliberately not in this method. It lives beside the
+            // write, in DimensionObjectSpine.ApplyItemEffects, which both this generator and the
+            // world-object generator go through; put back here, a world object could never reach
+            // it.
 
             if (rule == DimensionStacking.NeverStacks && item.Stackable)
             {

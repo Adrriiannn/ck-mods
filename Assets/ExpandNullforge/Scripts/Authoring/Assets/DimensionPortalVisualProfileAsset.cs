@@ -378,12 +378,6 @@ namespace ExpandNullforge.Authoring
         public bool GroundLightEnabled { get { return groundLightEnabled; } }
         public Color GroundLightColor { get { return groundLightColor; } }
         /// <summary>
-        /// The brightness the light actually holds in game. The vanilla LightFlickerEffect
-        /// overwrites Unity's authored intensity within a frame of the portal spawning, settling
-        /// around the midpoint of the runtime range, so the serialized starting value cannot be
-        /// observed and is not used. The field is kept only so existing assets still load.
-        /// </summary>
-        /// <summary>
         /// How bright the light on the ground is.
         /// </summary>
         /// <remarks>

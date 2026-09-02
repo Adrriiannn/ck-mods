@@ -47,17 +47,23 @@ namespace ExpandNullforge.EditorTests
         }
 
         /// <summary>
-        /// Both passes reach the compiled plan, in the order the profile-plus-biome pair produced:
-        /// the profile's first, the biome's own after it.
+        /// Every pass listed on a biome reaches the compiled plan, in the order it is listed.
         /// </summary>
+        /// <remarks>
+        /// RENAMED FROM CompilerReceivesProfilePassesAndBiomePassesInOrder, and there is no
+        /// profile in it. There was — a generation profile asset held one list and the biome held
+        /// the other, and this test proved the two arrived in the right order. The fold this file
+        /// is named for put both lists on the biome, so both passes below are the biome's and the
+        /// order is the order it lists them. The old name outlived the asset by a whole feature.
+        /// </remarks>
         [Test]
-        public void CompilerReceivesProfilePassesAndBiomePassesInOrder()
+        public void PassesCompileInTheOrderTheBiomeListsThem()
         {
-            GenerationPassTemplateAsset fromProfile = Pass("carve", 0);
-            GenerationPassTemplateAsset fromBiome = Pass("scatter", 10);
+            GenerationPassTemplateAsset listedFirst = Pass("carve", 0);
+            GenerationPassTemplateAsset listedSecond = Pass("scatter", 10);
 
             BiomeTemplateAsset biome = Biome("cavern");
-            biome.SetGenerationPasses(new[] { fromProfile, fromBiome });
+            biome.SetGenerationPasses(new[] { listedFirst, listedSecond });
 
             DimensionCompiledGenerationPlan plan = Compile(Template(biome));
 

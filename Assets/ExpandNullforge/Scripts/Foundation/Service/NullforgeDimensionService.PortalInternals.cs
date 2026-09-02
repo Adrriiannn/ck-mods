@@ -5,11 +5,6 @@ namespace ExpandNullforge.Foundation
 {
   public sealed partial class NullforgeDimensionService
   {
-    private bool IsProtectedPortalId(string portalId)
-    {
-      return false;
-    }
-
     private bool PortalDefinitionRouteEquals(
         DimensionPortalDefinition a,
         DimensionPortalDefinition b)

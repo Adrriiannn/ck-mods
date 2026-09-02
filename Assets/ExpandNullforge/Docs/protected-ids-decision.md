@@ -30,7 +30,7 @@ private static bool IsProtectedStarterId(string starterId) { return false; }
 `IsProtectedMapLayerId` is the template. It compares against one constant:
 
 ```csharp
-// NullforgeDimensionService.BuiltIns.cs:45
+// NullforgeDimensionService.BuiltIns.cs
 private const string BuiltInOverworldMapLayerId = "corekeeper:map-layer-overworld";
 ```
 
@@ -128,3 +128,33 @@ safe, and will be wrong.
 One thing to be careful of if the delete path is taken: `ContentManifests.cs:1506` and `:1561` and
 `MapMarkersAnchors.cs:108` and `:323` are `&&` conditions whose *second* half is a real equality
 check. Removing the branch removes that check too. Read each of the four before cutting.
+
+---
+
+## Decided 2026-09-02: the four predicates and their eight branches were removed together
+
+The delete path was taken, because the code and the amputation record agree that the framework
+ships no built-in portal, marker, anchor or starter today, and `BuiltIns.cs` declares no id of
+those kinds to compare against. Supplying lists would have meant inventing them.
+
+What went, in one change:
+
+- `IsProtectedPortalId` (`NullforgeDimensionService.PortalInternals.cs`),
+  `IsProtectedMarkerId` and `IsProtectedAnchorId` (`…RelationshipCleanup.cs`),
+  `IsProtectedStarterId` (`…Starters.cs`).
+- All eight branches: two in `…ContentManifestValidation.cs`, four in `…MapMarkersAnchors.cs`, one
+  in `…Portals.cs`, one in `…Starters.cs`. Nothing else reaches the four `"…-protected"` result
+  codes now, and none is left in the tree.
+
+Checked before cutting, as this page warned: each `&&` branch's second half
+(`MarkerAnchorEquals`, `AnchorLocationEquals`) is only evaluated when the predicate says yes, so
+removing the branch removed no live equality check. Both helpers keep other callers —
+`…MapAnchorInternals.cs` and the map-layer branch that stays — so neither went dead.
+
+`IsProtectedMapLayerId` stays, with its two branches, and the reason it is now the only one is
+written beside it and beside `BuiltInOverworldMapLayerId`. The three protected things left are the
+overworld map layer, the overworld dimension and this framework's own content pack.
+
+**If the framework ships built-in content of one of those four kinds again**, the mutation points
+to put a branch back at are the ones in the table above: for each kind, the manifest validation
+path and the direct register/remove path.

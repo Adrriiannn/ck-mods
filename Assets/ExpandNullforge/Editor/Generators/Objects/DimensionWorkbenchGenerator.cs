@@ -331,6 +331,14 @@ namespace ExpandNullforge.EditorTools
                     return;
             }
 
+            // THE CONSOLE ERROR ON THE NEXT LINE IS CORE KEEPER'S AND CANNOT BE PREVENTED HERE.
+            // InventoryAuthoring.OnValidate reads slotRequirements.Count first thing, the list has
+            // no initialiser, and Unity runs OnValidate the instant AddComponent returns — so it
+            // is null for exactly that instant and Unity logs a NullReferenceException from inside
+            // the game's component. The list is filled a few lines down; nothing on this side can
+            // get in front of OnValidate, and adding the component by hand in the Inspector logs
+            // the same line. Written here so the next person to see it in a generate log stops
+            // looking for it in this file.
             InventoryAuthoring inventory = EnsureComponent<InventoryAuthoring>(root);
             if (inventory.sizeX <= 0)
             {
