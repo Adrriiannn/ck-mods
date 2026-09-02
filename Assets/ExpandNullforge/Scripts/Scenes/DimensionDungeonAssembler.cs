@@ -210,11 +210,11 @@ namespace ExpandNullforge.Scenes
                 shapeFreq = shape != null && shape.HasAShapedOutline
                     ? math.max(0.01f, shape.OutlineBusyness)
                     : 3f,
-                // ONE control, on the dungeon itself. The shape template used to carry an
-                // inverted twin of this bit, and because a shape template is present whenever
-                // the generator is switched on, the twin always won — an author who cleared
-                // "Keep Creatures Out" on the dungeon watched wildlife stay out anyway, with
-                // nothing said. The twin was removed; this field is the only writer.
+                // ONE control, on the dungeon itself. An inverted twin on the shape template
+                // wins whenever the generator is switched on, because a shape template is always
+                // present then — so an author who clears
+                // "Keep Creatures Out" on the dungeon watches wildlife stay out anyway, with
+                // nothing said. This field is the only writer.
                 blockSpawns = definition.BlockOtherSpawns,
                 defineShapeByRooms = defineByRooms
             });

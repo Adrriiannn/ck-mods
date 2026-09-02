@@ -9,9 +9,9 @@ namespace ExpandNullforge.Creatures
     /// </summary>
     /// <remarks>
     /// <para>
-    /// THE BEAM IS NOT BROKEN. THE CONVERTER IS ONE LINE SHORT. This framework used to refuse the
-    /// beam outright, on the grounds that Core Keeper needed a list of beams nothing ever created.
-    /// That is not what the code does. <c>BeamAttackStateSystem</c> fills the list ITSELF the
+    /// THE BEAM IS NOT BROKEN. THE CONVERTER IS ONE LINE SHORT. Refusing the
+    /// beam outright, on the grounds that Core Keeper needs a list of beams nothing ever creates,
+    /// misreads the code. <c>BeamAttackStateSystem</c> fills the list ITSELF the
     /// moment the wind-up finishes — <c>ck-db\Pug.Other\BeamAttackStateSystem.cs:133</c> adds the
     /// first beam and <c>:141</c> adds the rest of the fan — and its query at <c>:218</c> only asks
     /// that the buffer EXISTS. The gap is that <c>BeamAttackStateConverter</c> ensures

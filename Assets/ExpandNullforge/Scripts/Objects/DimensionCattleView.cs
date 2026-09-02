@@ -17,13 +17,13 @@ namespace ExpandNullforge.Objects
     /// halves can be true.
     /// </para>
     /// <para>
-    /// NOTHING IS OVERRIDDEN AWAY ANY MORE, AND THAT IS THE POINT OF THIS CLASS'S CURRENT SHAPE.
+    /// NOTHING IS OVERRIDDEN AWAY, AND THAT IS THE POINT OF THIS CLASS'S SHAPE.
     /// <c>Cattle.UpdateName</c> dereferences <c>nameTag</c> and <c>Cattle.UpdateLeash</c>
     /// dereferences <c>XScaler</c> with no null check, both from <c>ManagedLateUpdate</c>, and
-    /// <c>OnShow</c> and <c>OnHide</c> dereference <c>nameTag</c> again. This class used to override
-    /// all three empty, because the generator could fill neither field. It now fills both — the
-    /// scaler since the bodies work, and the name tag since the floating-text work — so the game's
-    /// own per-frame pass runs, and a generated animal gets back its floating name AND the rope
+    /// <c>OnShow</c> and <c>OnHide</c> dereference <c>nameTag</c> again. Overriding
+    /// all three empty is what a generator that can fill neither field forces. The generator fills
+    /// both — the scaler from the bodies work, the name tag from the floating-text work — so the
+    /// game's own per-frame pass runs, and a generated animal gets its floating name AND the rope
     /// drawn when a player leads it.
     /// </para>
     /// <para>

@@ -164,12 +164,12 @@ namespace ExpandNullforge.Conditions
         /// </summary>
         /// <remarks>
         /// The store is protected on the converter's base class and the property that would reach
-        /// it another way has a private getter, so this used to go through reflection. It cannot:
-        /// Core Keeper's mod sandbox denies <c>System.Reflection</c> and <c>AccessTools</c> alike
-        /// and refuses the whole mod over either. <see cref="DimensionConversionStoreProbe"/> is
-        /// asked instead, and it is inside the hierarchy, so this is an ordinary typed call. It
+        /// it another way has a private getter, so reflection is the obvious way in. It cannot be
+        /// used: Core Keeper's mod sandbox denies <c>System.Reflection</c> and <c>AccessTools</c>
+        /// alike and refuses the whole mod over either. <see cref="DimensionConversionStoreProbe"/>
+        /// is asked instead, and it is inside the hierarchy, so this is an ordinary typed call. It
         /// does not need the converter passed in: one store serves the whole process, which is why
-        /// this takes no converter any more. Not having it is worth saying out loud rather than
+        /// this takes no converter. Not having it is worth saying out loud rather than
         /// passing over: the table still works, but the blob then lives until the process ends
         /// rather than until the world does.
         /// </remarks>

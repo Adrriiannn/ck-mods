@@ -10,11 +10,11 @@ namespace ExpandNullforge.Core
     /// <para>
     /// ONE CONVERSION, BECAUSE THESE VALUES ARE COMPARED. A portal id, a dimension id and a travel
     /// id are written into components on one path and read back on another, and the two only match
-    /// if both were encoded the same way. Sixteen copies of this used to exist and one of them was
-    /// not the same: the item-portal spawn path used <c>CopyFromTruncated</c>, which truncates at
-    /// 61 BYTES and keeps control characters, while every other path truncated at 63 CHARS and
-    /// stripped them. A portal id carrying a non-ASCII character therefore encoded one way when the
-    /// item portal wrote it and another way everywhere else, and nothing compared equal.
+    /// if both are encoded the same way. Copies of this scattered across the tree drift: a
+    /// <c>CopyFromTruncated</c> on the item-portal spawn path truncates at
+    /// 61 BYTES and keeps control characters, while every other path truncates at 63 CHARS and
+    /// strips them. A portal id carrying a non-ASCII character then encodes one way when the
+    /// item portal writes it and another way everywhere else, and nothing compares equal.
     /// </para>
     /// <para>
     /// CONTROL CHARACTERS ARE DROPPED, not replaced. They cannot be typed into an authoring field

@@ -199,9 +199,9 @@ namespace ExpandNullforge.Tilesets
         /// back, once, as the world goes away.
         /// </summary>
         /// <remarks>
-        /// THE PAIRING IS THE POINT AND NOTHING USED TO CHECK IT. Capture and restore each printed
-        /// a line per submap — unbounded, on a streaming path — and a session could show a hundred
-        /// captures and ninety restores with nobody in a position to notice. Counting instead costs
+        /// THE PAIRING IS THE POINT AND NOTHING ELSE CHECKS IT. A line per submap from each of
+        /// capture and restore is unbounded, on a streaming path, and a session showing a hundred
+        /// captures and ninety restores leaves nobody in a position to notice. Counting instead costs
         /// one dictionary increment per submap and turns the two tallies into one line that can
         /// disagree with itself out loud.
         /// </remarks>
@@ -246,7 +246,7 @@ namespace ExpandNullforge.Tilesets
         /// </summary>
         /// <remarks>
         /// <para>
-        /// A MOD'S SYSTEMS ARE CREATED INTO THIS GROUP, and this comment used to say the opposite.
+        /// A MOD'S SYSTEMS ARE CREATED INTO THIS GROUP, whatever mod load order suggests.
         /// The game builds its worlds after the mod assembly is in memory and puts every system it
         /// finds into the group its <c>[UpdateInGroup]</c> names — which is why the engine's
         /// "Ignoring invalid [UpdateBeforeAttribute]" line can appear at all: that message is only

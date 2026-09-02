@@ -237,12 +237,13 @@ namespace ExpandNullforge.Diagnostics
             // Server, not both. Everything that touches a serialized submap is server-side, so the
             // client copies of these two could never do anything — and this table saying Both is
             // what would have had the audit certify them as working there.
-            // NO COUNT ON PURPOSE, AND THE COUNT IT USED TO HAVE WAS A FALSE ALARM. Its
+            // NO COUNT ON PURPOSE: a count here is a false alarm. Its
             // RequireForUpdate is a query over SERIALIZED submaps, which exist only once the game
             // has read one back off disk; the tileset registry counts CONTENT. On a world that has
             // just been generated nothing has been serialized yet, so five seconds in this system
-            // has correctly never run while the registry holds rows — and the liveness pass called
-            // that a problem and predicted lost terrain. The failure it was meant to catch is the
+            // has correctly never run while the registry holds rows — and a liveness pass reading a
+            // count would call that a problem and predict lost terrain. The failure it is meant to
+            // catch is the
             // registration pass's business: CheckTileRescueBracket asks whether the system is in
             // SerializationSystemGroup at all, which is the thing that can actually be wrong.
             new Row(

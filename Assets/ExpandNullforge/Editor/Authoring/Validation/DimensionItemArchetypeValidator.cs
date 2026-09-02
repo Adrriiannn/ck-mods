@@ -72,9 +72,9 @@ namespace ExpandNullforge.Authoring
                     " needs a sprite to be visible. Drag one into Icon sprite."));
             }
 
-            // Stacking used to be checked here, back when it was a number that could be zero.
-            // It is a yes/no now — the only shape Core Keeper's ObjectInfo has — and neither
-            // answer is invalid, so there is nothing left to check.
+            // Stacking is deliberately not checked here. It is a yes/no — the only shape Core
+            // Keeper's ObjectInfo has — and neither answer is invalid, so there is nothing to
+            // check.
 
             if (Requires(required, DimensionItemAuthoringComponents.Loot) &&
                 string.IsNullOrEmpty(item.LootTableId))
@@ -100,10 +100,10 @@ namespace ExpandNullforge.Authoring
 
             // Durability is validated on the MULTIPLIER, not on the points.
             //
-            // This used to be the other way round, and it was a contradiction: the validator refused
-            // to generate equipment without a durability number, and the generator then told the
-            // author that Core Keeper recomputes durability from the item type and their number was
-            // discarded. Equipment could not be made at all without filling in a field that did
+            // The other way round is a contradiction: a validator that refuses to generate
+            // equipment without a durability number, and a generator that then tells the
+            // author Core Keeper recomputes durability from the item type and their number was
+            // discarded. Equipment could not be made at all without filling in a field that does
             // nothing.
             //
             // The multiplier is what the game multiplies its own type-based base by, so a zero there

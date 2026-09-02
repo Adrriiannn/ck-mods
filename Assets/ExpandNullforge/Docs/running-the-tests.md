@@ -50,7 +50,7 @@ It means: **the generator produced the shape the test expected.**
 That is worth having and it is not much. Specifically, green says nothing about:
 
 - **Whether the game accepts that shape.** The framework's own capability registry
-  (`API/Scripts/DimensionCapabilityRegistry.cs`) records 2 of 60 capabilities as evidenced in a
+  (`API/Scripts/Core/DimensionCapabilityRegistry.cs`) records 2 of 60 capabilities as evidenced in a
   running game. A green suite does not move that number by one.
 - **Whether a generated component is ever read.** Wave C found 101 features that generated cleanly
   and were dead because a prefab did not satisfy a vanilla `EntityQuery`. The suite was green

@@ -54,11 +54,11 @@ namespace ExpandNullforge.Objects
         [Tooltip("Full object names of the tile objects this stays alive on. Empty means it does not care.")]
         public string[] allowedTileObjectNames = new string[0];
 
-        // THERE USED TO BE TWO MORE HERE — "can never be put down on" and "is destroyed on" —
-        // public, tooltipped, and written by no generator anywhere. A field a person can see and
-        // fill in that reaches nothing is worse than a missing feature, because it reads as one
-        // that works. They went with their two property writes; when a generator has a question to
-        // ask that needs them, they come back together with the pass that fills them in.
+        // THERE ARE DELIBERATELY NO FIELDS HERE for "can never be put down on" or "is destroyed
+        // on". Public and tooltipped, they would be written by no generator anywhere, and a field
+        // a person can see and fill in that reaches nothing is worse than a missing feature,
+        // because it reads as one that works. When a generator has a question to ask that needs
+        // them, they arrive together with the pass that fills them in.
     }
 
     /// <summary>

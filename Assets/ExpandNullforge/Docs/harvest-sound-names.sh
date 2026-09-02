@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuilds Scripts/Authoring/DimensionSoundNames.cs — every name the game can play a sound by.
+# Rebuilds Scripts/Authoring/Fields/DimensionSoundNames.cs — every name the game can play a sound by.
 #
 # The game stores a sound as Animator.StringToHash(name) and throws the name away. The names
 # survive in two places, and together they are the whole list:
@@ -31,6 +31,6 @@ count=$(wc -l < "$work/names.txt")
   printf '        };\n\n'
   printf '        private static readonly HashSet<string> Known = new HashSet<string>(All);\n'
   printf '    }\n}\n'
-} > "$root/Scripts/Authoring/DimensionSoundNames.cs"
+} > "$root/Scripts/Authoring/Fields/DimensionSoundNames.cs"
 
 echo "wrote $count sound names"

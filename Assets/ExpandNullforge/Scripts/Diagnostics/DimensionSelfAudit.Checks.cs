@@ -409,10 +409,10 @@ namespace ExpandNullforge.Diagnostics
                 armed.World,
                 declared + " declared items all exist in this world (" + resolved
                     + " names resolved)."
-                    // THE EMPTY CASE IS SAID, NOT LEFT OUT. It used to add nothing at all here,
-                    // and a line that names only what it found reads as though that was all there
+                    // THE EMPTY CASE IS SAID, NOT LEFT OUT. A line that names only what it found
+                    // reads as though that was all there
                     // was to find: a pack built before the framework kept the wider list declares
-                    // its items and nothing else, and looked from here exactly like a pack that
+                    // its items and nothing else, and would look from here exactly like a pack that
                     // has no creatures.
                     + (DimensionGeneratedObjectLedger.DeclaredCount == 0
                         ? " No generated object was declared beside them — no creature, boss, "

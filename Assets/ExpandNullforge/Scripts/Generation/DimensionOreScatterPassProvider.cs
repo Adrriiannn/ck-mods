@@ -26,10 +26,10 @@ namespace ExpandNullforge.Generation
     /// initialized, and only then walks it.
     /// </para>
     /// <para>
-    /// A SCOPED STEP READS ONLY ITS OWN RECTANGLE. The scan used to walk the whole area whatever
-    /// the step said, so an author who scoped ore to one cavern grew veins in every wall of the
-    /// dimension — and, because veins ARE the visible result, saw nothing that looked like a
-    /// mistake.
+    /// A SCOPED STEP READS ONLY ITS OWN RECTANGLE. A scan that walks the whole area whatever
+    /// the step says grows veins in every wall of the
+    /// dimension for an author who scoped ore to one cavern — and, because veins ARE the visible
+    /// result, shows nothing that looks like a mistake.
     /// </para>
     /// </remarks>
     public sealed class DimensionOreScatterPassProvider :

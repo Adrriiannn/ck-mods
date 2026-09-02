@@ -218,6 +218,12 @@ print <<'HEAD';
 //
 // Produced by Docs/harvest-borrowed-attacks.sh from the Core Keeper dictionary vault, which
 // transcribes every authored value out of the game's own prefabs. Re-run that script to refresh it.
+//
+// IT SITS BEHIND THE EDITOR BOUNDARY, and that is where the ten thousand lines below belong: a
+// preset is POURED INTO the ordinary fields when an author picks one, and the creature keeps no
+// reference to it, so nothing at run time can ever ask this table a question. On the shipped side
+// of the boundary it is ten thousand lines compiled into every mod built with this framework and
+// read by nothing there.
 using System;
 
 namespace ExpandNullforge.Authoring

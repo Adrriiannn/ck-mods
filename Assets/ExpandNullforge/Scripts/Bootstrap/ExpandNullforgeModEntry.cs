@@ -362,9 +362,9 @@ public sealed class ExpandNullforgeModEntry : IMod
 
   private void UpdateInner()
   {
-    // THE BUNDLE CHECK MOVED INTO THE AUDIT. It used to be asked here, every frame, self-latching;
-    // it is a once-per-session question and the audit is where once-per-session questions are
-    // asked, so the per-frame call is gone and DimensionSelfAudit makes it on the first world.
+    // THE BUNDLE CHECK IS THE AUDIT'S, NOT THIS METHOD'S. It is a once-per-session question and
+    // the audit is where once-per-session questions are asked, so nothing asks it per frame here
+    // and DimensionSelfAudit makes it on the first world.
 
     // THE AUDIT KEEPS ITS OWN WAIT rather than riding the item report's latch below, because that
     // latch closes once per SESSION and the audit has to run once per WORLD: quit to the menu,

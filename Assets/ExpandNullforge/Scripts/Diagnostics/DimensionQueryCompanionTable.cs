@@ -23,7 +23,7 @@ namespace ExpandNullforge.Diagnostics
     /// built a summoning circle built one the game never looked at.
     /// </para>
     /// <para>
-    /// WHY THIS IS NOT THE EDITOR'S TABLE MOVED DOWN. <c>Editor/DimensionQueryCompanions.cs</c>
+    /// WHY THIS IS NOT THE EDITOR'S TABLE MOVED DOWN. <c>Editor/Generators/Shared/DimensionQueryCompanions.cs</c>
     /// answers a different question in a different vocabulary: it is keyed on AUTHORING components
     /// (<c>SummonAreaAuthoring</c> needs <c>AnimationAuthoring</c>), it carries
     /// <c>Func&lt;GameObject, bool&gt;</c> repair delegates, and nine of its forty rows name a
@@ -271,9 +271,9 @@ namespace ExpandNullforge.Diagnostics
             // DimensionObjectTypeAuthoring. So an object that misses the one line that adds it
             // drops out of EnvironmentalConditionsSystem's query, and nothing else would say so.
             //
-            // THE TRIGGER USED TO BE ObjectDataCD, WHICH IS ON EVERY CONVERTED PREFAB, AND THAT IS
-            // WHY THIS ROW IS BEING FIXED RATHER THAN LEFT ALONE. Written that way it asked the
-            // question of everything the audit is handed, and answered with a consequence that is
+            // THE TRIGGER IS ObjectTypeCD, NOT ObjectDataCD, WHICH IS ON EVERY CONVERTED PREFAB.
+            // Triggered on ObjectDataCD the row asks the
+            // question of everything the audit is handed, and answers with a consequence that is
             // only true of a fraction of it. The consequence — burning ground, acid, mould, oil and
             // slime — belongs to one query, and that query wants six more components than
             // ObjectTypeCD (ck-db/Pug.Other/EnvironmentalConditionsSystem.cs:887-894):
@@ -302,8 +302,8 @@ namespace ExpandNullforge.Diagnostics
             // kind that also gets conditions support gets the type, so on correct content this rule
             // finds nothing — it guards the pairing, so that a new generator, or a kind that stops
             // going through the finisher, fails here rather than in a player's world. IT GUARDS
-            // FOUR OF THE EIGHT KINDS THAT CARRY THE TYPE, and it used to be written as though it
-            // guarded all eight. The other four — crop, critter, station, vehicle — carry no
+            // FOUR OF THE EIGHT KINDS THAT CARRY THE TYPE, not all eight.
+            // The other four — crop, critter, station, vehicle — carry no
             // condition buffer and so can never reach this trigger; the four rows under this one
             // are theirs, and the comment on them says what each one's absence actually costs.
             //
@@ -583,9 +583,10 @@ namespace ExpandNullforge.Diagnostics
             // ---- world objects -------------------------------------------------------------
             //
             // THE ONE PLACE A PLACED OBJECT'S MISSING BODY IS A QUERY GAP RATHER THAN A SILENCE.
-            // Every generated world object, container, workbench and vehicle used to come out with
-            // no PhysicsCollider, and almost all of what that cost — nothing could hit it, mine it,
-            // dig it or find it with a cast — is invisible to a table like this one, because casts
+            // A generated world object, container, workbench or vehicle that comes out with
+            // no PhysicsCollider loses nearly everything — nothing can hit it, mine it,
+            // dig it or find it with a cast — and almost all of that is invisible to a table like
+            // this one, because casts
             // are not EntityQueries. ColliderVariationSystem's job IS a query, and it is exactly
             // ColliderVariationCD + PhysicsCollider + ObjectDataCD
             // (ck-db/Pug.Other/ColliderVariationSystem.cs:365-368), so a door whose collider never

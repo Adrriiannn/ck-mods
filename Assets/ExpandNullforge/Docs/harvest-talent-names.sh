@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuilds Scripts/Authoring/DimensionVanillaTalentNames.cs from the shipped talent table.
+# Rebuilds Scripts/Authoring/Fields/DimensionVanillaTalentNames.cs from the shipped talent table.
 #
 # The 96 names in Core Keeper's twelve talent trees are the dividing line between "I only want to
 # change this talent's numbers" and "I am writing a talent of my own": a row that reuses one of
@@ -12,7 +12,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 src="${1:-E:/Tools/CoreKeeperRippedAssets/ExportedProject/Assets/Resources/SkillTalentsTable.asset}"
-out="$here/../Scripts/Authoring/DimensionVanillaTalentNames.cs"
+out="$here/../Scripts/Authoring/Fields/DimensionVanillaTalentNames.cs"
 tsv="$here/vanilla-talent-names.tsv"
 
 awk '

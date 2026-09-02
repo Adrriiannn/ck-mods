@@ -53,9 +53,9 @@ namespace ExpandNullforge.Generation
         /// </summary>
         /// <remarks>
         /// <para>
-        /// THIS USED TO ALWAYS FAIL for custom blocks, because nothing could turn a name into an
-        /// index. That is no longer true: a custom tileset's id is a pure function of its name
-        /// (<see cref="DimensionTilesetRegistry.ComputeTilesetId"/>), so it resolves without the
+        /// A CUSTOM BLOCK RESOLVES WITHOUT ITS TILESET. Its id is a pure function of the tileset's
+        /// name (<see cref="DimensionTilesetRegistry.ComputeTilesetId"/>), so a name turns into an
+        /// index without the
         /// tileset being installed, or registered, or even existing.
         /// </para>
         /// <para>

@@ -166,9 +166,9 @@ namespace ExpandNullforge.Authoring
         /// Collects the object id off every creature in one of the four creature arrays.
         /// </summary>
         /// <remarks>
-        /// This used to read the serialized <c>objectId</c> field by name, because the four creature
-        /// classes share the field without sharing a base type that carries it. The mod sandbox
-        /// denies <c>System.Reflection</c> outright, and the field was never the only way in: all
+        /// Reading the serialized <c>objectId</c> field by name is the obvious way, because the four
+        /// creature classes share the field without sharing a base type that carries it. The mod
+        /// sandbox denies <c>System.Reflection</c> outright, and the field is not the only way in: all
         /// four already expose <c>ObjectId</c>, so <see cref="IDimensionCreatureAsset"/> names that
         /// and the read is an ordinary property call. Same value, same creatures, one constraint
         /// instead of a lookup that could miss silently.

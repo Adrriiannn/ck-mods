@@ -38,8 +38,8 @@ namespace ExpandNullforge.Objects
     /// this instance would inherit those windows.
     /// </para>
     /// <para>
-    /// THE WINDOW'S LOOK IS LOOKED UP PER ENTITY for the same pooling reason. It used to be
-    /// hard-coded to <c>Wood</c>; it now comes from <see cref="DimensionCraftingBenchLookRegistry"/>
+    /// THE WINDOW'S LOOK IS LOOKED UP PER ENTITY for the same pooling reason. Hard-coded to
+    /// <c>Wood</c> it is one window for every station; it comes from <see cref="DimensionCraftingBenchLookRegistry"/>
     /// keyed on the object being drawn, so two stations in one mod can wear two different windows.
     /// An unregistered station still gets Wood, which is the value the game itself falls back to.
     /// </para>

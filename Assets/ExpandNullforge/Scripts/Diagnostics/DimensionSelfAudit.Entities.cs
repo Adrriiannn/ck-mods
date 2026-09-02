@@ -33,10 +33,10 @@ namespace ExpandNullforge.Diagnostics
         /// all.
         /// </para>
         /// <para>
-        /// AND THEY ARE TOLD SO ON A LINE THEY CAN SEE. The trace below used to be described as
-        /// telling them, and it is off by default like every other trace, so the session where this
-        /// check never ran read exactly like the session where it passed. The summary line for the
-        /// world carries the clause now — see <see cref="WhatWasNotAskedOf"/>.
+        /// AND THEY ARE TOLD SO ON A LINE THEY CAN SEE. The trace below cannot be that line: it is
+        /// off by default like every other trace, so the session where this
+        /// check never ran reads exactly like the session where it passed. The summary line for the
+        /// world carries the clause — see <see cref="WhatWasNotAskedOf"/>.
         /// </para>
         /// </remarks>
         private static void RunEntityAudit(ArmedWorld armed)
@@ -159,14 +159,14 @@ namespace ExpandNullforge.Diagnostics
         /// </summary>
         /// <remarks>
         /// <para>
-        /// IT USED TO CONGRATULATE ON A SUBJECT LIST IT HAD NOT DESCRIBED. The line was
-        /// "N of this mod's objects checked against 41 of the game's queries; all of them carry
-        /// what the systems that read them require", where N was whatever resolved and 41 was the
+        /// IT MUST NOT CONGRATULATE ON A SUBJECT LIST IT HAS NOT DESCRIBED. "N of this mod's
+        /// objects checked against 41 of the game's queries; all of them carry
+        /// what the systems that read them require" takes N as whatever resolved and 41 as the
         /// whole table — most of which is creature and world-object rules that an item cannot
         /// trigger. A content pack generated before the object ledger existed declares its items
-        /// and nothing else, so on that pack the sentence measured two tileset blocks against
-        /// thirty-nine creature rules and called the result clean. Nothing in it was false and the
-        /// reader was still misled, because the two numbers in it were the size of the walk rather
+        /// and nothing else, so on that pack the sentence measures two tileset blocks against
+        /// thirty-nine creature rules and calls the result clean. Nothing in it is false and the
+        /// reader is still misled, because the two numbers in it are the size of the walk rather
         /// than the size of what the walk could have caught.
         /// </para>
         /// <para>

@@ -11,7 +11,7 @@ up.
 ## How to read this
 
 Each capability carries the same maturity word the framework uses internally
-(`API/Scripts/DimensionCapabilityRegistry.cs`), so the badge on a Studio page, this document, and
+(`API/Scripts/Core/DimensionCapabilityRegistry.cs`), so the badge on a Studio page, this document, and
 the code all say one thing:
 
 | Badge | What it means for you |
@@ -39,7 +39,7 @@ Nothing here is rated **Stable**, and that is deliberate.
 ## How a mod is made
 
 The authoring window walks eleven studios in order
-(`Editor/UI/DimensionJourney.cs:50-60`). Each one owns a part of the mod, and the last one builds
+(`Editor/UI/Shell/DimensionJourney.cs:50-60`). Each one owns a part of the mod, and the last one builds
 it:
 
 **Dimension → Portal Studio → Tileset Studio → Biome Studio → Layout Studio → Item Studio →
@@ -72,7 +72,7 @@ recipe; Core Keeper stores it on the item that comes out, so it is stamped there
 Swing arcs, charged attacks, the shape of a melee hit, and projectiles with their own flight,
 bounce, spread and impact. Attack, impact, wind-up and heavy-swing sounds are chosen **by name** —
 you type the sound's name and the framework hashes it the same way the game does
-(`Scripts/Authoring/DimensionSoundNames.cs:29-31`, Unity's own `Animator.StringToHash`), so all
+(`Scripts/Authoring/Fields/DimensionSoundNames.cs:29-31`, Unity's own `Animator.StringToHash`), so all
 1,400-odd of the game's sounds are available without a lookup table.
 
 ### Bombs — *Implemented (unproven)*
@@ -90,13 +90,13 @@ game's own remote explosive and cannot be pointed at yours.
 
 A piece of armour can carry its own paperdoll art. The art is a separate data block the item points
 at by address, which is a thing mods are allowed to register
-(`Editor/DimensionEquipmentSkinGenerator.cs:46`). The sheet is a fixed 234x156 layout.
+(`Editor/Generators/Objects/DimensionEquipmentSkinGenerator.cs:46`). The sheet is a fixed 234x156 layout.
 
 ### Instruments and music sheets — *Implemented (unproven)*
 
 An object can be an instrument (note sound, octave-up sound, which key it starts on) or a music
 sheet naming a track per instrument. Both write the game's own components
-(`Editor/DimensionObjectSpine.cs:6304-6340`), and the generator tells you if you made a silent
+(`Editor/Generators/Shared/DimensionObjectSpine.cs:6304-6340`), and the generator tells you if you made a silent
 instrument or a blank sheet.
 
 ## Recipes and workbenches
@@ -417,9 +417,9 @@ compiles, is tested, and is connected to nothing:
 
 1. Every `Append*Registrations` has a production caller. *(22/22)*
 2. Every system class is explicitly created in the mod entry point, guarded permanently by
-   `Editor/Tests/DimensionSystemLivenessTests.cs`. *(29/29)*
+   `Editor/Tests/Guardrails/DimensionSystemLivenessTests.cs`. *(29/29)*
 3. Every `[HarmonyPatch]` names a method that exists in the game, guarded by
-   `Editor/Tests/DimensionHarmonyPatchTargetTests.cs`. *(40/40)*
+   `Editor/Tests/Guardrails/DimensionHarmonyPatchTargetTests.cs`. *(40/40)*
 4. Every field row in the authoring catalog resolves to a real field on the asset its page edits.
    *(210/210)*
 5. Every registry has both a producer and a reader.

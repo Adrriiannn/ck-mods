@@ -2,7 +2,7 @@
 
 ## The code-first construction API that was on `SceneTemplateAsset`
 
-`Scripts/Authoring/SceneTemplateAsset.cs` carried a complete set of methods for building a scene
+`Scripts/Authoring/Assets/SceneTemplateAsset.cs` carried a complete set of methods for building a scene
 template in code rather than in the inspector. Nothing ever called eight of them, and they are
 deleted. The shape is written down here because it is a coherent API and somebody will want it back
 the first time a mod wants to generate scene templates rather than author them by hand.

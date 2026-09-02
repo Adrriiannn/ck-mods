@@ -7,9 +7,9 @@ namespace ExpandNullforge.Portals
   /// </summary>
   /// <remarks>
   /// <para>
-  /// THIS CLOSES A HOLE THAT USED TO REFUSE EVERYONE. Item requirements could be authored and were
-  /// registered faithfully, but nothing shipped that could answer them — so the access provider
-  /// denied every travel through an item-gated portal, silently. The rule now: an item requirement
+  /// THIS CLOSES A HOLE THAT WOULD REFUSE EVERYONE. Item requirements are authored and
+  /// registered faithfully, and with nothing shipped that can answer them the access provider
+  /// denies every travel through an item-gated portal, silently. The rule: an item requirement
   /// is met when the portal's offering slot for that item holds the required amount.
   /// </para>
   /// <para>

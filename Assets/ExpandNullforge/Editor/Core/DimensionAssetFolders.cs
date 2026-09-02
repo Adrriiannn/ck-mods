@@ -8,12 +8,12 @@ namespace ExpandNullforge.EditorTools
     /// </summary>
     /// <remarks>
     /// <para>
-    /// THROUGH THE ASSET DATABASE, NEVER BEHIND IT. Twenty copies of this used to exist in five
-    /// shapes, and one of the shapes called <c>Directory.CreateDirectory</c> and then asked Unity to
+    /// THROUGH THE ASSET DATABASE, NEVER BEHIND IT. Copies of this scattered across the tree take
+    /// five shapes, and one of them calls <c>Directory.CreateDirectory</c> and then asks Unity to
     /// import the result. A folder made that way does not exist as far as the asset database is
     /// concerned until it has been imported, and an asset written into it in the same batch lands
-    /// nowhere — which is why exactly those sites carried a retry-and-refresh block that the others
-    /// did not need. <c>AssetDatabase.CreateFolder</c> has no such window.
+    /// nowhere — which is why exactly those sites carry a retry-and-refresh block that the others
+    /// do not need. <c>AssetDatabase.CreateFolder</c> has no such window.
     /// </para>
     /// <para>
     /// A FOLDER CREATED INSIDE A BATCH STILL DOES NOT EXIST UNTIL THE BATCH CLOSES. That is

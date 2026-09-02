@@ -12,10 +12,10 @@ namespace ExpandNullforge.Generation
       IDimensionGenerationProvider,
       IDimensionGenerationPassProvider
   {
-    // Dirt, and only when nothing says otherwise. This used to be the ONLY tileset the whole file
-    // named, which is why every generated dimension came out a dirt platform however carefully its
-    // biomes were authored. DimensionTerrainMaterialRegistry answers first now; this is what a cell
-    // no biome covers still gets, so an unauthored dimension generates exactly what it always did.
+    // Dirt, and only when nothing says otherwise. As the ONLY tileset this file
+    // names, it makes every generated dimension a dirt platform however carefully its
+    // biomes are authored. DimensionTerrainMaterialRegistry answers first; this is what a cell
+    // no biome covers gets, so an unauthored dimension still generates a dirt platform.
     private const int FallbackTileset = DimensionTerrainMaterialRegistry.DefaultTileset;
     private const int MaxTilesPerTick = 384;
     private const int ReadyDelayFrames = 2;

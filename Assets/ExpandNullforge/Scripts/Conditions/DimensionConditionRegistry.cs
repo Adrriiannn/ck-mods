@@ -293,7 +293,7 @@ namespace ExpandNullforge.Conditions
         /// <remarks>
         /// THE ONLY PLACE THAT KNOWS THE FIELD LIST. Both the running game (as the mod's assets
         /// load) and the editor (before a generate, so names resolve to the same numbers) need this
-        /// record, and they used to build it separately with two hand-written field lists. A field
+        /// record. Built separately, from two hand-written field lists, a field
         /// added to one and not the other is silent — the generated content gets one set of rules
         /// and the running game another — so there is one list and it is here.
         /// </remarks>

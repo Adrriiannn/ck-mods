@@ -10,10 +10,10 @@ cleanup** — the files stay pending that decision.
 
 | File | Lines |
 |---|---:|
-| `Scripts/Authoring/DimensionTemplateCustomizerFieldEditPreview.cs` | 1,009 |
-| `Scripts/Authoring/DimensionTemplateCustomizerFieldEditBatch.cs` | 721 |
-| `Scripts/Authoring/DimensionTemplateCustomizerIssueRepairPlan.cs` | 466 |
-| `Scripts/Authoring/DimensionTemplateCustomizerFieldEditRollback.cs` | 229 |
+| `Editor/Authoring/Engine/DimensionTemplateCustomizerFieldEditPreview.cs` | 1,009 |
+| `Editor/Authoring/Engine/DimensionTemplateCustomizerFieldEditBatch.cs` | 721 |
+| `Editor/Authoring/Engine/DimensionTemplateCustomizerIssueRepairPlan.cs` | 466 |
+| `Editor/Authoring/Engine/DimensionTemplateCustomizerFieldEditRollback.cs` | 229 |
 
 ## The pipeline they describe
 

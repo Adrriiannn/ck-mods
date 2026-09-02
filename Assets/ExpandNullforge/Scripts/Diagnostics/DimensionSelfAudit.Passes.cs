@@ -308,11 +308,11 @@ namespace ExpandNullforge.Diagnostics
         /// </summary>
         /// <remarks>
         /// LOWER CASE BECAUSE IT IS SPLICED. Half the callers put it mid-sentence after "and", the
-        /// other half start a sentence with it and pass it through <see cref="UpperFirst"/>. It
-        /// used to start with a capital either way, so the mid-sentence sites read "…in 300 frames,
-        /// and Nothing here can count…". The parenthetical went too: several rows describe their
-        /// work in a whole clause ("nothing registers rows for this; it answers whatever clients
-        /// send"), which cannot be the subject of "keeps no total".
+        /// other half start a sentence with it and pass it through <see cref="UpperFirst"/>. A
+        /// capital either way makes the mid-sentence sites read "…in 300 frames,
+        /// and Nothing here can count…". There is no parenthetical either: several rows describe
+        /// their work in a whole clause ("nothing registers rows for this; it answers whatever
+        /// clients send"), which cannot be the subject of "keeps no total".
         /// </remarks>
         private static string DescribeWork(DimensionSystemRoster.Row row)
         {

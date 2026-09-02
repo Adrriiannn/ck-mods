@@ -126,11 +126,11 @@ namespace ExpandNullforge.WorldRules
         /// leave exactly what a first load leaves.
         /// </para>
         /// <para>
-        /// THE ROWS THEMSELVES, NOT THEIR NUMBERS, AND THAT IS THE CORRECTION. This used to hold
-        /// the set NUMBERS and strip every row carrying one, under a comment saying another mod's
-        /// sets were safe. They were not: <see cref="DimensionSetBonusesPatch.FirstFreeNumber"/> is
+        /// THE ROWS THEMSELVES, NOT THEIR NUMBERS. Holding
+        /// the set NUMBERS and stripping every row carrying one does not leave another mod's
+        /// sets safe, however it reads: <see cref="DimensionSetBonusesPatch.FirstFreeNumber"/> is
         /// the highest <c>SetBonusID</c> plus one, which is the number any other mod appending a
-        /// set picks by exactly the same reasoning — so a second mod's set written at 63 was
+        /// set picks by exactly the same reasoning — so a second mod's set written at 63 is
         /// deleted by this framework's next append. A row is this framework's only if this
         /// framework is holding the object it added.
         /// </para>

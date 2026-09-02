@@ -224,8 +224,8 @@ namespace ExpandNullforge.WorldRules
         /// framework cannot ask Harmony what it bound. One static increment is the whole of the
         /// evidence, and it costs one add on a path the game was already walking.
         ///
-        /// COUNTED IN THE PREFIX ONLY. Both halves used to add, so one world load reported two and
-        /// the number could not be read as "how many times this patch ran".
+        /// COUNTED IN THE PREFIX ONLY. Adding in both halves makes one world load report two, and
+        /// the number then cannot be read as "how many times this patch ran".
         /// </remarks>
         internal static int Fired;
 

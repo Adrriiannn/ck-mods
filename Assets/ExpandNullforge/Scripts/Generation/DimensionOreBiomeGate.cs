@@ -63,9 +63,9 @@ namespace ExpandNullforge.Generation
                 return;
             }
 
-            // Binding is idempotent, because it is no longer a one-shot. The bind moved down into
+            // Binding is idempotent, because it is not a one-shot. It happens at
             // zone registration so the bootstrap's own zones reach it too, and zone UPDATE fires
-            // repeatedly on one zone — without this, one zone updated a hundred times would leave
+            // repeatedly on one zone — without this, one zone updated a hundred times leaves
             // a hundred identical rows for Allows to walk per ore.
             for (int i = 0; i < rows.Count; i++)
             {

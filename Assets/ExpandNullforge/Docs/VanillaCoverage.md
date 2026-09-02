@@ -82,7 +82,7 @@ be", so it is the honest denominator.
 > and we put on none. `AnimationAuthoring`, `PaintableObject`, `Rotation`, `Description`,
 > `AutomatedStorage` (conveyors can now feed a custom chest), `Diggable`, `AutomatedHarvestablePlant`,
 > `IgnoreVertexOffsets`, `AreaLevel`, plus `Health` on plants. Defined once in
-> `Editor/DimensionObjectSpine.cs` rather than repeated per generator.
+> `Editor/Generators/Shared/DimensionObjectSpine.cs` rather than repeated per generator.
 >
 > **`AreaLevelAuthoring` is deliberately CONDITIONAL.** `HealthAuthoring` has an opt-out
 > (`dontCalculateHealthFromLevel`); the attack components have none — their `OnValidate` overwrites

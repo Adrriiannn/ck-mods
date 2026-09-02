@@ -220,8 +220,8 @@ namespace ExpandNullforge.Tilesets
                     continue;
                 }
 
-                // A baked entry whose texture failed to load is the dangerous case: it used to be
-                // skipped in silence, leaving the layer to inherit an unrelated tileset's art.
+                // A baked entry whose texture failed to load is the dangerous case: skipped in
+                // silence it leaves the layer inheriting an unrelated tileset's art.
                 if (g.texture == null)
                 {
                     missing += (missing.Length > 0 ? ", " : string.Empty) + g.layer;
@@ -289,10 +289,11 @@ namespace ExpandNullforge.Tilesets
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Ticking "grass tufts" used to make a block's grass art render and nothing ever place any.
+        /// Ticking "grass tufts" renders a block's grass art; without this registration nothing ever
+        /// places any.
         /// Core Keeper scatters vanilla overlays from generation code that names tilesets by hardcoded
-        /// id, so a custom tileset is never a candidate however complete its art is — the block looked
-        /// finished in the Studio and came out bare in the world.
+        /// id, so a custom tileset is never a candidate however complete its art is — the block looks
+        /// finished in the Studio and comes out bare in the world.
         /// </para>
         /// <para>
         /// Registered even when the block has no art for the overlay yet: the density is the author's

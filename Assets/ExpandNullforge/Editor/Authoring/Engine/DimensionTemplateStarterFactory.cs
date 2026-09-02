@@ -102,9 +102,9 @@ namespace ExpandNullforge.Authoring
         /// The generation steps the starter biome runs, in order.
         /// </summary>
         /// <remarks>
-        /// These used to be handed out twice: once here and once inside a separate Biome Generation
-        /// Profile asset the starter also created and the biome pointed at. The profile is gone and
-        /// the biome owns its passes, so this list and <c>Biome.GenerationPasses</c> now agree.
+        /// The biome owns its passes, so this list and <c>Biome.GenerationPasses</c> are the same
+        /// list. Handing them out twice — here and again inside a separate Biome Generation Profile
+        /// asset the biome points at — is what makes the two disagree.
         /// </remarks>
         public GenerationPassTemplateAsset[] GenerationPasses { get; private set; }
 

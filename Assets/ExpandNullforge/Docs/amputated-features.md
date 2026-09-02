@@ -102,7 +102,7 @@ Three files that turned a short authored recipe into a filled biome:
 - `Scripts/Authoring/BiomePaletteTemplateAsset.cs`
 - `Scripts/Authoring/DimensionSemanticObjectTableBuilder.cs`
 
-`API/Scripts/DimensionBiomeAuthoringRecipe.cs` is the surviving type in that area and does part of
+`API/Scripts/Authoring/DimensionBiomeAuthoringRecipe.cs` is the surviving type in that area and does part of
 the same job. No reference to any of the three names remains.
 
 ## The full list, as the csproj had it

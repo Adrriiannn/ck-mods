@@ -130,9 +130,9 @@ namespace ExpandNullforge.Portals
         /// 100. Idempotent per load, and safe to run again.
         /// </summary>
         /// <remarks>
-        /// IT USED TO SPEND ITS ONE CHANCE. The pass latched <c>applied</c> whether or not anything
-        /// had landed, so a run during a moment the game could not answer left every drop reported
-        /// as broken and never tried again. Now each row is ticked off as it lands, an unlanded row
+        /// IT MUST NOT SPEND ITS ONE CHANCE. Latching <c>applied</c> whether or not anything has
+        /// landed leaves every drop of a run made during a moment the game could not answer
+        /// reported as broken and never tried again. So each row is ticked off as it lands, an unlanded row
         /// is retried on the next conversion, and the latch only closes once nothing is left. Every
         /// append is guarded against being made twice, which is what makes the retry free.
         /// </remarks>
@@ -319,9 +319,7 @@ namespace ExpandNullforge.Portals
 
                 // Only set when asked. Biome's zero value IS "anywhere" — Biome.None = 0 — so an
                 // untouched field already means everywhere, and a misspelled name parsed onto the
-                // field would land on None and quietly widen the drop rather than narrow it. The
-                // reason recorded here used to say the opposite, which is what the next person to
-                // touch this block would have reasoned from.
+                // field would land on None and quietly widen the drop rather than narrow it.
                 if (!string.IsNullOrEmpty(request.OnlyInBiome))
                 {
                     Biome biome;
@@ -456,13 +454,13 @@ namespace ExpandNullforge.Portals
         /// </summary>
         /// <remarks>
         /// <para>
-        /// THE NUMBER THE AUTHOR TYPED USED TO BE THROWN AWAY. A drop's chance reached here, decided
-        /// whether the row went in the always-drops pool, and was then dropped on the floor: the row
-        /// carried the author's SHARE instead, and the table was minted with
-        /// <c>minUniqueDrops = 1</c>. One weighted row in a table that hands out one thing wins every
-        /// roll, so an item written as "one in twenty" dropped on every single kill. A control that
+        /// THE NUMBER THE AUTHOR TYPED HAS TO SURVIVE THIS. A drop's chance reaches here and decides
+        /// whether the row goes in the always-drops pool; letting it stop there — the row carrying
+        /// the author's SHARE instead, the table minted with <c>minUniqueDrops = 1</c> — throws it
+        /// away. One weighted row in a table that hands out one thing wins every
+        /// roll, so an item written as "one in twenty" would drop on every single kill. A control that
         /// reads as a probability and behaves as a weight is the worst thing this framework can
-        /// ship, so the table is now built to make it true.
+        /// ship, so the table is built to make it true.
         /// </para>
         /// <para>
         /// Three pieces, all of them Core Keeper's own:
@@ -653,17 +651,18 @@ namespace ExpandNullforge.Portals
         /// </summary>
         /// <remarks>
         /// <para>
-        /// THIS IS WHERE A MOD'S CREATURE DROPPING A MOD'S ITEM USED TO STOP. The old answer was
+        /// THIS IS WHERE A MOD'S CREATURE DROPPING A MOD'S ITEM STOPS, IF IT IS ANSWERED THE
+        /// OBVIOUS WAY. That answer is
         /// <c>PugDatabase.TryGetComponent(objectData, out DropsLootFromLootTableCD)</c>, which
         /// builds a prefab lookup out of <c>Manager.ecs.ClientWorld ?? ServerWorld</c>
         /// (<c>PugDatabase.InitObjectPrefabEntityLookup</c>). Every moment this prefix runs is a
         /// moment that query is wrong: <c>ECSManager.Init</c> nulls both worlds before the
         /// conversion that reaches <c>LootTableConverter.Convert</c>, and the later conversions
-        /// write into a staging world whose entities have not been moved across yet. So the read
-        /// either dereferenced a null dictionary or answered "no table", and the framework told the
-        /// author their creature had no loot table one line after stamping one onto it. It also
-        /// cached that empty dictionary against the world for the rest of the session, which made
-        /// every other <c>PugDatabase</c> component read on the client answer false.
+        /// write into a staging world whose entities have not been moved across yet. The read
+        /// either dereferences a null dictionary or answers "no table", so the framework would tell
+        /// the author their creature had no loot table one line after stamping one onto it. It
+        /// would also cache that empty dictionary against the world for the rest of the session,
+        /// making every other <c>PugDatabase</c> component read on the client answer false.
         /// </para>
         /// <para>
         /// Two answers replace it, neither of which touches an entity world:

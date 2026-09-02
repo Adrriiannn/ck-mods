@@ -63,7 +63,7 @@ namespace ExpandNullforge.Portals
         // game's own way of reading an object id off the prefab comes back empty for every bench
         // this framework generates. Without this fall-back a recipe could name one of the mod's
         // Workbenches and the bench would never be recognised as a crafting station at all, which
-        // is exactly why custom-station injection used to stop at a warning.
+        // is what makes custom-station injection stop at a warning without it.
         DimensionPortalObjectIdCache.TryResolve(modObjectName, out objectID);
       }
 
@@ -119,7 +119,7 @@ namespace ExpandNullforge.Portals
       // Collect everything this station should show in one pass. The framework's recipes belong
       // together in the crafting window, so they have to be placed as a block rather than one at a
       // time — objects resolve at different moments during conversion, and adding them piecemeal is
-      // what used to scatter them across separate pages.
+      // what scatters them across separate pages.
       ResolvedRecipes.Clear();
       for (int definitionIndex = 0; definitionIndex < DimensionCraftingRegistry.Count; definitionIndex++)
       {

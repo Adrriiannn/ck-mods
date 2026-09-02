@@ -51,7 +51,7 @@ decl() { grep -oP '(?<=\[SerializeField\] private )[\w\[\]<>., ]+ \w+(?= =|;)' "
 echo "=== assets: are the top-level fields drawn? ==="
 total_f=0; total_d=0
 REACHABLE_TYPES=""
-for f in Scripts/Authoring/*Asset.cs; do
+for f in $(find Scripts/Authoring -name '*Asset.cs' | sort); do
   a=$(basename "$f" .cs)
   case " $EXCLUDE_ASSETS " in *" $a "*) continue;; esac
 
@@ -100,7 +100,7 @@ done
 # plain serializable class that holds two templates, so a Template-only walk stopped at it and
 # called both of them orphaned when an ability list already reaches them.
 for pass in 1 2 3 4 5; do
-  for f in Scripts/Authoring/Dimension*.cs; do
+  for f in $(find Scripts/Authoring -name 'Dimension*.cs' | sort); do
     t=$(basename "$f" .cs)
     case " $REACHABLE_TYPES " in *" $t "*) ;; *) continue;; esac
     while IFS= read -r line; do
@@ -113,7 +113,7 @@ done
 echo
 echo "=== templates: orphaned, or reached through a drawn parent? ==="
 t_all=0; t_ok=0
-for f in Scripts/Authoring/Dimension*Template.cs; do
+for f in $(find Scripts/Authoring -name 'Dimension*Template.cs' | sort); do
   t=$(basename "$f" .cs)
   n=$(decl "$f" | wc -l)
   [ "$n" -eq 0 ] && continue

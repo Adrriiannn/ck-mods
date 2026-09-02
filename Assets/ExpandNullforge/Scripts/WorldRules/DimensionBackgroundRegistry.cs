@@ -70,10 +70,10 @@ namespace ExpandNullforge.WorldRules
         /// </remarks>
         public const int MostItemsTheScreenCanShow = 2;
 
-        // A `NomadBackground = 6` constant used to sit here and had no readers anywhere in the
-        // tree: the check that matters is DimensionBackgroundKit.NamesASkillNomadWillNeverGet,
+        // THERE IS DELIBERATELY NO `NomadBackground = 6` CONSTANT HERE, because nothing in the
+        // tree would read it: the check that matters is DimensionBackgroundKit.NamesASkillNomadWillNeverGet,
         // which the template carries and the generator reports from. A public number nothing asks
-        // for reads as a check that is being made somewhere, and none was.
+        // for reads as a check being made somewhere, and there is none.
 
         private static readonly List<Row> Rows = new List<Row>();
 

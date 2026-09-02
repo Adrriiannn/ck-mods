@@ -478,11 +478,11 @@ namespace ExpandNullforge.WorldRules
         /// framework cannot ask Harmony what it bound. One static increment is the whole of the
         /// evidence, and it costs one add on a path the game was already walking.
         ///
-        /// COUNTED IN THE PREFIX ONLY. Both halves used to add, so one world load reported two and
-        /// the number could not be read as "how many times this patch ran". Counting at the top
+        /// COUNTED IN THE PREFIX ONLY. Adding in both halves makes one world load report two, and
+        /// the number then cannot be read as "how many times this patch ran". Counting at the top
         /// also keeps the one distinction the stash-and-restore design exists to survive: a prefix
         /// that ran and an original that then threw leaves the count at one, where counting in both
-        /// would have left it at one too and looked identical to a clean run only by accident.
+        /// would leave it at one too and look identical to a clean run only by accident.
         /// </remarks>
         internal static int Fired;
 

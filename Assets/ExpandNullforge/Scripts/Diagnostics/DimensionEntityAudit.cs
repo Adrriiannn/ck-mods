@@ -107,7 +107,7 @@ namespace ExpandNullforge.Diagnostics
             /// pack generated before <see cref="DimensionGeneratedObjectLedger"/> existed carries
             /// no manifest entry for anything but its items, so the second number is zero and the
             /// subject list is the item slice of a table that is mostly creature and world-object
-            /// queries — which is the case that used to be reported as a clean result. Neither
+            /// queries — which is the case that would otherwise be reported as a clean result. Neither
             /// number is a fault on its own; both are needed for the line to be honest about its
             /// own scope.
             /// </remarks>
@@ -155,7 +155,7 @@ namespace ExpandNullforge.Diagnostics
         /// is wrong rather than incomplete.
         /// </para>
         /// <para>
-        /// A BUDGET OF ZERO CHECKS NOTHING. It used to mean "no limit", which is the opposite of
+        /// A BUDGET OF ZERO CHECKS NOTHING. Reading it as "no limit" is the opposite of
         /// what somebody typing a zero into a diagnostics setting is asking for — the switch for
         /// off is <c>entityAudit</c>, and a budget is a ceiling.
         /// </para>
@@ -326,14 +326,14 @@ namespace ExpandNullforge.Diagnostics
 
             text.Append("Of that set this object already has: ");
             text.Append(finding.Present.Count == 0 ? "nothing" : Join(finding.Present));
-            // NO PASS IS NAMED, AND THE ONE IT USED TO NAME WAS WRONG FOR FOUR OF THE RULES. It
-            // said "the generator's CloseTheGaps pass fills the companions in", which is true of
+            // NO PASS IS NAMED, BECAUSE THE OBVIOUS ONE IS WRONG FOR FOUR OF THE RULES.
+            // "The generator's CloseTheGaps pass fills the companions in" is true of
             // the item, creature, plant, critter, container, workbench, world-object and vehicle
             // paths and of nothing else: neither DimensionProjectileGenerator nor
             // DimensionExplosionGenerator calls CloseTheGaps, so for the ProjectileCD,
-            // MortarProjectileCD, ExplosionCD and SequenceExplosiveCD rules the reader was told to
-            // run a pass that does not exist for their object. What is true of every rule is the
-            // instruction below.
+            // MortarProjectileCD, ExplosionCD and SequenceExplosiveCD rules it would tell the
+            // reader to run a pass that does not exist for their object. What is true of every
+            // rule is the instruction below.
             text.Append(". Fix: generate this object again and see whether it comes back the same. "
                 + "Most generators close a gap like this as they finish an object; if this one "
                 + "survives a regenerate, the gap is in the generator for that kind of thing "

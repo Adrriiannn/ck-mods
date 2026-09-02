@@ -30,9 +30,12 @@ components=$(grep -v '^\s*#' "$here/borrowed-groups.tsv" | grep -v '^\s*$' | cut
 # shellcheck disable=SC2086
 perl "$here/harvest-vault.pl" "$vault" $components > "$work/values.tsv"
 
+# The whole family of each, not the trunk alone: both are split across partials, and a trunk-only
+# read builds an empty reverse map and a table of presets that set nothing.
+# shellcheck disable=SC2046
 perl "$here/harvest-revmap.pl" "$here/borrowed-groups.tsv" \
-  "$root/Editor/DimensionCreatureGenerator.cs" \
-  "$root/Editor/DimensionObjectSpine.cs" | sort -u > "$work/revmap.tsv"
+  $(find "$root/Editor" -name 'DimensionCreatureGenerator*.cs' -o -name 'DimensionObjectSpine*.cs') \
+  | sort -u > "$work/revmap.tsv"
 
 # Two fields are written through a resolve call rather than a plain assignment, so the reader
 # cannot see them. They are named here instead of being silently missing from every preset.
@@ -42,10 +45,10 @@ MeleeAttackStateAuthoring	objectToSpawnOnHitTiles	SpawnsOnBrokenTilesId
 EXTRA
 sort -u "$work/revmap.tsv" -o "$work/revmap.tsv"
 
-( cd "$root/Scripts/Authoring" && perl "$here/harvest-props.pl" Dimension*.cs ) \
+( cd "$root/Scripts/Authoring" && perl "$here/harvest-props.pl" $(find . -name 'Dimension*.cs') ) \
   | sort -u > "$work/props.tsv"
 
-( cd "$root/Scripts/Authoring" && perl "$here/harvest-subs.pl" Dimension*.cs ) \
+( cd "$root/Scripts/Authoring" && perl "$here/harvest-subs.pl" $(find . -name 'Dimension*.cs') ) \
   | sort -u > "$work/subs.tsv"
 
 perl "$here/harvest-emit.pl" \

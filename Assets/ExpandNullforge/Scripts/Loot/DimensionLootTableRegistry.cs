@@ -233,10 +233,10 @@ namespace ExpandNullforge.Loot
 
         /// <summary>Every queued table, materialized into the game's own list. Idempotent per load.</summary>
         /// <remarks>
-        /// IT USED TO SPEND ITS ONE CHANCE, the same way its sibling in
-        /// <c>DimensionPortalDropRegistry</c> did. <c>applied</c> was latched at the end whatever
-        /// happened, so a pass that ran while <c>API.Authoring.GetObjectID</c> could not yet answer
-        /// dropped every row it could not resolve and never came back. Now a table is ticked off
+        /// IT MUST NOT SPEND ITS ONE CHANCE, and neither must its sibling in
+        /// <c>DimensionPortalDropRegistry</c>. Latching <c>applied</c> at the end whatever happens
+        /// loses every row a pass could not resolve while <c>API.Authoring.GetObjectID</c> was not
+        /// yet answering, and nothing comes back for them. So a table is ticked off
         /// only once it is in the game's list, an untried one is retried on the next conversion,
         /// and the latch closes only when nothing is left. A table already in the list is
         /// recognised by name, so a retry cannot add it twice or accuse it of colliding with
@@ -326,14 +326,14 @@ namespace ExpandNullforge.Loot
                     {
                         objectID = itemId,
 
-                        // THE CHANCE, CARRIED RATHER THAN THROWN AWAY. The number the author typed
-                        // used to decide only whether the row was an always-drop and was then
-                        // dropped on the floor, with the row going in at its own share instead. In
-                        // a table that hands out one thing, one weighted row wins every roll — so
-                        // a row written as "one in twenty" dropped on every single kill, and
-                        // LOWERING a row's chance from 1 to 0.05 moved it out of the always-drops
-                        // pool into a weighted pool of its own and took it from a third of the time
-                        // to all of the time. This field is what the shaping below reads.
+                        // THE CHANCE, CARRIED RATHER THAN THROWN AWAY. Letting the number the
+                        // author typed decide only whether the row is an always-drop, and putting
+                        // the row in at its own share, loses it. In a table that hands out one
+                        // thing, one weighted row wins every roll — so a row written as "one in
+                        // twenty" drops on every single kill, and LOWERING a row's chance from 1
+                        // to 0.05 moves it out of the always-drops pool into a weighted pool of
+                        // its own and takes it from a third of the time to all of the time. This
+                        // field is what the shaping below reads.
                         editorVisualDropChance = Mathf.Clamp01(source.DropChance) * 100f,
                         weight = Mathf.Max(0.0001f, source.Weight),
                         amount = new Pug.UnityExtensions.RangeInt
@@ -347,7 +347,7 @@ namespace ExpandNullforge.Loot
                     // Only set when asked. Biome's zero value IS "anywhere" — Biome.None = 0 — so
                     // leaving the field alone is already right, and writing a name the game does
                     // not have would land on None and read as "anywhere" rather than as the biome
-                    // that was typed. The reason recorded here used to say the opposite.
+                    // that was typed.
                     if (!string.IsNullOrEmpty(source.OnlyInBiome) &&
                         System.Enum.TryParse(source.OnlyInBiome, false, out Biome biome))
                     {
@@ -393,8 +393,8 @@ namespace ExpandNullforge.Loot
                 // guaranteed pick the only slot and no weighted row could ever come out. Core
                 // Keeper's own bank refuses that shape outright — "Not allowed to have guaranteed
                 // drops in loot tables that only drops one item" (LootTableBank.OnAfterDeserialize).
-                // THE SAME SHAPING THE AUTO-MINTED TABLES ALREADY GOT, and the reason this table
-                // used to be the one place in the framework where "Drop Chance" did not mean a
+                // THE SAME SHAPING THE AUTO-MINTED TABLES GET. Without it this table is the one
+                // place in the framework where "Drop Chance" does not mean a
                 // chance. It fixes the roll count so every row's odds stop varying with it, turns
                 // each row's chance into the share that produces it over that many rolls, and adds
                 // a row of nothing for the remainder so a weighted pool is allowed to come up empty

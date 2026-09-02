@@ -155,15 +155,15 @@ namespace ExpandNullforge.Diagnostics
         /// </summary>
         /// <remarks>
         /// <para>
-        /// THIS TEXT USED TO STATE THE OPPOSITE and prescribe a fix that would have damaged four
-        /// systems. It said <c>[UpdateInGroup]</c> is only read when the game builds its own
-        /// groups, "which happened before this mod loaded". Core Keeper builds its worlds when a
+        /// THE OPPOSITE READING IS THE TEMPTING ONE AND IT IS WRONG: that <c>[UpdateInGroup]</c> is
+        /// only read when the game builds its own groups, "which happened before this mod loaded".
+        /// Core Keeper builds its worlds when a
         /// save loads, which is after the mod assembly is in the AppDomain, and a player build's
         /// system sweep walks <c>AppDomain.CurrentDomain.GetAssemblies()</c> — so the attribute is
         /// read and the systems are scheduled by the game.
         /// </para>
         /// <para>
-        /// AND THE REMEDY IT NAMED WAS WORSE THAN THE COMPLAINT. <c>AddScheduledSystem</c> resolves
+        /// AND THE REMEDY THAT READING LEADS TO IS WORSE THAN THE COMPLAINT. <c>AddScheduledSystem</c> resolves
         /// to <c>SimulationSystemGroup.AddSystemToUpdateList</c> and nothing else. For the systems
         /// already in that group it is a no-op, because the add de-duplicates. For the four that
         /// live elsewhere — tile capture in <c>SerializationSystemGroup</c>, skill experience in
@@ -184,18 +184,13 @@ namespace ExpandNullforge.Diagnostics
             + "adds to SimulationSystemGroup and nothing else, and four of these belong in other "
             + "groups, so it would leave them in two update lists and run them twice a frame.";
 
-        // THERE USED TO BE A THIRD CONSTANT HERE AND IT IS DELIBERATELY GONE. It said, on every
-        // server world in every session, that the evidence the game schedules a mod's systems by
-        // itself comes from one session that had no server world in it — a client joining a
-        // dedicated server — so the server-world reading was an expectation rather than something
-        // watched.
-        //
-        // That is a true thing to record and the wrong place to record it. It is a fact about how
-        // much of this framework has been tested, not about the world in front of the reader, so it
-        // was identical on every run, could not be retired by anybody actually watching a server
-        // world, and arrived in a player's log as a note addressed to the framework's own authors.
-        // It fired on every single-player and every host session, which is the whole of normal use.
-        // The note itself now lives in the class remarks above, where it can be read by whoever
+        // THERE IS DELIBERATELY NO THIRD CONSTANT HERE. How far the game's own scheduling of a
+        // mod's systems has been watched on a SERVER world is a fact about how much of this
+        // framework has been tested, not about the world in front of the reader. As a log line it
+        // would be identical on every run, could not be retired by anybody actually watching a
+        // server world, and would reach a player's log as a note addressed to the framework's own
+        // authors — on every single-player and every host session, which is the whole of normal
+        // use. The note lives in the class remarks above instead, where it can be read by whoever
         // needs it and changed by whoever retires it.
 
         /// <summary>Remembers a world so the next quiet frame audits it.</summary>
