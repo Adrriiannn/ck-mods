@@ -7,24 +7,6 @@ using UnityEngine.Scripting;
 
 namespace ExpandNullforge.Creatures
 {
-    /// <summary>
-    /// Marks an item as the offering that summons a boss, by name.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// NOT vanilla's <c>SummoningItemAuthoring</c>, deliberately. That one bakes a list of
-    /// ObjectIDs, and a mod's own boss has no id at generation time — it would bake as None and
-    /// the item would summon nothing, silently. This bakes names; the hydration system appends
-    /// the real ids into the vanilla <c>SummoningItemBuffer</c> at runtime, and from then on the
-    /// game's own <c>BossSummoningSystem</c> treats the item exactly like a vanilla idol —
-    /// refusal while the boss lives, anticipation glow, tile clear, the whole staging.
-    /// </para>
-    /// </remarks>
-    public sealed class DimensionSummoningItemAuthoring : MonoBehaviour
-    {
-        [Tooltip("Full object names of the bosses this item can summon.")]
-        public List<string> bossObjectNames = new List<string>();
-    }
 
     [InternalBufferCapacity(2)]
     public struct DimensionSummonBossNameBuffer : IBufferElementData
@@ -67,23 +49,6 @@ namespace ExpandNullforge.Creatures
                 });
             }
         }
-    }
-
-    /// <summary>
-    /// The arena summoning circle's boss link, by name — the same pattern as the item.
-    /// </summary>
-    /// <remarks>
-    /// Rides BESIDE the vanilla <c>SummonAreaAuthoring</c>, which carries every number the
-    /// circle needs (anticipation, spawn time, tile clear) but whose boss id bakes as None for
-    /// mod bosses. Hydration writes the real ids into <c>SummonAreaCD</c> on the first ticks.
-    /// </remarks>
-    public sealed class DimensionSummonAreaByNameAuthoring : MonoBehaviour
-    {
-        [Tooltip("Full object name of the boss this circle summons.")]
-        public string bossObjectName;
-
-        [Tooltip("A second boss it may summon instead. Usually empty.")]
-        public string optionalBossObjectName;
     }
 
     public struct DimensionSummonAreaNameCD : IComponentData

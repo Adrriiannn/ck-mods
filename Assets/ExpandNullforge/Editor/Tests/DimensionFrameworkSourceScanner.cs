@@ -116,6 +116,48 @@ namespace ExpandNullforge.EditorTools
             return File.ReadAllText(FindByName(fileName));
         }
 
+        /// <summary>
+        /// The text of every file one type is written across, trunk and partials together.
+        /// </summary>
+        /// <remarks>
+        /// A type split across files is called <c>Foo.cs</c>, <c>Foo.Bar.cs</c>, <c>Foo.Baz.cs</c>
+        /// here. A test that goes on reading <c>Foo.cs</c> after the split reads whatever stayed
+        /// behind, which is a fraction of the subject and not a named one — so an assertion about
+        /// the type either fails for the wrong reason or, worse, finds nothing to fail on. Reading
+        /// the family keeps the assertion about the type.
+        /// </remarks>
+        public static string ReadPartials(string typeName)
+        {
+            List<string> matches = new List<string>();
+            List<string> files = SourceFiles();
+            for (int i = 0; i < files.Count; i++)
+            {
+                string name = Path.GetFileName(files[i]);
+                if (string.Equals(name, typeName + ".cs", StringComparison.OrdinalIgnoreCase) ||
+                    (name.StartsWith(typeName + ".", StringComparison.OrdinalIgnoreCase) &&
+                     name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)))
+                {
+                    matches.Add(files[i]);
+                }
+            }
+
+            Assert.That(
+                matches.Count,
+                Is.Not.EqualTo(0),
+                "No file under " + Root + " belongs to a type called " + typeName + ", so this " +
+                "test has no subject. It was renamed or deleted; find out which before changing " +
+                "this name.");
+
+            matches.Sort(StringComparer.OrdinalIgnoreCase);
+            List<string> text = new List<string>();
+            for (int i = 0; i < matches.Count; i++)
+            {
+                text.Add(File.ReadAllText(matches[i]));
+            }
+
+            return string.Join("\n", text.ToArray());
+        }
+
         /// <summary>Whether a file with this name exists, without failing when it does not.</summary>
         public static bool Exists(string fileName)
         {

@@ -452,7 +452,7 @@ namespace ExpandNullforge.EditorTests
         {
             StringAssert.Contains(
                 "AppendExplosiveRegistrations(builder, template, modName);",
-                DimensionFrameworkSourceScanner.ReadByName("DimensionRuntimeConsumerBootstrapUtility.cs"),
+                DimensionFrameworkSourceScanner.ReadPartials("DimensionRuntimeConsumerBootstrapUtility"),
                 "DimensionRuntimeConsumerBootstrapUtility.Explosives.cs writes the bomb-to-blast " +
                 "rows and nothing calls it. Add AppendExplosiveRegistrations(builder, template, " +
                 "modName); beside AppendFoodRegistrations in the shared bootstrap utility.");

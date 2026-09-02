@@ -20,12 +20,12 @@ namespace ExpandNullforge.EditorTools.Tests
     /// </remarks>
     internal sealed class DimensionGeneratedModSettingsTests
     {
-        private const string Generator = "DimensionRuntimeConsumerBootstrapUtility.cs";
+        private const string Generator = "DimensionRuntimeConsumerBootstrapUtility";
 
         [Test]
         public void TheGeneratorSetsBothSwitchesOnTheCreatorsMod()
         {
-            string source = DimensionFrameworkSourceScanner.ReadByName(Generator);
+            string source = DimensionFrameworkSourceScanner.ReadPartials(Generator);
 
             Assert.That(
                 source,
@@ -46,7 +46,7 @@ namespace ExpandNullforge.EditorTools.Tests
         [Test]
         public void TheSwitchesAreSetOnEveryGenerateAndNotOnlyWhenTheModIsNew()
         {
-            string source = DimensionFrameworkSourceScanner.ReadByName(Generator);
+            string source = DimensionFrameworkSourceScanner.ReadPartials(Generator);
 
             Assert.That(
                 source,
@@ -59,7 +59,7 @@ namespace ExpandNullforge.EditorTools.Tests
         [Test]
         public void TheGeneratorSaysWhenItChangesEitherSwitch()
         {
-            string source = DimensionFrameworkSourceScanner.ReadByName(Generator);
+            string source = DimensionFrameworkSourceScanner.ReadPartials(Generator);
 
             Assert.That(
                 source,

@@ -519,8 +519,8 @@ namespace ExpandNullforge.EditorTools
             {
                 // Found by name rather than by path: this list names three generators, not three
                 // places, and where they live is not what it is asserting.
-                string source = DimensionFrameworkSourceScanner.ReadByName(
-                    System.IO.Path.GetFileName(generator));
+                string source = DimensionFrameworkSourceScanner.ReadPartials(
+                    System.IO.Path.GetFileNameWithoutExtension(generator));
 
                 Assert.That(
                     StripComments(source),

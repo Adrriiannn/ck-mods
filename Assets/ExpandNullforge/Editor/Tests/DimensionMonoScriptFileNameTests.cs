@@ -23,12 +23,11 @@ namespace ExpandNullforge.EditorTools
     /// </para>
     /// <para>
     /// THE PROJECT ALREADY STATES THIS RULE, at <c>Scripts/Authoring/DimensionItemAsset.cs:7-8</c>,
-    /// and only for ScriptableObjects. There are no ScriptableObject offenders and there are
-    /// fourteen MonoBehaviour ones, every one of them added to a root that goes through
+    /// and only for ScriptableObjects. There were no ScriptableObject offenders and fourteen
+    /// MonoBehaviour ones, every one of them added to a root that goes through
     /// <c>PrefabUtility.SaveAsPrefabAsset</c> by <c>DimensionCreatureGenerator</c> or
-    /// <c>DimensionPlantGenerator</c>. They are recorded here rather than fixed here: the fix is one
-    /// file per class, which is the file-splitting stage, and this test is what stops a fifteenth
-    /// arriving in the meantime.
+    /// <c>DimensionPlantGenerator</c>. All fourteen were given a file of their own in the
+    /// file-splitting stage, so the list below is empty and every offender is a new one.
     /// </para>
     /// <para>
     /// IT FAILS BOTH WAYS. A class not on the list is a new offender. A name on the list that no
@@ -42,27 +41,12 @@ namespace ExpandNullforge.EditorTools
         /// The classes whose file is named for something else, each with the file it is in.
         /// </summary>
         /// <remarks>
-        /// Measured, not copied from a report. Take an entry out in the same commit that gives the
-        /// class its own file.
+        /// Empty, and meant to stay that way. It is kept rather than deleted because a class that
+        /// genuinely cannot have its own file would need a reason written beside it, and there is
+        /// nowhere else to write one. Anything put here must say which file it is in and why.
         /// </remarks>
         private static readonly Dictionary<string, string> KnownMismatches =
-            new Dictionary<string, string>
-            {
-                { "DimensionBossMarkerAuthoring", "Scripts/Creatures/DimensionBossMarker.cs" },
-                { "DimensionShopStockAuthoring", "Scripts/Creatures/DimensionShopAndHatching.cs" },
-                { "DimensionHatchTargetAuthoring", "Scripts/Creatures/DimensionShopAndHatching.cs" },
-                { "DimensionSummoningItemAuthoring", "Scripts/Creatures/DimensionSummoningItem.cs" },
-                { "DimensionSummonAreaByNameAuthoring", "Scripts/Creatures/DimensionSummoningItem.cs" },
-                { "DimensionHoldsFireAuthoring", "Scripts/Creatures/DimensionTemperament.cs" },
-                { "DimensionBlastFireAuthoring", "Scripts/Explosives/DimensionBlastFire.cs" },
-                { "DimensionCropTierSeedAuthoring", "Scripts/Plants/DimensionCropTierAuthoring.cs" },
-                { "DimensionCropTierPlantAuthoring", "Scripts/Plants/DimensionCropTierAuthoring.cs" },
-                { "DimensionSeedAuthoring", "Scripts/Plants/DimensionPlantAuthoring.cs" },
-                { "DimensionPlantProduceAuthoring", "Scripts/Plants/DimensionPlantAuthoring.cs" },
-                { "DimensionPlantDropsAuthoring", "Scripts/Plants/DimensionPlantAuthoring.cs" },
-                { "DimensionPortalOfferingAuthoring", "Scripts/Portals/DimensionPortalOffering.cs" },
-                { "DimensionCoordinatePresentationHost", "Scripts/UI/DimensionCoordinatePresentation.cs" },
-            };
+            new Dictionary<string, string>();
 
         /// <summary>
         /// A class declaration and the types it derives from, on one line or wrapped onto the next.

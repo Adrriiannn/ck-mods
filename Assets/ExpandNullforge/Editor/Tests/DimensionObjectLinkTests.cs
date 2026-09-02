@@ -450,8 +450,8 @@ namespace ExpandNullforge.EditorTools
 
             foreach (string relative in files)
             {
-                string text = DimensionFrameworkSourceScanner.ReadByName(
-                    Path.GetFileName(relative));
+                string text = DimensionFrameworkSourceScanner.ReadPartials(
+                    Path.GetFileNameWithoutExtension(relative));
                 foreach (Match match in Regex.Matches(text, @"Enum\.TryParse\([^)]*out (\w+)"))
                 {
                     string variable = match.Groups[1].Value;
@@ -553,11 +553,11 @@ namespace ExpandNullforge.EditorTools
             // registry finds a source's table through exactly that component. The drop had nowhere
             // to go, so it never happened, and the one warning read like a spelling mistake.
             string creature =
-                DimensionFrameworkSourceScanner.ReadByName("DimensionCreatureGenerator.cs");
+                DimensionFrameworkSourceScanner.ReadPartials("DimensionCreatureGenerator");
             string container =
-                DimensionFrameworkSourceScanner.ReadByName("DimensionContainerGenerator.cs");
+                DimensionFrameworkSourceScanner.ReadPartials("DimensionContainerGenerator");
             string worldObject =
-                DimensionFrameworkSourceScanner.ReadByName("DimensionWorldObjectGenerator.cs");
+                DimensionFrameworkSourceScanner.ReadPartials("DimensionWorldObjectGenerator");
 
             foreach (string source in new[] { creature, container, worldObject })
             {
@@ -600,7 +600,7 @@ namespace ExpandNullforge.EditorTools
             // mentioned in prose in three places here, so a grep for the bare name would survive
             // the assignment being deleted.
             string spine = CodeWithoutComments(
-                DimensionFrameworkSourceScanner.ReadByName("DimensionObjectSpine.cs"));
+                DimensionFrameworkSourceScanner.ReadPartials("DimensionObjectSpine"));
 
             Assert.That(
                 spine,

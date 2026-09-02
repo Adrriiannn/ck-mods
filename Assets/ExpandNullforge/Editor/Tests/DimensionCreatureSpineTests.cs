@@ -310,7 +310,7 @@ namespace ExpandNullforge.EditorTools
 
         private static string TheSpine()
         {
-            return DimensionFrameworkSourceScanner.ReadByName("DimensionObjectSpine.cs");
+            return DimensionFrameworkSourceScanner.ReadPartials("DimensionObjectSpine");
         }
 
         private static string TheGenerator()
